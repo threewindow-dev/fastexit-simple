@@ -1,0 +1,4 @@
+# .tool-versions
+nodejs 24.11.0
+python 3.13.1
+postgres 17.2
