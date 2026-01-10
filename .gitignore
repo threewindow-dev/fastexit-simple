@@ -16,6 +16,7 @@ venv/
 env/
 .env
 *.log
+.venv-test/
 
 # Node.js
 node_modules/
