@@ -1,0 +1,63 @@
+# .dockerignore for single container build
+
+# Git
+.git
+.gitignore
+.gitmodules
+
+# Documentation
+README*.md
+docs/
+
+# Development files
+.vscode/
+.tool-versions
+.dev-standards/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Docker files
+docker-compose.yml
+deployment/docker/
+
+# Node modules (will be installed during build)
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+
+# Python cache
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache/
+*.egg-info/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test files
+**/tests/
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Scripts not needed in container
+scripts/build-single-image.sh
+scripts/run-single-container.sh
