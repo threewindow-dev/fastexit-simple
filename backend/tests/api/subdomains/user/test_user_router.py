@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from testcontainers.postgres import PostgresContainer
 
 from main import app
-from infra.database import DatabasePool
+from shared.infra.database import DatabasePool
 
 
 @pytest.fixture(scope="module")
