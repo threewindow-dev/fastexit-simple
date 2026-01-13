@@ -5,7 +5,7 @@ Tests application layer use cases with mocked dependencies
 """
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, ANY
 
 from subdomains.user.application.services import UserAppService
 from subdomains.user.application.dtos import (
@@ -22,7 +22,7 @@ class TestCreateUser:
     """Test UserAppService.create_user use case"""
     
     @pytest.mark.asyncio
-    async def test_create_user_success(self, mock_user_repository):
+    async def test_create_user_success(self, mock_user_repository, mock_transaction_manager):
         """Should create user when username and email are unique"""
         # Arrange
         command = RegisterUserCommand(
@@ -43,8 +43,11 @@ class TestCreateUser:
         mock_user_repository.exists_by_email.return_value = False
         mock_user_repository.add.return_value = created_user
         
-        # transaction_factory 없이 생성 (트랜잭션 관리 없음)
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        # 트랜잭션 팩토리 없이 생성 (트랜잭션 관리 없음)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act
         result = await service.create_user(command)
@@ -55,13 +58,14 @@ class TestCreateUser:
         assert result.email == "john@example.com"
         assert result.full_name == "John Doe"
         
-        mock_user_repository.exists_by_username.assert_awaited_once_with("john_doe")
-        mock_user_repository.exists_by_email.assert_awaited_once_with("john@example.com")
-        mock_user_repository.add.assert_awaited_once()
+        conn = mock_transaction_manager.mock_connection
+        mock_user_repository.exists_by_username.assert_awaited_once_with(conn, "john_doe")
+        mock_user_repository.exists_by_email.assert_awaited_once_with(conn, "john@example.com")
+        mock_user_repository.add.assert_awaited_once_with(conn, ANY)
     
     @pytest.mark.asyncio
     async def test_create_user_duplicate_username_raises_error(
-        self, mock_user_repository
+        self, mock_user_repository, mock_transaction_manager
     ):
         """Should raise DuplicateUserError when username exists"""
         # Arrange
@@ -73,18 +77,22 @@ class TestCreateUser:
         
         mock_user_repository.exists_by_username.return_value = True
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act & Assert
         with pytest.raises(DuplicateUserError):
             await service.create_user(command)
         
-        mock_user_repository.exists_by_username.assert_awaited_once_with("existing_user")
+        conn = mock_transaction_manager.mock_connection
+        mock_user_repository.exists_by_username.assert_awaited_once_with(conn, "existing_user")
         mock_user_repository.add.assert_not_awaited()
     
     @pytest.mark.asyncio
     async def test_create_user_duplicate_email_raises_error(
-        self, mock_user_repository
+        self, mock_user_repository, mock_transaction_manager
     ):
         """Should raise DuplicateUserError when email exists"""
         # Arrange
@@ -97,18 +105,22 @@ class TestCreateUser:
         mock_user_repository.exists_by_username.return_value = False
         mock_user_repository.exists_by_email.return_value = True
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act & Assert
         with pytest.raises(DuplicateUserError):
             await service.create_user(command)
         
-        mock_user_repository.exists_by_email.assert_awaited_once_with("existing@example.com")
+        conn = mock_transaction_manager.mock_connection
+        mock_user_repository.exists_by_email.assert_awaited_once_with(conn, "existing@example.com")
         mock_user_repository.add.assert_not_awaited()
     
     @pytest.mark.asyncio
     async def test_create_user_with_invalid_username_raises_domain_error(
-        self, mock_user_repository
+        self, mock_user_repository, mock_transaction_manager
     ):
         """Should raise DomainError for invalid username (< 3 chars)"""
         # Arrange
@@ -121,7 +133,10 @@ class TestCreateUser:
         mock_user_repository.exists_by_username.return_value = False
         mock_user_repository.exists_by_email.return_value = False
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act & Assert
         with pytest.raises(DomainError) as exc_info:
@@ -135,7 +150,7 @@ class TestUpdateUser:
     """Test UserAppService.update_user use case"""
     
     @pytest.mark.asyncio
-    async def test_update_user_success(self, mock_user_repository):
+    async def test_update_user_success(self, mock_user_repository, mock_transaction_manager):
         """Should update user full name successfully"""
         # Arrange
         existing_user = User(
@@ -162,19 +177,23 @@ class TestUpdateUser:
         mock_user_repository.find_by_id.return_value = existing_user
         mock_user_repository.update.return_value = updated_user
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act
         result = await service.update_user(command)
         
         # Assert
         assert result.full_name == "Jane Doe"
-        mock_user_repository.find_by_id.assert_awaited_once_with(1)
-        mock_user_repository.update.assert_awaited_once()
+        conn = mock_transaction_manager.mock_connection
+        mock_user_repository.find_by_id.assert_awaited_once_with(conn, 1)
+        mock_user_repository.update.assert_awaited_once_with(conn, ANY)
     
     @pytest.mark.asyncio
     async def test_update_user_not_found_raises_error(
-        self, mock_user_repository
+        self, mock_user_repository, mock_transaction_manager
     ):
         """Should raise UserNotFoundError when user doesn't exist"""
         # Arrange
@@ -185,7 +204,10 @@ class TestUpdateUser:
         
         mock_user_repository.find_by_id.return_value = None
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act & Assert
         with pytest.raises(UserNotFoundError):
@@ -195,7 +217,7 @@ class TestUpdateUser:
     
     @pytest.mark.asyncio
     async def test_update_user_with_empty_full_name_raises_domain_error(
-        self, mock_user_repository
+        self, mock_user_repository, mock_transaction_manager
     ):
         """Should raise DomainError for empty full name"""
         # Arrange
@@ -214,7 +236,10 @@ class TestUpdateUser:
         
         mock_user_repository.find_by_id.return_value = existing_user
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act & Assert
         with pytest.raises(DomainError) as exc_info:
@@ -228,7 +253,7 @@ class TestDeleteUser:
     """Test UserAppService.delete_user use case"""
     
     @pytest.mark.asyncio
-    async def test_delete_user_success(self, mock_user_repository):
+    async def test_delete_user_success(self, mock_user_repository, mock_transaction_manager):
         """Should delete user successfully"""
         # Arrange
         existing_user = User(
@@ -244,18 +269,22 @@ class TestDeleteUser:
         mock_user_repository.find_by_id.return_value = existing_user
         mock_user_repository.remove.return_value = None
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act
         await service.delete_user(command)
         
         # Assert
-        mock_user_repository.find_by_id.assert_awaited_once_with(1)
-        mock_user_repository.remove.assert_awaited_once_with(1)
+        conn = mock_transaction_manager.mock_connection
+        mock_user_repository.find_by_id.assert_awaited_once_with(conn, 1)
+        mock_user_repository.remove.assert_awaited_once_with(conn, 1)
     
     @pytest.mark.asyncio
     async def test_delete_user_not_found_raises_error(
-        self, mock_user_repository
+        self, mock_user_repository, mock_transaction_manager
     ):
         """Should raise UserNotFoundError when user doesn't exist"""
         # Arrange
@@ -263,7 +292,10 @@ class TestDeleteUser:
         
         mock_user_repository.find_by_id.return_value = None
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act & Assert
         with pytest.raises(UserNotFoundError):
@@ -276,7 +308,7 @@ class TestGetUser:
     """Test UserAppService.get_user query"""
     
     @pytest.mark.asyncio
-    async def test_get_user_success(self, mock_user_repository):
+    async def test_get_user_success(self, mock_user_repository, mock_transaction_manager):
         """Should return user by ID"""
         # Arrange
         existing_user = User(
@@ -289,7 +321,10 @@ class TestGetUser:
         
         mock_user_repository.find_by_id.return_value = existing_user
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act
         result = await service.get_user(1)
@@ -297,17 +332,21 @@ class TestGetUser:
         # Assert
         assert result.id == 1
         assert result.username == "john_doe"
-        mock_user_repository.find_by_id.assert_awaited_once_with(1)
+        conn = mock_transaction_manager.mock_connection
+        mock_user_repository.find_by_id.assert_awaited_once_with(conn, 1)
     
     @pytest.mark.asyncio
     async def test_get_user_not_found_raises_error(
-        self, mock_user_repository
+        self, mock_user_repository, mock_transaction_manager
     ):
         """Should raise UserNotFoundError when user doesn't exist"""
         # Arrange
         mock_user_repository.find_by_id.return_value = None
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act & Assert
         with pytest.raises(UserNotFoundError):
@@ -319,7 +358,7 @@ class TestListUsers:
     
     @pytest.mark.asyncio
     async def test_list_users_success(
-        self, mock_user_repository, sample_users
+        self, mock_user_repository, mock_transaction_manager, sample_users
     ):
         """Should return paginated list of users"""
         # Arrange
@@ -327,7 +366,10 @@ class TestListUsers:
         
         mock_user_repository.find_all.return_value = (sample_users[:10], 10)
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act
         result = await service.list_users(query)
@@ -337,11 +379,12 @@ class TestListUsers:
         assert result.total_count == 10
         assert result.skip == 0
         assert result.limit == 10
-        mock_user_repository.find_all.assert_awaited_once_with(skip=0, limit=10)
+        conn = mock_transaction_manager.mock_connection
+        mock_user_repository.find_all.assert_awaited_once_with(conn, skip=0, limit=10)
     
     @pytest.mark.asyncio
     async def test_list_users_with_pagination(
-        self, mock_user_repository, sample_users
+        self, mock_user_repository, mock_transaction_manager, sample_users
     ):
         """Should return correct page of users"""
         # Arrange
@@ -349,7 +392,10 @@ class TestListUsers:
         
         mock_user_repository.find_all.return_value = (sample_users[5:10], 10)
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act
         result = await service.list_users(query)
@@ -362,7 +408,7 @@ class TestListUsers:
     
     @pytest.mark.asyncio
     async def test_list_users_empty_result(
-        self, mock_user_repository
+        self, mock_user_repository, mock_transaction_manager
     ):
         """Should return empty list when no users exist"""
         # Arrange
@@ -370,7 +416,10 @@ class TestListUsers:
         
         mock_user_repository.find_all.return_value = ([], 0)
         
-        service = UserAppService(mock_user_repository, transaction_factory=None)
+        service = UserAppService(
+            mock_user_repository,
+            mock_transaction_manager,
+        )
         
         # Act
         result = await service.list_users(query)

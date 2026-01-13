@@ -8,6 +8,7 @@ import pytest_asyncio
 import psycopg
 from datetime import datetime
 from testcontainers.postgres import PostgresContainer
+from testcontainers.core.waiting_utils import wait_for_logs
 
 from subdomains.user.domain.models import User
 from subdomains.user.infra.repositories import PsycopgUserRepository
@@ -17,8 +18,11 @@ from shared.errors import DuplicateUserError, InfraError
 @pytest.fixture(scope="module")
 def postgres_container():
     """Start PostgreSQL container for integration tests"""
-    with PostgresContainer("postgres:17-alpine") as postgres:
-        yield postgres
+    container = PostgresContainer("postgres:17-alpine")
+    container.start()
+    wait_for_logs(container, "database system is ready to accept connections")
+    yield container
+    container.stop()
 
 
 @pytest_asyncio.fixture()
