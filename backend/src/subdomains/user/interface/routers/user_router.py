@@ -18,13 +18,22 @@ from subdomains.user.application.dtos import (
 from subdomains.user.application.services import UserAppService
 from subdomains.user.interface.schemas import (
     PostUserRequest,
+    PostUserResponse,
+    PostUserResponseData,
     PatchUserRequest,
+    PatchUserResponse,
+    PatchUserResponseData,
     GetUserPagedListResponse,
+    GetUserPagedListResponseData,
+    GetUserPagedListItemInfo,
     GetUserResponse,
+    GetUserResponseItemInfo,
     GetUserPagedListRequest,
+    DeleteUserResponse,
+    DeleteUserResponseData,
 )
-from core.exception_handlers import create_ok_response
-from core.common_responses import common_responses
+from shared.schemas import ApiResponse
+from shared.common_responses import common_responses
 from core.dependencies import get_user_app_service
 
 
@@ -44,7 +53,7 @@ router = APIRouter(
 
 @router.post(
     "",
-    response_model=dict,
+    response_model=PostUserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create User",
     description=(
@@ -60,7 +69,7 @@ router = APIRouter(
 async def create_user(
     request: PostUserRequest,
     service: UserAppService = Depends(get_user_app_service),
-) -> dict:
+) -> PostUserResponse:
     """
     사용자 생성 엔드포인트
     
@@ -81,15 +90,19 @@ async def create_user(
     )
     result = await service.create_user(command)
     
-    return create_ok_response(
-        result.to_dict(),
-        message="User created successfully",
+    data = PostUserResponseData(
+        id=result.id,
+        username=result.username,
+        email=result.email,
+        full_name=result.full_name,
+        created_at=result.created_at.isoformat() if hasattr(result.created_at, 'isoformat') else str(result.created_at),
     )
+    return PostUserResponse(code=0, message="User created successfully", data=data)
 
 
 @router.get(
     "",
-    response_model=dict,
+    response_model=GetUserPagedListResponse,
     summary="List Users",
     description=(
         "## 기능\n"
@@ -106,7 +119,7 @@ async def list_users(
     skip: int = Query(0, ge=0, examples=[0, 10], description="건너뛸 개수"),
     limit: int = Query(100, ge=1, le=1000, examples=[50, 100], description="조회할 개수 (1-1000)"),
     service: UserAppService = Depends(get_user_app_service),
-) -> dict:
+) -> GetUserPagedListResponse:
     """
     사용자 목록 조회 엔드포인트
     
@@ -126,12 +139,28 @@ async def list_users(
     query = UserPagedListQuery(skip=skip, limit=limit)
     result = await service.list_users(query)
     
-    return create_ok_response(result.to_dict())
+    items_data = [
+        GetUserPagedListItemInfo(
+            id=item.id,
+            username=item.username,
+            email=item.email,
+            full_name=item.full_name,
+            created_at=item.created_at.isoformat() if hasattr(item.created_at, 'isoformat') else str(item.created_at),
+        )
+        for item in result.items
+    ]
+    data = GetUserPagedListResponseData(
+        items=items_data,
+        total_count=result.total_count,
+        skip=skip,
+        limit=limit,
+    )
+    return GetUserPagedListResponse(code=0, message="success", data=data)
 
 
 @router.get(
     "/{user_id}",
-    response_model=dict,
+    response_model=GetUserResponse,
     summary="Get User",
     description=(
         "## 기능\n"
@@ -146,7 +175,7 @@ async def list_users(
 async def get_user(
     user_id: int = Path(..., examples=[1, 2], description="사용자 ID"),
     service: UserAppService = Depends(get_user_app_service),
-) -> dict:
+) -> GetUserResponse:
     """
     사용자 단건 조회 엔드포인트
     
@@ -160,12 +189,19 @@ async def get_user(
     """
     result = await service.get_user(user_id)
     
-    return create_ok_response(result.to_dict())
+    data = GetUserResponseItemInfo(
+        id=result.id,
+        username=result.username,
+        email=result.email,
+        full_name=result.full_name,
+        created_at=result.created_at.isoformat() if hasattr(result.created_at, 'isoformat') else str(result.created_at),
+    )
+    return GetUserResponse(code=0, message="success", data=data)
 
 
 @router.patch(
     "/{user_id}",
-    response_model=dict,
+    response_model=PatchUserResponse,
     summary="Update User",
     description=(
         "## 기능\n"
@@ -181,7 +217,7 @@ async def update_user(
     request: PatchUserRequest,
     user_id: int = Path(..., examples=[1], description="사용자 ID"),
     service: UserAppService = Depends(get_user_app_service),
-) -> dict:
+) -> PatchUserResponse:
     """
     사용자 업데이트 엔드포인트
     
@@ -202,15 +238,20 @@ async def update_user(
     )
     result = await service.update_user(command)
     
-    return create_ok_response(
-        result.to_dict(),
-        message="User updated successfully",
+    data = PatchUserResponseData(
+        id=result.id,
+        username=result.username,
+        email=result.email,
+        full_name=result.full_name,
+        updated_at=result.created_at.isoformat() if hasattr(result.created_at, 'isoformat') else str(result.created_at),
     )
+    return PatchUserResponse(code=0, message="User updated successfully", data=data)
 
 
 @router.delete(
     "/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=DeleteUserResponse,
+    status_code=status.HTTP_200_OK,
     summary="Delete User",
     description=(
         "## 기능\n"
@@ -225,7 +266,7 @@ async def update_user(
 async def delete_user(
     user_id: int = Path(..., examples=[1], description="사용자 ID"),
     service: UserAppService = Depends(get_user_app_service),
-) -> None:
+) -> DeleteUserResponse:
     """
     사용자 삭제 엔드포인트
     
@@ -238,5 +279,10 @@ async def delete_user(
     command = DeleteUserCommand(user_id=user_id)
     await service.delete_user(command)
     
-    return None
+    from datetime import datetime, timezone
+    data = DeleteUserResponseData(
+        id=user_id,
+        deleted_at=datetime.now(timezone.utc).isoformat(),
+    )
+    return DeleteUserResponse(code=0, message="User deleted successfully", data=data)
 

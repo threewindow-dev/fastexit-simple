@@ -138,11 +138,3 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
 
-
-def create_ok_response(data: Any, message: str = "success") -> dict:
-    """성공 응답 생성."""
-    return {
-        "code": 0,
-        "message": message,
-        "data": data,
-    }

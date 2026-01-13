@@ -328,7 +328,7 @@ class TestDeleteUser:
     """Test DELETE /api/users/{user_id} endpoint"""
     
     def test_delete_user_success(self, client, clean_db):
-        """Should delete user and return 204"""
+        """Should delete user and return 200 with response body"""
         # Arrange - create user
         create_payload = {"username": "john_doe", "email": "john@example.com"}
         create_response = client.post("/api/users", json=create_payload)
@@ -338,7 +338,10 @@ class TestDeleteUser:
         response = client.delete(f"/api/users/{user_id}")
         
         # Assert
-        assert response.status_code == 204
+        assert response.status_code == 200
+        assert response.json()["code"] == 0
+        assert response.json()["data"]["id"] == user_id
+        assert "deleted_at" in response.json()["data"]
         
         # Verify user is deleted
         get_response = client.get(f"/api/users/{user_id}")
