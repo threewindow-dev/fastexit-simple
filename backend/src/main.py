@@ -10,7 +10,7 @@ import psycopg
 
 from core.exception_handlers import register_exception_handlers, create_ok_response
 from core.logging import configure_logging
-from infra.database import db_pool
+from shared.infra.database import db_pool
 from core.dependencies import set_db_pool
 from subdomains.user.interface.routers.user_router import router as user_router
 
@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
 
 def _create_all_tables(sync_conn):
     """SQLAlchemy ORM 모델의 모든 테이블 생성."""
-    from infra.database import Base
+    from shared.infra.database import Base
     # ORM 모델 import하여 메타데이터 등록
     from subdomains.user.infra.models import UserORM  # noqa: F401
     Base.metadata.create_all(sync_conn)
