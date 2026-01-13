@@ -5,8 +5,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
 
-from domains.user.domain.models import User
-from domains.user.infra.repositories import UserRepository
+from subdomains.user.domain.models import User
+from subdomains.user.infra.repositories import UserRepository
 
 
 # ============================================================================
@@ -71,12 +71,3 @@ def mock_user_repository() -> AsyncMock:
     mock_repo.remove = AsyncMock()
     
     return mock_repo
-
-
-@pytest.fixture
-def mock_transaction():
-    """Mock TransactionProtocol for unit tests"""
-    mock_tx = MagicMock()
-    mock_tx.__aenter__ = AsyncMock(return_value=mock_tx)
-    mock_tx.__aexit__ = AsyncMock(return_value=None)
-    return mock_tx

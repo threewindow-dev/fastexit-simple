@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from domains.user.domain.models.user import User
+    from subdomains.user.domain.models.user import User
 
 
 # ============================================================================

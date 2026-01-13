@@ -2,18 +2,21 @@
 User API Router (FastAPI endpoints)
 
 인터페이스 계층: HTTP 엔드포인트
+- SQLAlchemy 기본 저장소 사용
+- Psycopg는 환경 변수로 선택 가능
+- DI: transaction_factory를 통한 자동 트랜잭션 관리
 """
 from fastapi import APIRouter, status
 from fastapi import Path, Query
 
-from domains.user.application.dtos import (
+from subdomains.user.application.dtos import (
     RegisterUserCommand,
     DeleteUserCommand,
     UpdateUserCommand,
     UserPagedListQuery,
 )
-from domains.user.application.services import UserAppService
-from domains.user.interface.schemas import (
+from subdomains.user.application.services import UserAppService
+from subdomains.user.interface.schemas import (
     PostUserRequest,
     PatchUserRequest,
     GetUserPagedListResponse,
@@ -22,15 +25,19 @@ from domains.user.interface.schemas import (
 )
 from core.exception_handlers import create_ok_response
 from core.common_responses import common_responses
-from domains.user.infra.repositories import PsycopgUserRepository
-from infra.database import PsycopgTransaction
+from subdomains.user.infra.repositories import (
+    PsycopgUserRepository,
+    SQLAlchemyUserRepository,
+)
+from infra.database import PsycopgTransaction, SQLAlchemyTransaction
 
 
 def create_user_router(db_pool) -> APIRouter:
     """
     User 라우터 팩토리 함수
     
-    DB 풀을 의존성으로 주입받아 라우터 생성
+    DB 풀을 의존성으로 주입받아 라우터 생성.
+    저장소 타입(SQLAlchemy/Psycopg)은 db_pool._repository_type으로 결정.
     
     Args:
         db_pool: DatabasePool 인스턴스
@@ -43,6 +50,27 @@ def create_user_router(db_pool) -> APIRouter:
         tags=["users"],
         responses={400: {"description": "Bad request"}, 500: {"description": "Server error"}},
     )
+    
+    # DI 헬퍼: 현재 저장소 타입에 맞는 서비스 생성
+    async def get_service():
+        """저장소 타입에 맞는 AppService 생성."""
+        if db_pool._repository_type == "sqlalchemy":
+            session = await db_pool.get_session()
+            repository = SQLAlchemyUserRepository(session)
+            
+            async def tx_factory():
+                # 같은 세션 사용
+                return SQLAlchemyTransaction(session)
+            
+            return UserAppService(repository, tx_factory)
+        else:  # psycopg
+            conn = await db_pool.get_connection()
+            repository = PsycopgUserRepository(conn)
+            
+            async def tx_factory():
+                return PsycopgTransaction(conn)
+            
+            return UserAppService(repository, tx_factory)
     
     # ========================================================================
     # API Endpoints
@@ -77,26 +105,18 @@ def create_user_router(db_pool) -> APIRouter:
         - message: 성공 메시지
         - data: 생성된 사용자 정보
         """
-        async with db_pool.connection() as conn:
-            tx = PsycopgTransaction(conn)
-            repository = PsycopgUserRepository(conn)
-            service = UserAppService(repository, tx)
-            try:
-                command = RegisterUserCommand(
-                    username=request.username,
-                    email=request.email,
-                    full_name=request.full_name,
-                )
-                result = await service.create_user(command)
-                await tx.commit()
-            except Exception:
-                await tx.rollback()
-                raise
-
-            return create_ok_response(
-                result.to_dict(),
-                message="User created successfully",
-            )
+        service = await get_service()
+        command = RegisterUserCommand(
+            username=request.username,
+            email=request.email,
+            full_name=request.full_name,
+        )
+        result = await service.create_user(command)
+        
+        return create_ok_response(
+            result.to_dict(),
+            message="User created successfully",
+        )
     
     
     @router.get(
@@ -134,15 +154,11 @@ def create_user_router(db_pool) -> APIRouter:
         if limit > 1000:
             limit = 1000
         
-        async with db_pool.connection() as conn:
-            tx = PsycopgTransaction(conn)
-            repository = PsycopgUserRepository(conn)
-            service = UserAppService(repository, tx)
-            
-            query = UserPagedListQuery(skip=skip, limit=limit)
-            result = await service.list_users(query)
-            
-            return create_ok_response(result.to_dict())
+        service = await get_service()
+        query = UserPagedListQuery(skip=skip, limit=limit)
+        result = await service.list_users(query)
+        
+        return create_ok_response(result.to_dict())
     
     
     @router.get(
@@ -171,14 +187,10 @@ def create_user_router(db_pool) -> APIRouter:
         - message: 성공 메시지
         - data: 사용자 정보
         """
-        async with db_pool.connection() as conn:
-            tx = PsycopgTransaction(conn)
-            repository = PsycopgUserRepository(conn)
-            service = UserAppService(repository, tx)
-
-            result = await service.get_user(user_id)
-            
-            return create_ok_response(result.to_dict())
+        service = await get_service()
+        result = await service.get_user(user_id)
+        
+        return create_ok_response(result.to_dict())
     
     
     @router.patch(
@@ -213,25 +225,17 @@ def create_user_router(db_pool) -> APIRouter:
         - message: 성공 메시지
         - data: 업데이트된 사용자 정보
         """
-        async with db_pool.connection() as conn:
-            tx = PsycopgTransaction(conn)
-            repository = PsycopgUserRepository(conn)
-            service = UserAppService(repository, tx)
-            try:
-                command = UpdateUserCommand(
-                    user_id=user_id,
-                    full_name=request.full_name,
-                )
-                result = await service.update_user(command)
-                await tx.commit()
-            except Exception:
-                await tx.rollback()
-                raise
-
-            return create_ok_response(
-                result.to_dict(),
-                message="User updated successfully",
-            )
+        service = await get_service()
+        command = UpdateUserCommand(
+            user_id=user_id,
+            full_name=request.full_name,
+        )
+        result = await service.update_user(command)
+        
+        return create_ok_response(
+            result.to_dict(),
+            message="User updated successfully",
+        )
     
     
     @router.delete(
@@ -258,18 +262,10 @@ def create_user_router(db_pool) -> APIRouter:
         응답:
         - 204 No Content (성공)
         """
-        async with db_pool.connection() as conn:
-            tx = PsycopgTransaction(conn)
-            repository = PsycopgUserRepository(conn)
-            service = UserAppService(repository, tx)
-            try:
-                command = DeleteUserCommand(user_id=user_id)
-                await service.delete_user(command)
-                await tx.commit()
-            except Exception:
-                await tx.rollback()
-                raise
-
-            return None
+        service = await get_service()
+        command = DeleteUserCommand(user_id=user_id)
+        await service.delete_user(command)
+        
+        return None
     
     return router

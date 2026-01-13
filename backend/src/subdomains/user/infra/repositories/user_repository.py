@@ -6,7 +6,7 @@ User Repository Protocol (추상 계약)
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from domains.user.domain.models.user import User
+from subdomains.user.domain.models.user import User
 
 
 class UserRepository(ABC):
@@ -134,7 +134,7 @@ class UserRepository(ABC):
 
 
 # ============================================================================
-# PostgreSQL Implementation
+# Psycopg Implementation (Legacy)
 # ============================================================================
 
 import psycopg
@@ -142,7 +142,7 @@ import psycopg.errors
 
 
 class PsycopgUserRepository(UserRepository):
-    """PostgreSQL User Repository Implementation"""
+    """PostgreSQL User Repository Implementation (Psycopg - Legacy)"""
 
     def __init__(self, connection):
         """의존성 주입"""
