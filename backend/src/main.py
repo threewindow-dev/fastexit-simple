@@ -1,14 +1,12 @@
 import logging
 import os
-from typing import List, Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import psycopg
 
-from core.exception_handlers import register_exception_handlers, create_ok_response
+from core.exception_handlers import register_exception_handlers
+from shared.schemas import ApiResponse
 from core.logging import configure_logging
 from shared.infra.database import db_pool_factory
 from core.dependencies import set_db_pool
@@ -101,18 +99,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# (Deprecated on_event handlers removed; handled by lifespan)
-
-
-# ============================================================================
-# Pydantic Schemas
-# ============================================================================
-
 
 @app.get("/")
 async def root():
     """헬스 체크"""
-    return create_ok_response({"status": "healthy"})
+    return ApiResponse(code=0, message="success", data={"status": "healthy"})
 
 
 if __name__ == "__main__":
