@@ -11,7 +11,8 @@ import psycopg
 from core.exception_handlers import register_exception_handlers, create_ok_response
 from core.logging import configure_logging
 from infra.database import db_pool
-from subdomains.user.interface.routers import create_user_router
+from core.dependencies import set_db_pool
+from subdomains.user.interface.routers.user_router import router as user_router
 
 # 로깅 설정
 configure_logging(log_level="INFO", json_format=True)
@@ -22,6 +23,9 @@ async def lifespan(app: FastAPI):
     """App lifespan handler replacing deprecated on_event hooks."""
     # Startup
     await db_pool.initialize()
+    
+    # 전역 DatabasePool 설정 (dependencies.py에서 사용)
+    set_db_pool(db_pool)
     
     # 데이터베이스 테이블 초기화 (Psycopg용, SQLAlchemy는 필요 시에만 생성)
     repository_type = os.getenv("REPOSITORY_TYPE", "sqlalchemy")
@@ -80,8 +84,8 @@ app = FastAPI(title="FastExit API", lifespan=lifespan)
 # 전역 예외 핸들러 등록
 register_exception_handlers(app)
 
-# User 라우터 등록 (DB 풀 주입)
-app.include_router(create_user_router(db_pool))
+# User 라우터 등록 (Depends를 통한 DI)
+app.include_router(user_router)
 
 # CORS 설정
 app.add_middleware(
@@ -98,18 +102,6 @@ app.add_middleware(
 # ============================================================================
 # Pydantic Schemas
 # ============================================================================
-
-class User(BaseModel):
-    id: Optional[int] = None
-    username: str
-    email: str
-    full_name: Optional[str] = None
-
-
-class UserCreate(BaseModel):
-    username: str
-    email: str
-    full_name: Optional[str] = None
 
 
 @app.get("/")
