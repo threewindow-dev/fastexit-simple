@@ -1,6 +1,6 @@
 """SQLAlchemy ORM model for User entity."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime
 
 from shared.infra.database import Base
@@ -16,7 +16,8 @@ class UserORM(Base):
     username = Column(String(100), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
     full_name = Column(String(255), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # Use UTC timezone-aware datetime but strip timezone for storage in TIMESTAMP WITHOUT TIME ZONE
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def __repr__(self) -> str:
         return f"<UserORM(id={self.id}, username={self.username}, email={self.email})>"

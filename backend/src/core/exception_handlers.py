@@ -72,7 +72,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             extra={
                 "exception_type": "InfraError",
                 "code": exc.code,
-                "message": str(exc),
+                "error_details": str(exc),
                 "origin_exc": str(exc.origin_exc) if exc.origin_exc else None,
             },
         )
@@ -126,7 +126,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             exc_info=True,
             extra={
                 "exception_type": type(exc).__name__,
-                "message": str(exc),
+                "error_details": str(exc),
             },
         )
         return JSONResponse(

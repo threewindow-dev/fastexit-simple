@@ -3,15 +3,15 @@ API integration tests for User router
 
 Tests full HTTP endpoints with real database using Testcontainers
 """
+import re
 import pytest
 import pytest_asyncio
 import psycopg
 from fastapi.testclient import TestClient
 from testcontainers.postgres import PostgresContainer
-from testcontainers.core.waiting_utils import wait_for_logs
 
 from main import app
-from shared.infra.database import DatabasePool
+from shared.infra.database import db_pool_factory
 
 
 @pytest.fixture(scope="module")
@@ -19,7 +19,7 @@ def postgres_container():
     """Start PostgreSQL container for API tests"""
     container = PostgresContainer("postgres:17-alpine")
     container.start()
-    wait_for_logs(container, "database system is ready to accept connections")
+    container.waiting_for(re.compile(r".*database system is ready to accept connections.*", re.DOTALL))
     yield container
     container.stop()
 
@@ -47,7 +47,7 @@ async def test_db_pool(postgres_container):
             """)
     
     # Create pool
-    pool = DatabasePool()
+    pool = db_pool_factory("sqlalchemy")
     # Override connection string
     import os
     os.environ["DB_HOST"] = str(postgres_container.get_container_host_ip())
@@ -66,7 +66,13 @@ async def test_db_pool(postgres_container):
 @pytest_asyncio.fixture
 async def clean_db(test_db_pool):
     """Clean database before each test"""
-    async with test_db_pool.connection() as conn:
+    # Use psycopg connection directly for table cleanup
+    import os
+    conn_str = f"postgresql://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
+    
+    async with await psycopg.AsyncConnection.connect(
+        conn_str, autocommit=False, row_factory=psycopg.rows.dict_row
+    ) as conn:
         try:
             await conn.rollback()
         except Exception:
@@ -74,9 +80,13 @@ async def clean_db(test_db_pool):
         async with conn.cursor() as cur:
             await cur.execute("TRUNCATE users RESTART IDENTITY CASCADE")
         await conn.commit()
+    
     yield
+    
     # Cleanup after test
-    async with test_db_pool.connection() as conn:
+    async with await psycopg.AsyncConnection.connect(
+        conn_str, autocommit=False, row_factory=psycopg.rows.dict_row
+    ) as conn:
         try:
             await conn.rollback()
         except Exception:

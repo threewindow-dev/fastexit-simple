@@ -10,7 +10,8 @@ FastAPI Dependency Injection.
 import os
 from typing import AsyncGenerator
 
-from shared.infra.database import DatabasePool, SQLAlchemyTransactionManager, PsycopgTransactionManager
+from shared.protocols.database import DatabasePool
+from shared.infra.database import SQLAlchemyTransactionManager, PsycopgTransactionManager
 from subdomains.user.infra.repositories import SQLAlchemyUserRepository, PsycopgUserRepository
 from subdomains.user.application.services.user_app_service import UserAppService
 

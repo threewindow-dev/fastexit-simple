@@ -1,7 +1,7 @@
 """
 Transaction protocol definition.
 
-기준: .dev-standards/python/TRANSACTION_MANAGEMENT.md
+기준: .dev-standards/python/DATABASE_STANDARDS.md
 """
 
 from abc import ABC, abstractmethod
