@@ -10,13 +10,16 @@ import psycopg
 
 from core.exception_handlers import register_exception_handlers, create_ok_response
 from core.logging import configure_logging
-from shared.infra.database import db_pool
+from shared.infra.database import db_pool_factory
 from core.dependencies import set_db_pool
 from subdomains.user.interface.routers.user_router import router as user_router
 
 # 로깅 설정
 configure_logging(log_level="INFO", json_format=True)
 logger = logging.getLogger(__name__)
+
+# DatabasePool 생성 (환경변수 기반 factory)
+db_pool = db_pool_factory(os.getenv("REPOSITORY_TYPE", "sqlalchemy"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
