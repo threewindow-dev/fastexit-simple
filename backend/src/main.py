@@ -59,8 +59,10 @@ async def lifespan(app: FastAPI):
                 await conn.commit()
     else:
         # SQLAlchemy: create_all 수행
-        if db_pool._engine:
-            async with db_pool._engine.begin() as conn:
+        # Note: DatabasePool exposes write/read engines as _engine_write/_engine_readonly
+        engine = getattr(db_pool, "_engine_write", None)
+        if engine:
+            async with engine.begin() as conn:
                 await conn.run_sync(lambda sync_conn: _create_all_tables(sync_conn))
     
     logger.info(f"Database initialized successfully (repository_type={repository_type})")

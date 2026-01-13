@@ -8,13 +8,10 @@ FastAPI Dependency Injection.
 """
 
 import os
-from typing import AsyncGenerator, Callable, Awaitable
+from typing import AsyncGenerator
 
-from shared.infra.database import DatabasePool, SQLAlchemyTransaction, PsycopgTransaction
-from shared.protocols.transaction import TransactionProtocol
-from subdomains.user.infra.repositories.user_repository import UserRepository
-from subdomains.user.infra.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from subdomains.user.infra.repositories.psycopg_user_repository import PsycopgUserRepository
+from shared.infra.database import DatabasePool, SQLAlchemyTransactionManager, PsycopgTransactionManager
+from subdomains.user.infra.repositories import SQLAlchemyUserRepository, PsycopgUserRepository
 from subdomains.user.application.services.user_app_service import UserAppService
 
 
@@ -47,8 +44,7 @@ async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
     UserAppService 인스턴스 생성 및 의존성 주입.
     
     - repository: 환경변수 기반 자동 선택
-    - transaction_factory: 환경변수 기반 자동 선택
-    - Repository와 Transaction이 동일한 세션/연결 사용
+    - transaction_manager: readonly/writable 트랜잭션 생성 관리
     
     사용 예시 (Router):
         @router.post("/users")
@@ -63,34 +59,22 @@ async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
     repository_type = os.getenv("REPOSITORY_TYPE", "sqlalchemy")
     
     if repository_type == "sqlalchemy":
-        # SQLAlchemy: 동일한 세션 사용
-        session = await db_pool.get_session()
-        try:
-            repository = SQLAlchemyUserRepository(session)
-            
-            async def tx_factory() -> TransactionProtocol:
-                return SQLAlchemyTransaction(session)
-            
-            service = UserAppService(
-                user_repository=repository,
-                transaction_factory=tx_factory
-            )
-            yield service
-        finally:
-            await session.close()
+        # SQLAlchemy: TransactionManager가 세션 생성 관리
+        tx_manager = SQLAlchemyTransactionManager(db_pool)
+        repository = SQLAlchemyUserRepository()
+        
+        service = UserAppService(
+            user_repository=repository,
+            transaction_manager=tx_manager,
+        )
+        yield service
     else:
-        # Psycopg: 동일한 연결 사용
-        conn = await db_pool.get_connection()
-        try:
-            repository = PsycopgUserRepository(conn)
-            
-            async def tx_factory() -> TransactionProtocol:
-                return PsycopgTransaction(conn)
-            
-            service = UserAppService(
-                user_repository=repository,
-                transaction_factory=tx_factory
-            )
-            yield service
-        finally:
-            await conn.close()
+        # Psycopg: TransactionManager가 연결 생성 관리
+        tx_manager = PsycopgTransactionManager(db_pool)
+        repository = PsycopgUserRepository()
+        
+        service = UserAppService(
+            user_repository=repository,
+            transaction_manager=tx_manager,
+        )
+        yield service

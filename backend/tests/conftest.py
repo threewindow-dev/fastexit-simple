@@ -2,11 +2,12 @@
 Pytest configuration and fixtures for User domain tests
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from datetime import datetime
 
 from subdomains.user.domain.models import User
-from subdomains.user.infra.repositories import UserRepository
+from subdomains.user.domain.protocols import UserRepository
+from tests.test_helpers import MockTransactionManager
 
 
 # ============================================================================
@@ -71,3 +72,9 @@ def mock_user_repository() -> AsyncMock:
     mock_repo.remove = AsyncMock()
     
     return mock_repo
+
+
+@pytest.fixture
+def mock_transaction_manager() -> MockTransactionManager:
+    """Mock TransactionManager for unit tests."""
+    return MockTransactionManager()
