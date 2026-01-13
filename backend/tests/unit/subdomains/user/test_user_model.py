@@ -6,7 +6,7 @@ Tests domain logic and business rules without external dependencies
 import pytest
 from datetime import datetime
 
-from domains.user.domain.models import User
+from subdomains.user.domain.models import User
 from shared.errors import DomainError
 
 

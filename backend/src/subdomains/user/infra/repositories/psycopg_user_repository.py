@@ -5,8 +5,8 @@ User Repository Implementation (PostgreSQL with Psycopg)
 """
 from typing import Optional
 
-from domains.user.domain.models.user import User
-from domains.user.infra.repositories.user_repository import UserRepository
+from subdomains.user.domain.models.user import User
+from subdomains.user.infra.repositories.user_repository import UserRepository
 from shared.errors import DuplicateUserError, InfraError
 import psycopg
 import psycopg.errors

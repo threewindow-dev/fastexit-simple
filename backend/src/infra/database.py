@@ -2,16 +2,20 @@
 Database connection and session management.
 
 기준: .dev-standards/python/TRANSACTION_MANAGEMENT.md
-현재: psycopg 기반 (향후 SQLAlchemy async로 확장 가능)
+현재: psycopg + SQLAlchemy async 모두 지원
+- REPOSITORY_TYPE 환경변수로 선택: "psycopg" | "sqlalchemy" (기본값: "sqlalchemy")
 """
 
 import os
 import logging
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 import psycopg
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import declarative_base
 
 from shared.errors import DbConnectionError, InfraError
 from shared.protocols.transaction import TransactionProtocol
@@ -19,6 +23,17 @@ from shared.protocols.transaction import TransactionProtocol
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# SQLAlchemy 기본 설정
+# ============================================================================
+
+# ORM Base (모든 모델이 상속)
+Base = declarative_base()
+
+
+# ============================================================================
+# Transaction Implementations
+# ============================================================================
 
 class PsycopgTransaction(TransactionProtocol):
     """psycopg 기반 트랜잭션 구현."""
@@ -40,33 +55,82 @@ class PsycopgTransaction(TransactionProtocol):
             await self.conn.rollback()
         except Exception as exc:
             logger.error(f"Rollback failed: {exc}")
-            # 롤백 실패도 에러이지만, 이미 문제 상황이므로 조용히 처리
+            raise InfraError("Failed to rollback transaction", origin_exc=exc)
+
+
+class SQLAlchemyTransaction(TransactionProtocol):
+    """SQLAlchemy 기반 비동기 트랜잭션 구현.
+    
+    AsyncSession 컨텍스트 매니저로 자동 commit/rollback 관리.
+    """
+    
+    def __init__(self, session: AsyncSession):
+        self.session = session
+    
+    async def commit(self) -> None:
+        """트랜잭션 커밋."""
+        try:
+            await self.session.commit()
+        except Exception as exc:
+            logger.error(f"Commit failed: {exc}")
+            raise InfraError("Failed to commit transaction", origin_exc=exc)
+    
+    async def rollback(self) -> None:
+        """트랜잭션 롤백."""
+        try:
+            await self.session.rollback()
+        except Exception as exc:
+            logger.error(f"Rollback failed: {exc}")
             raise InfraError("Failed to rollback transaction", origin_exc=exc)
 
 
 class DatabasePool:
-    """데이터베이스 연결 풀 관리."""
+    """데이터베이스 연결 풀 관리 (psycopg + SQLAlchemy)."""
     
     def __init__(self):
         self._dsn: str | None = None
+        self._engine = None
+        self._session_factory = None
+        self._repository_type: str = os.getenv("REPOSITORY_TYPE", "sqlalchemy")  # "sqlalchemy" | "psycopg"
     
     async def initialize(self) -> None:
-        """연결 풀 초기화."""
+        """연결 풀 및 SQLAlchemy engine 초기화."""
         dsn = self._build_connection_string()
-        try:
-            # 연결 문자열만 준비하여 지연 연결 방식으로 동작
-            self._dsn = dsn
-            logger.info("Database pool initialized (lazy)")
-        except Exception as exc:
-            raise DbConnectionError(os.getenv("DB_HOST", "localhost"), origin_exc=exc)
+        self._dsn = dsn
+        
+        if self._repository_type == "sqlalchemy":
+            try:
+                # SQLAlchemy async engine 생성
+                # postgresql+asyncpg:// 스키마 사용
+                async_dsn = dsn.replace("postgresql://", "postgresql+asyncpg://")
+                self._engine = create_async_engine(
+                    async_dsn,
+                    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+                    future=True,
+                    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+                    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
+                    pool_pre_ping=True,
+                )
+                self._session_factory = async_sessionmaker(
+                    self._engine,
+                    class_=AsyncSession,
+                    expire_on_commit=False,
+                )
+                logger.info("SQLAlchemy async engine initialized")
+            except Exception as exc:
+                raise DbConnectionError(os.getenv("DB_HOST", "localhost"), origin_exc=exc)
+        else:
+            logger.info("Using psycopg repository (legacy)")
     
     async def close(self) -> None:
         """연결 풀 종료."""
-        # 지연 연결 방식: 명시적으로 관리할 풀 없음
+        if self._engine:
+            await self._engine.dispose()
+            logger.info("SQLAlchemy engine disposed")
         logger.info("Database pool closed")
     
     async def get_connection(self) -> AsyncConnection:
-        """풀에서 연결 획득."""
+        """Psycopg 연결 획득 (레거시)."""
         if not self._dsn:
             raise InfraError("Database pool not initialized")
         
@@ -77,21 +141,35 @@ class DatabasePool:
             raise InfraError("Failed to get database connection", origin_exc=exc)
     
     async def put_connection(self, conn: AsyncConnection) -> None:
-        """풀에 연결 반환."""
-        # 지연 연결: 즉시 연결 종료
+        """Psycopg 연결 반환."""
         try:
             await conn.close()
         except Exception:
             pass
     
+    async def get_session(self) -> AsyncSession:
+        """SQLAlchemy 세션 획득."""
+        if not self._session_factory:
+            raise InfraError("SQLAlchemy not initialized")
+        return self._session_factory()
+    
     @asynccontextmanager
     async def connection(self):
-        """연결 컨텍스트 매니저."""
+        """Psycopg 연결 컨텍스트 매니저."""
         conn = await self.get_connection()
         try:
             yield conn
         finally:
             await self.put_connection(conn)
+    
+    @asynccontextmanager
+    async def session(self) -> AsyncGenerator[AsyncSession, None]:
+        """SQLAlchemy 세션 컨텍스트 매니저."""
+        session = await self.get_session()
+        try:
+            yield session
+        finally:
+            await session.close()
     
     @staticmethod
     def _build_connection_string() -> str:
@@ -100,10 +178,10 @@ class DatabasePool:
         if not db_password:
             raise ValueError("DB_PASSWORD environment variable is required")
         
-        host = os.getenv("DB_HOST", "postgres")
-        port = os.getenv("DB_PORT", "5432")
-        dbname = os.getenv("DB_NAME", "fastexit")
-        user = os.getenv("DB_USER", "postgres")
+        host = os.getenv("DB_HOST", "")
+        port = os.getenv("DB_PORT", "")
+        dbname = os.getenv("DB_NAME", "")
+        user = os.getenv("DB_USER", "")
         
         return f"postgresql://{user}:{db_password}@{host}:{port}/{dbname}"
 
@@ -112,16 +190,29 @@ class DatabasePool:
 db_pool = DatabasePool()
 
 
-async def get_transaction() -> TransactionProtocol:
-    """의존성 주입용 트랜잭션 팩토리."""
-    conn = await db_pool.get_connection()
-    try:
+# ============================================================================
+# Dependency Injection Factories
+# ============================================================================
+
+async def get_transaction(db_pool_instance: DatabasePool | None = None) -> TransactionProtocol:
+    """의존성 주입용 트랜잭션 팩토리.
+    
+    저장소 타입(psycopg/sqlalchemy)에 따라 적절한 트랜잭션 반환.
+    """
+    pool = db_pool_instance or db_pool
+    if pool._repository_type == "sqlalchemy":
+        session = await pool.get_session()
+        return SQLAlchemyTransaction(session)
+    else:
+        conn = await pool.get_connection()
         return PsycopgTransaction(conn)
-    except Exception:
-        await db_pool.put_connection(conn)
-        raise
 
 
 async def get_db_connection() -> AsyncConnection:
-    """의존성 주입용 DB 연결 팩토리."""
+    """의존성 주입용 Psycopg 연결 팩토리."""
     return await db_pool.get_connection()
+
+
+async def get_db_session() -> AsyncSession:
+    """의존성 주입용 SQLAlchemy 세션 팩토리."""
+    return await db_pool.get_session()

@@ -2,10 +2,12 @@
 User Application Service (Use Cases)
 
 애플리케이션 계층: 비즈니스 프로세스 조율
+- 트랜잭션 경계 관리 (per use-case)
+- Domain Model과 Repository 조율
 """
-from typing import Optional
+from typing import Optional, Callable, Awaitable
 
-from domains.user.application.dtos import (
+from subdomains.user.application.dtos import (
     RegisterUserCommand,
     DeleteUserCommand,
     UpdateUserCommand,
@@ -13,8 +15,8 @@ from domains.user.application.dtos import (
     RegisterUserCommandResult,
     UserPagedListQueryResult,
 )
-from domains.user.domain.models import User
-from domains.user.infra.repositories import UserRepository
+from subdomains.user.domain.models import User
+from subdomains.user.infra.repositories import UserRepository
 from shared.errors import DuplicateUserError, UserNotFoundError
 from shared.protocols.transaction import TransactionProtocol
 
@@ -25,35 +27,40 @@ class UserAppService:
     
     DDD Application Service 패턴:
     - Use Case (Command/Query) 처리
+    - 메서드별 트랜잭션 경계 관리 (per use-case)
     - Domain Model과 Repository 조율
-    - Transaction 관리
     - DTO 변환
+    
+    트랜잭션 관리:
+    - 커맨드(쓰기): 트랜잭션으로 감싸짐 (자동 commit/rollback)
+    - 쿼리(읽기): 트랜잭션 불필요 (읽기 전용)
     """
     
     def __init__(
         self,
         user_repository: UserRepository,
-        transaction: TransactionProtocol,
+        transaction_factory: Callable[[], Awaitable[TransactionProtocol]] | None = None,
     ):
         """
         의존성 주입
         
         Args:
             user_repository: User 저장소
-            transaction: 트랜잭션 관리자
+            transaction_factory: 트랜잭션 생성 팩토리 함수 (async callable)
+                                 기본값: None (트랜잭션 없이 동작)
         """
         self.user_repository = user_repository
-        self.transaction = transaction
+        self.transaction_factory = transaction_factory
     
     # ========================================================================
-    # Commands (쓰기 작업)
+    # Commands (쓰기 작업) - 트랜잭션으로 감싸짐
     # ========================================================================
     
     async def create_user(self, command: RegisterUserCommand) -> RegisterUserCommandResult:
         """
         Register User Use Case
         
-        프로세스:
+        트랜잭션 경계:
         1. 중복 검사 (username, email)
         2. Domain Model 생성 (비즈니스 규칙 검증)
         3. Repository에 저장
@@ -70,31 +77,34 @@ class UserAppService:
             DomainError: 비즈니스 규칙 위반
             InfraError: DB 오류
         """
-        # 1. 중복 검사
-        if await self.user_repository.exists_by_username(command.username):
-            raise DuplicateUserError(command.username)
+        async def _execute():
+            # 1. 중복 검사
+            if await self.user_repository.exists_by_username(command.username):
+                raise DuplicateUserError(command.username)
+            
+            if await self.user_repository.exists_by_email(command.email):
+                raise DuplicateUserError(command.email)
+            
+            # 2. Domain Model 생성 (팩토리 메서드는 비즈니스 규칙 검증)
+            user = User.create(
+                username=command.username,
+                email=command.email,
+                full_name=command.full_name,
+            )
+            
+            # 3. Repository에 저장
+            saved_user = await self.user_repository.add(user)
+            
+            # 4. DTO 변환
+            return RegisterUserCommandResult.from_domain(saved_user)
         
-        if await self.user_repository.exists_by_email(command.email):
-            raise DuplicateUserError(command.email)
-        
-        # 2. Domain Model 생성 (팩토리 메서드는 비즈니스 규칙 검증)
-        user = User.create(
-            username=command.username,
-            email=command.email,
-            full_name=command.full_name,
-        )
-        
-        # 3. Repository에 저장
-        saved_user = await self.user_repository.add(user)
-        
-        # 4. DTO 변환
-        return RegisterUserCommandResult.from_domain(saved_user)
+        return await self._run_with_transaction(_execute)
     
     async def update_user(self, command: UpdateUserCommand) -> RegisterUserCommandResult:
         """
         Update User Use Case
         
-        프로세스:
+        트랜잭션 경계:
         1. 사용자 조회
         2. Domain Model 업데이트 (비즈니스 규칙 검증)
         3. Repository에 저장
@@ -111,26 +121,29 @@ class UserAppService:
             DomainError: 비즈니스 규칙 위반
             InfraError: DB 오류
         """
-        # 1. 사용자 조회
-        user = await self.user_repository.find_by_id(command.user_id)
-        if user is None:
-            raise UserNotFoundError(command.user_id)
+        async def _execute():
+            # 1. 사용자 조회
+            user = await self.user_repository.find_by_id(command.user_id)
+            if user is None:
+                raise UserNotFoundError(command.user_id)
+            
+            # 2. Domain Model 업데이트
+            if command.full_name is not None:
+                user.change_full_name(command.full_name)
+            
+            # 3. Repository에 저장
+            updated_user = await self.user_repository.update(user)
+            
+            # 4. DTO 변환
+            return RegisterUserCommandResult.from_domain(updated_user)
         
-        # 2. Domain Model 업데이트
-        if command.full_name is not None:
-            user.change_full_name(command.full_name)
-        
-        # 3. Repository에 저장
-        updated_user = await self.user_repository.update(user)
-        
-        # 4. DTO 변환
-        return RegisterUserCommandResult.from_domain(updated_user)
+        return await self._run_with_transaction(_execute)
     
     async def delete_user(self, command: DeleteUserCommand) -> None:
         """
         Delete User Use Case
         
-        프로세스:
+        트랜잭션 경계:
         1. 사용자 존재 확인
         2. Repository에서 삭제
         
@@ -141,16 +154,19 @@ class UserAppService:
             UserNotFoundError: 사용자 미존재
             InfraError: DB 오류
         """
-        # 1. 사용자 존재 확인
-        user = await self.user_repository.find_by_id(command.user_id)
-        if user is None:
-            raise UserNotFoundError(command.user_id)
+        async def _execute():
+            # 1. 사용자 존재 확인
+            user = await self.user_repository.find_by_id(command.user_id)
+            if user is None:
+                raise UserNotFoundError(command.user_id)
+            
+            # 2. Repository에서 삭제
+            await self.user_repository.remove(command.user_id)
         
-        # 2. Repository에서 삭제
-        await self.user_repository.remove(command.user_id)
+        await self._run_with_transaction(_execute)
     
     # ========================================================================
-    # Queries (읽기 작업)
+    # Queries (읽기 작업) - 트랜잭션 불필요
     # ========================================================================
     
     async def get_user(self, user_id: int) -> RegisterUserCommandResult:
@@ -199,3 +215,31 @@ class UserAppService:
             skip=query.skip,
             limit=query.limit,
         )
+    
+    # ========================================================================
+    # Transaction Management
+    # ========================================================================
+    
+    async def _run_with_transaction(self, func: Callable[[], Awaitable]) -> any:
+        """
+        트랜잭션으로 감싼 비동기 함수 실행.
+        
+        Args:
+            func: 실행할 비동기 함수
+        
+        Returns:
+            함수의 반환값
+        
+        Note:
+            - transaction_factory가 None이면 트랜잭션 없이 함수만 실행
+            - 예외 발생 시 자동 rollback
+            - 정상 완료 시 자동 commit
+        """
+        if self.transaction_factory is None:
+            # 트랜잭션 없이 실행
+            return await func()
+        
+        # 트랜잭션으로 감싼 실행
+        tx = await self.transaction_factory()
+        async with tx:
+            return await func()

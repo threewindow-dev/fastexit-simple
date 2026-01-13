@@ -1,15 +1,17 @@
 import logging
+import os
 from typing import List, Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import psycopg
 
 from core.exception_handlers import register_exception_handlers, create_ok_response
 from core.logging import configure_logging
 from infra.database import db_pool
-from domains.user.interface.routers import create_user_router
+from subdomains.user.interface.routers import create_user_router
 
 # 로깅 설정
 configure_logging(log_level="INFO", json_format=True)
@@ -20,39 +22,57 @@ async def lifespan(app: FastAPI):
     """App lifespan handler replacing deprecated on_event hooks."""
     # Startup
     await db_pool.initialize()
-    # 데이터베이스 테이블 초기화
-    async with db_pool.connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(100) UNIQUE NOT NULL,
-                    email VARCHAR(255) UNIQUE NOT NULL,
-                    full_name VARCHAR(255),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            await cur.execute("SELECT COUNT(*) FROM users")
-            result = await cur.fetchone()
-            count = result["count"] if result else 0
-            if count == 0:
-                sample_users = [
-                    ("john_doe", "john@example.com", "John Doe"),
-                    ("jane_smith", "jane@example.com", "Jane Smith"),
-                    ("bob_wilson", "bob@example.com", "Bob Wilson"),
-                ]
-                for username, email, full_name in sample_users:
-                    await cur.execute(
-                        "INSERT INTO users (username, email, full_name) VALUES (%s, %s, %s)",
-                        (username, email, full_name),
+    
+    # 데이터베이스 테이블 초기화 (Psycopg용, SQLAlchemy는 필요 시에만 생성)
+    repository_type = os.getenv("REPOSITORY_TYPE", "sqlalchemy")
+    
+    if repository_type == "psycopg":
+        async with db_pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        username VARCHAR(100) UNIQUE NOT NULL,
+                        email VARCHAR(255) UNIQUE NOT NULL,
+                        full_name VARCHAR(255),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-            await conn.commit()
-    logger.info("Database initialized successfully")
+                """)
+                await cur.execute("SELECT COUNT(*) FROM users")
+                result = await cur.fetchone()
+                count = result["count"] if result else 0
+                if count == 0:
+                    sample_users = [
+                        ("john_doe", "john@example.com", "John Doe"),
+                        ("jane_smith", "jane@example.com", "Jane Smith"),
+                        ("bob_wilson", "bob@example.com", "Bob Wilson"),
+                    ]
+                    for username, email, full_name in sample_users:
+                        await cur.execute(
+                            "INSERT INTO users (username, email, full_name) VALUES (%s, %s, %s)",
+                            (username, email, full_name),
+                        )
+                await conn.commit()
+    else:
+        # SQLAlchemy: create_all 수행
+        if db_pool._engine:
+            async with db_pool._engine.begin() as conn:
+                await conn.run_sync(lambda sync_conn: _create_all_tables(sync_conn))
+    
+    logger.info(f"Database initialized successfully (repository_type={repository_type})")
     try:
         yield
     finally:
         await db_pool.close()
         logger.info("Database pool closed")
+
+
+def _create_all_tables(sync_conn):
+    """SQLAlchemy ORM 모델의 모든 테이블 생성."""
+    from infra.database import Base
+    # ORM 모델 import하여 메타데이터 등록
+    from subdomains.user.infra.models import UserORM  # noqa: F401
+    Base.metadata.create_all(sync_conn)
 
 
 app = FastAPI(title="FastExit API", lifespan=lifespan)

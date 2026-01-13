@@ -9,8 +9,8 @@ import psycopg
 from datetime import datetime
 from testcontainers.postgres import PostgresContainer
 
-from domains.user.domain.models import User
-from domains.user.infra.repositories import PsycopgUserRepository
+from subdomains.user.domain.models import User
+from subdomains.user.infra.repositories import PsycopgUserRepository
 from shared.errors import DuplicateUserError, InfraError
 
 
