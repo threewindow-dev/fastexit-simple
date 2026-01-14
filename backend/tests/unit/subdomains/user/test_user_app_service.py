@@ -16,7 +16,8 @@ from subdomains.user.application.dtos import (
     UserPagedListQuery,
 )
 from subdomains.user.domain.models import User
-from shared.errors import DuplicateUserError, UserNotFoundError, DomainError
+from subdomains.user.domain.errors import DuplicateUserError, UserNotFoundError
+from shared.errors import DomainError
 
 
 class TestCreateUser:
@@ -61,14 +62,13 @@ class TestCreateUser:
         assert result.email == "john@example.com"
         assert result.full_name == "John Doe"
 
-        conn = mock_transaction_manager.mock_connection
         mock_user_repository.exists_by_username.assert_awaited_once_with(
-            conn, "john_doe"
+            "john_doe"
         )
         mock_user_repository.exists_by_email.assert_awaited_once_with(
-            conn, "john@example.com"
+            "john@example.com"
         )
-        mock_user_repository.add.assert_awaited_once_with(conn, ANY)
+        mock_user_repository.add.assert_awaited_once_with(ANY)
 
     @pytest.mark.asyncio
     async def test_create_user_duplicate_username_raises_error(
@@ -93,9 +93,8 @@ class TestCreateUser:
         with pytest.raises(DuplicateUserError):
             await service.create_user(command)
 
-        conn = mock_transaction_manager.mock_connection
         mock_user_repository.exists_by_username.assert_awaited_once_with(
-            conn, "existing_user"
+            "existing_user"
         )
         mock_user_repository.add.assert_not_awaited()
 
@@ -123,9 +122,8 @@ class TestCreateUser:
         with pytest.raises(DuplicateUserError):
             await service.create_user(command)
 
-        conn = mock_transaction_manager.mock_connection
         mock_user_repository.exists_by_email.assert_awaited_once_with(
-            conn, "existing@example.com"
+            "existing@example.com"
         )
         mock_user_repository.add.assert_not_awaited()
 
@@ -200,9 +198,8 @@ class TestUpdateUser:
 
         # Assert
         assert result.full_name == "Jane Doe"
-        conn = mock_transaction_manager.mock_connection
-        mock_user_repository.find_by_id.assert_awaited_once_with(conn, 1)
-        mock_user_repository.update.assert_awaited_once_with(conn, ANY)
+        mock_user_repository.find_by_id.assert_awaited_once_with(1)
+        mock_user_repository.update.assert_awaited_once_with(ANY)
 
     @pytest.mark.asyncio
     async def test_update_user_not_found_raises_error(
@@ -293,9 +290,8 @@ class TestDeleteUser:
         await service.delete_user(command)
 
         # Assert
-        conn = mock_transaction_manager.mock_connection
-        mock_user_repository.find_by_id.assert_awaited_once_with(conn, 1)
-        mock_user_repository.remove.assert_awaited_once_with(conn, 1)
+        mock_user_repository.find_by_id.assert_awaited_once_with(1)
+        mock_user_repository.remove.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
     async def test_delete_user_not_found_raises_error(
@@ -349,8 +345,7 @@ class TestGetUser:
         # Assert
         assert result.id == 1
         assert result.username == "john_doe"
-        conn = mock_transaction_manager.mock_connection
-        mock_user_repository.find_by_id.assert_awaited_once_with(conn, 1)
+        mock_user_repository.find_by_id.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
     async def test_get_user_not_found_raises_error(
@@ -396,8 +391,7 @@ class TestListUsers:
         assert result.total_count == 10
         assert result.skip == 0
         assert result.limit == 10
-        conn = mock_transaction_manager.mock_connection
-        mock_user_repository.find_all.assert_awaited_once_with(conn, skip=0, limit=10)
+        mock_user_repository.find_all.assert_awaited_once_with(skip=0, limit=10)
 
     @pytest.mark.asyncio
     async def test_list_users_with_pagination(

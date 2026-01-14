@@ -59,7 +59,7 @@ def _create_all_tables(sync_conn):
     from shared.infra.database import Base
 
     # ORM 모델 import하여 메타데이터 등록
-    from subdomains.user.infra.models import UserORM  # noqa: F401
+    from subdomains.user.infra.entities.user_entity import UserEntity  # noqa: F401
 
     Base.metadata.create_all(sync_conn)
 
