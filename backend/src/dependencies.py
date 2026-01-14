@@ -11,8 +11,14 @@ import os
 from typing import AsyncGenerator
 
 from shared.protocols.database import DatabasePool
-from shared.infra.database import SQLAlchemyTransactionManager, PsycopgTransactionManager
-from subdomains.user.infra.repositories import SQLAlchemyUserRepository, PsycopgUserRepository
+from shared.infra.database import (
+    SQLAlchemyTransactionManager,
+    PsycopgTransactionManager,
+)
+from subdomains.user.infra.repositories import (
+    SQLAlchemyUserRepository,
+    PsycopgUserRepository,
+)
 from subdomains.user.application.services.user_app_service import UserAppService
 
 
@@ -40,13 +46,14 @@ def get_db_pool() -> DatabasePool:
 # Application Service 의존성
 # ============================================================================
 
+
 async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
     """
     UserAppService 인스턴스 생성 및 의존성 주입.
-    
+
     - repository: 환경변수 기반 자동 선택
     - transaction_manager: readonly/writable 트랜잭션 생성 관리
-    
+
     사용 예시 (Router):
         @router.post("/users")
         async def create_user(
@@ -58,12 +65,12 @@ async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
     """
     db_pool = get_db_pool()
     repository_type = os.getenv("REPOSITORY_TYPE", "sqlalchemy")
-    
+
     if repository_type == "sqlalchemy":
         # SQLAlchemy: TransactionManager가 세션 생성 관리
         tx_manager = SQLAlchemyTransactionManager(db_pool)
         repository = SQLAlchemyUserRepository()
-        
+
         service = UserAppService(
             user_repository=repository,
             transaction_manager=tx_manager,
@@ -73,7 +80,7 @@ async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
         # Psycopg: TransactionManager가 연결 생성 관리
         tx_manager = PsycopgTransactionManager(db_pool)
         repository = PsycopgUserRepository()
-        
+
         service = UserAppService(
             user_repository=repository,
             transaction_manager=tx_manager,

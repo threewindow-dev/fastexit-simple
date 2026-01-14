@@ -3,16 +3,45 @@ Integration tests for PsycopgUserRepository
 
 Tests repository with actual PostgreSQL database using Testcontainers
 """
+
 import pytest
 import pytest_asyncio
 import psycopg
 from datetime import datetime
+from pathlib import Path
 from testcontainers.postgres import PostgresContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 
 from subdomains.user.domain.models import User
-from subdomains.user.infra.repositories import PsycopgUserRepository
-from shared.errors import DuplicateUserError, InfraError
+from subdomains.user.domain.errors import DuplicateUserError
+from subdomains.user.infra.repositories import SQLAlchemyUserRepository
+from subdomains.user.infra.repositories.user_repository import PsycopgUserRepository
+from shared.errors import InfraError
+
+
+def _get_schema_files() -> list[Path]:
+    """Get all SQL schema files in order (numerically sorted)"""
+    schema_dir = Path(__file__).parent.parent.parent.parent / "sql" / "schema"
+    if not schema_dir.exists():
+        raise FileNotFoundError(f"Schema directory not found: {schema_dir}")
+    
+    sql_files = sorted(schema_dir.glob("*.sql"))
+    if not sql_files:
+        raise FileNotFoundError(f"No SQL files found in {schema_dir}")
+    
+    return sql_files
+
+
+async def _initialize_schema(conn: psycopg.AsyncConnection) -> None:
+    """Initialize database schema by executing all SQL files"""
+    schema_files = _get_schema_files()
+    
+    async with conn.cursor() as cur:
+        for sql_file in schema_files:
+            sql_content = sql_file.read_text()
+            await cur.execute(sql_content)
+    
+    await conn.commit()
 
 
 @pytest.fixture(scope="module")
@@ -27,27 +56,19 @@ def postgres_container():
 
 @pytest_asyncio.fixture()
 async def db_connection(postgres_container):
-    """Create database connection and initialize schema"""
+    """Create database connection and initialize schema from SQL files"""
     conn_str = postgres_container.get_connection_url()
     # Convert SQLAlchemy-style URL to plain psycopg DSN
-    conn_str = conn_str.replace("postgresql+psycopg2", "postgresql").replace("postgresql+psycopg", "postgresql")
-    
+    conn_str = conn_str.replace("postgresql+psycopg2", "postgresql").replace(
+        "postgresql+psycopg", "postgresql"
+    )
+
     async with await psycopg.AsyncConnection.connect(
         conn_str, autocommit=False, row_factory=psycopg.rows.dict_row
     ) as conn:
-        # Create users table
-        async with conn.cursor() as cur:
-            await cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(100) UNIQUE NOT NULL,
-                    email VARCHAR(255) UNIQUE NOT NULL,
-                    full_name VARCHAR(255),
-                    created_at TIMESTAMP NOT NULL
-                )
-            """)
-        await conn.commit()
-        
+        # Initialize schema from SQL files
+        await _initialize_schema(conn)
+
         yield conn
 
 
@@ -81,7 +102,7 @@ async def repository(db_connection):
 
 class TestAddUser:
     """Test PsycopgUserRepository.add method"""
-    
+
     @pytest.mark.asyncio
     async def test_add_user_success(self, repository, clean_db):
         """Should add user and return user with ID"""
@@ -91,43 +112,39 @@ class TestAddUser:
             email="john@example.com",
             full_name="John Doe",
         )
-        
+
         # Act
         saved_user = await repository.add(user)
-        
+
         # Assert
         assert saved_user.id is not None
         assert saved_user.username == "john_doe"
         assert saved_user.email == "john@example.com"
         assert saved_user.full_name == "John Doe"
         assert isinstance(saved_user.created_at, datetime)
-    
+
     @pytest.mark.asyncio
-    async def test_add_user_duplicate_username_raises_error(
-        self, repository, clean_db
-    ):
+    async def test_add_user_duplicate_username_raises_error(self, repository, clean_db):
         """Should raise DuplicateUserError for duplicate username"""
         # Arrange
         user1 = User.create(username="john_doe", email="john1@example.com")
         user2 = User.create(username="john_doe", email="john2@example.com")
-        
+
         await repository.add(user1)
-        
+
         # Act & Assert
         with pytest.raises(DuplicateUserError):
             await repository.add(user2)
-    
+
     @pytest.mark.asyncio
-    async def test_add_user_duplicate_email_raises_error(
-        self, repository, clean_db
-    ):
+    async def test_add_user_duplicate_email_raises_error(self, repository, clean_db):
         """Should raise DuplicateUserError for duplicate email"""
         # Arrange
         user1 = User.create(username="john1", email="john@example.com")
         user2 = User.create(username="john2", email="john@example.com")
-        
+
         await repository.add(user1)
-        
+
         # Act & Assert
         with pytest.raises(DuplicateUserError):
             await repository.add(user2)
@@ -135,24 +152,26 @@ class TestAddUser:
 
 class TestUpdateUser:
     """Test PsycopgUserRepository.update method"""
-    
+
     @pytest.mark.asyncio
     async def test_update_user_success(self, repository, clean_db):
         """Should update user successfully"""
         # Arrange
-        user = User.create(username="john_doe", email="john@example.com", full_name="John Doe")
+        user = User.create(
+            username="john_doe", email="john@example.com", full_name="John Doe"
+        )
         saved_user = await repository.add(user)
-        
+
         saved_user.change_full_name("Jane Doe")
-        
+
         # Act
         updated_user = await repository.update(saved_user)
-        
+
         # Assert
         assert updated_user.full_name == "Jane Doe"
         assert updated_user.id == saved_user.id
         assert updated_user.username == saved_user.username
-    
+
     @pytest.mark.asyncio
     async def test_update_user_not_found_raises_error(self, repository, clean_db):
         """Should raise InfraError for non-existent user"""
@@ -164,7 +183,7 @@ class TestUpdateUser:
             full_name="Test",
             created_at=datetime.now(),
         )
-        
+
         # Act & Assert
         with pytest.raises(InfraError):
             await repository.update(user)
@@ -172,21 +191,21 @@ class TestUpdateUser:
 
 class TestRemoveUser:
     """Test PsycopgUserRepository.remove method"""
-    
+
     @pytest.mark.asyncio
     async def test_remove_user_success(self, repository, clean_db):
         """Should remove user successfully"""
         # Arrange
         user = User.create(username="john_doe", email="john@example.com")
         saved_user = await repository.add(user)
-        
+
         # Act
         await repository.remove(saved_user.id)
-        
+
         # Assert - verify user is deleted
         result = await repository.find_by_id(saved_user.id)
         assert result is None
-    
+
     @pytest.mark.asyncio
     async def test_remove_user_nonexistent_completes(self, repository, clean_db):
         """Should complete without error for non-existent user"""
@@ -196,36 +215,38 @@ class TestRemoveUser:
 
 class TestFindById:
     """Test PsycopgUserRepository.find_by_id method"""
-    
+
     @pytest.mark.asyncio
     async def test_find_by_id_success(self, repository, clean_db):
         """Should find user by ID"""
         # Arrange
-        user = User.create(username="john_doe", email="john@example.com", full_name="John Doe")
+        user = User.create(
+            username="john_doe", email="john@example.com", full_name="John Doe"
+        )
         saved_user = await repository.add(user)
-        
+
         # Act
         found_user = await repository.find_by_id(saved_user.id)
-        
+
         # Assert
         assert found_user is not None
         assert found_user.id == saved_user.id
         assert found_user.username == "john_doe"
         assert found_user.email == "john@example.com"
-    
+
     @pytest.mark.asyncio
     async def test_find_by_id_not_found_returns_none(self, repository, clean_db):
         """Should return None for non-existent user"""
         # Act
         result = await repository.find_by_id(999)
-        
+
         # Assert
         assert result is None
 
 
 class TestFindAll:
     """Test PsycopgUserRepository.find_all method"""
-    
+
     @pytest.mark.asyncio
     async def test_find_all_returns_all_users(self, repository, clean_db):
         """Should return all users with pagination"""
@@ -237,14 +258,14 @@ class TestFindAll:
                 full_name=f"User {i}",
             )
             await repository.add(user)
-        
+
         # Act
         users, total = await repository.find_all(skip=0, limit=10)
-        
+
         # Assert
         assert len(users) == 5
         assert total == 5
-    
+
     @pytest.mark.asyncio
     async def test_find_all_with_pagination(self, repository, clean_db):
         """Should return correct page of users"""
@@ -252,21 +273,21 @@ class TestFindAll:
         for i in range(10):
             user = User.create(username=f"user_{i}", email=f"user{i}@example.com")
             await repository.add(user)
-        
+
         # Act
         users, total = await repository.find_all(skip=5, limit=3)
-        
+
         # Assert
         assert len(users) == 3
         assert total == 10
         assert users[0].username == "user_5"
-    
+
     @pytest.mark.asyncio
     async def test_find_all_empty_database(self, repository, clean_db):
         """Should return empty list for empty database"""
         # Act
         users, total = await repository.find_all(skip=0, limit=10)
-        
+
         # Assert
         assert len(users) == 0
         assert total == 0
@@ -274,7 +295,7 @@ class TestFindAll:
 
 class TestExistsByUsername:
     """Test PsycopgUserRepository.exists_by_username method"""
-    
+
     @pytest.mark.asyncio
     async def test_exists_by_username_returns_true_when_exists(
         self, repository, clean_db
@@ -283,13 +304,13 @@ class TestExistsByUsername:
         # Arrange
         user = User.create(username="john_doe", email="john@example.com")
         await repository.add(user)
-        
+
         # Act
         exists = await repository.exists_by_username("john_doe")
-        
+
         # Assert
         assert exists is True
-    
+
     @pytest.mark.asyncio
     async def test_exists_by_username_returns_false_when_not_exists(
         self, repository, clean_db
@@ -297,29 +318,27 @@ class TestExistsByUsername:
         """Should return False when username doesn't exist"""
         # Act
         exists = await repository.exists_by_username("nonexistent")
-        
+
         # Assert
         assert exists is False
 
 
 class TestExistsByEmail:
     """Test PsycopgUserRepository.exists_by_email method"""
-    
+
     @pytest.mark.asyncio
-    async def test_exists_by_email_returns_true_when_exists(
-        self, repository, clean_db
-    ):
+    async def test_exists_by_email_returns_true_when_exists(self, repository, clean_db):
         """Should return True when email exists"""
         # Arrange
         user = User.create(username="john_doe", email="john@example.com")
         await repository.add(user)
-        
+
         # Act
         exists = await repository.exists_by_email("john@example.com")
-        
+
         # Assert
         assert exists is True
-    
+
     @pytest.mark.asyncio
     async def test_exists_by_email_returns_false_when_not_exists(
         self, repository, clean_db
@@ -327,6 +346,6 @@ class TestExistsByEmail:
         """Should return False when email doesn't exist"""
         # Act
         exists = await repository.exists_by_email("nonexistent@example.com")
-        
+
         # Assert
         assert exists is False

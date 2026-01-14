@@ -1,48 +1,48 @@
 """SQLAlchemy-based User Repository Implementation."""
 
-from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from subdomains.user.domain.models.user import User
 from subdomains.user.domain.protocols.user_repository_protocol import UserRepository
-from subdomains.user.infra.models import UserORM
-from shared.errors import DuplicateUserError, InfraError
-from shared.protocols.transaction import Connection
+from subdomains.user.domain.errors import DuplicateUserError
+from subdomains.user.infra.entities.user_entity import UserEntity
+from shared.errors import InfraError
+from shared.decorators import use_transaction
 
 
 class SQLAlchemyUserRepository(UserRepository):
     """SQLAlchemy async User Repository Implementation.
-    
+
     비동기 SQLAlchemy를 사용한 데이터 접근 계층.
-    Connection(AsyncSession)을 메서드 파라미터로 받아 동작.
+    @use_transaction 데코레이터를 통해 자동으로 커넥션을 주입받습니다.
     """
-    
-    async def add(self, conn: Connection, user: User) -> User:
+
+    @use_transaction()
+    async def add(self, conn: AsyncSession, user: User) -> User:
         """새 사용자 저장.
-        
+
         Args:
             conn: DB 연결 (AsyncSession)
             user: 저장할 User 엔티티
-        
+
         Returns:
             id가 설정된 User 엔티티
-        
+
         Raises:
             DuplicateUserError: username/email 중복
             InfraError: DB 오류
         """
-        session: AsyncSession = conn
         try:
-            orm_user = UserORM(
+            orm_user = UserEntity(
                 username=user.username,
                 email=user.email,
                 full_name=user.full_name,
             )
-            session.add(orm_user)
-            await session.flush()  # 즉시 ID 생성
-            
+            conn.add(orm_user)
+            await conn.flush()  # 즉시 ID 생성
+
             return User(
                 id=orm_user.id,
                 username=orm_user.username,
@@ -51,37 +51,37 @@ class SQLAlchemyUserRepository(UserRepository):
                 created_at=orm_user.created_at,
             )
         except IntegrityError as exc:
-            await session.rollback()
+            await conn.rollback()
             raise DuplicateUserError(user.username or user.email, origin_exc=exc)
         except Exception as exc:
-            await session.rollback()
+            await conn.rollback()
             raise InfraError("USER_SAVE_FAILED", origin_exc=exc)
-    
-    async def update(self, conn: Connection, user: User) -> User:
+
+    @use_transaction()
+    async def update(self, conn: AsyncSession, user: User) -> User:
         """사용자 정보 업데이트.
-        
+
         Args:
             conn: DB 연결 (AsyncSession)
             user: 업데이트할 User 엔티티 (id 필수)
-        
+
         Returns:
             업데이트된 User 엔티티
-        
+
         Raises:
             InfraError: DB 오류
         """
-        session: AsyncSession = conn
         try:
-            stmt = select(UserORM).where(UserORM.id == user.id)
-            result = await session.execute(stmt)
+            stmt = select(UserEntity).where(UserEntity.id == user.id)
+            result = await conn.execute(stmt)
             orm_user = result.scalars().first()
-            
+
             if not orm_user:
                 raise InfraError("USER_NOT_FOUND")
-            
+
             orm_user.full_name = user.full_name
-            await session.flush()
-            
+            await conn.flush()
+
             return User(
                 id=orm_user.id,
                 username=orm_user.username,
@@ -92,58 +92,58 @@ class SQLAlchemyUserRepository(UserRepository):
         except InfraError:
             raise
         except Exception as exc:
-            await session.rollback()
+            await conn.rollback()
             raise InfraError("USER_UPDATE_FAILED", origin_exc=exc)
-    
-    async def remove(self, conn: Connection, user_id: int) -> None:
+
+    @use_transaction()
+    async def remove(self, conn: AsyncSession, user_id: int) -> None:
         """사용자 삭제.
-        
+
         Args:
             conn: DB 연결 (AsyncSession)
             user_id: 삭제할 사용자 ID
-        
+
         Raises:
             InfraError: DB 오류
         """
-        session: AsyncSession = conn
         try:
-            stmt = select(UserORM).where(UserORM.id == user_id)
-            result = await session.execute(stmt)
+            stmt = select(UserEntity).where(UserEntity.id == user_id)
+            result = await conn.execute(stmt)
             orm_user = result.scalars().first()
-            
+
             if not orm_user:
                 raise InfraError("USER_NOT_FOUND")
-            
-            await session.delete(orm_user)
-            await session.flush()
+
+            await conn.delete(orm_user)
+            await conn.flush()
         except InfraError:
             raise
         except Exception as exc:
-            await session.rollback()
+            await conn.rollback()
             raise InfraError("USER_DELETE_FAILED", origin_exc=exc)
-    
-    async def find_by_id(self, conn: Connection, user_id: int) -> Optional[User]:
+
+    @use_transaction()
+    async def find_by_id(self, conn: AsyncSession, user_id: int) -> User | None:
         """ID로 사용자 검색.
-        
+
         Args:
             conn: DB 연결 (AsyncSession)
             user_id: 조회할 사용자 ID
-        
+
         Returns:
             User 엔티티 또는 None
-        
+
         Raises:
             InfraError: DB 오류
         """
-        session: AsyncSession = conn
         try:
-            stmt = select(UserORM).where(UserORM.id == user_id)
-            result = await session.execute(stmt)
+            stmt = select(UserEntity).where(UserEntity.id == user_id)
+            result = await conn.execute(stmt)
             orm_user = result.scalars().first()
-            
+
             if not orm_user:
                 return None
-            
+
             return User(
                 id=orm_user.id,
                 username=orm_user.username,
@@ -153,33 +153,35 @@ class SQLAlchemyUserRepository(UserRepository):
             )
         except Exception as exc:
             raise InfraError("USER_FIND_FAILED", origin_exc=exc)
-    
-    async def find_all(self, conn: Connection, skip: int = 0, limit: int = 100) -> tuple[list[User], int]:
+
+    @use_transaction()
+    async def find_all(
+        self, conn: AsyncSession, skip: int = 0, limit: int = 100
+    ) -> tuple[list[User], int]:
         """모든 사용자 조회 (페이징).
-        
+
         Args:
             conn: DB 연결 (AsyncSession)
             skip: 건너뛸 레코드 수
             limit: 반환할 최대 레코드 수
-        
+
         Returns:
             (User 엔티티 리스트, 전체 개수) 튜플
-        
+
         Raises:
             InfraError: DB 오류
         """
-        session: AsyncSession = conn
         try:
             # 전체 개수 조회
-            count_stmt = select(func.count(UserORM.id))
-            count_result = await session.execute(count_stmt)
+            count_stmt = select(func.count(UserEntity.id))
+            count_result = await conn.execute(count_stmt)
             total = count_result.scalar() or 0
-            
+
             # 페이징된 데이터 조회
-            stmt = select(UserORM).offset(skip).limit(limit).order_by(UserORM.id)
-            result = await session.execute(stmt)
+            stmt = select(UserEntity).offset(skip).limit(limit).order_by(UserEntity.id)
+            result = await conn.execute(stmt)
             orm_users = result.scalars().all()
-            
+
             users = [
                 User(
                     id=u.id,
@@ -193,46 +195,48 @@ class SQLAlchemyUserRepository(UserRepository):
             return users, total
         except Exception as exc:
             raise InfraError("USER_LIST_FAILED", origin_exc=exc)
-    
-    async def exists_by_username(self, conn: Connection, username: str) -> bool:
+
+    @use_transaction()
+    async def exists_by_username(self, conn: AsyncSession, username: str) -> bool:
         """사용자명 존재 여부 확인.
-        
+
         Args:
             conn: DB 연결 (AsyncSession)
             username: 확인할 사용자명
-        
+
         Returns:
             True if 존재, False otherwise
-        
+
         Raises:
             InfraError: DB 오류
         """
-        session: AsyncSession = conn
         try:
-            stmt = select(func.count(UserORM.id)).where(UserORM.username == username)
-            result = await session.execute(stmt)
+            stmt = select(func.count(UserEntity.id)).where(
+                UserEntity.username == username
+            )
+            result = await conn.execute(stmt)
             count = result.scalar() or 0
             return count > 0
         except Exception as exc:
             raise InfraError("USER_EXISTS_CHECK_FAILED", origin_exc=exc)
-    
-    async def exists_by_email(self, conn: Connection, email: str) -> bool:
+
+    @use_transaction()
+    async def exists_by_email(self, conn: AsyncSession, email: str) -> bool:
         """이메일 존재 여부 확인.
-        
+
         Args:
             conn: DB 연결 (AsyncSession)
             email: 확인할 이메일
-        
+
         Returns:
             True if 존재, False otherwise
-        
+
         Raises:
             InfraError: DB 오류
         """
-        session: AsyncSession = conn
         try:
-            stmt = select(func.count(UserORM.id)).where(UserORM.email == email)
-            result = await session.execute(stmt)
+            stmt = select(func.count(UserEntity.id)).where(UserEntity.email == email)
+            result = await conn.execute(stmt)
             count = result.scalar() or 0
             return count > 0
         except Exception as exc:

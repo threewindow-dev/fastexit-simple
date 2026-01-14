@@ -18,7 +18,12 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 
 from shared.errors import DbConnectionError, InfraError
-from shared.protocols.transaction import TransactionProtocol, TransactionMode, TransactionManager, Connection
+from shared.protocols.transaction import (
+    TransactionProtocol,
+    TransactionMode,
+    TransactionManager,
+    Connection,
+)
 from shared.protocols.database import DatabasePool
 
 
@@ -36,11 +41,14 @@ Base = declarative_base()
 # Database Pool Helper (공용 로직)
 # ============================================================================
 
+
 class DatabasePoolHelper:
     """DatabasePool 구현체 간 공용 로직 제공."""
-    
+
     @staticmethod
-    def build_connection_string(prefix: str = "DB_", require_password: bool = True) -> str:
+    def build_connection_string(
+        prefix: str = "DB_", require_password: bool = True
+    ) -> str:
         """환경 변수에서 DB 연결 문자열 구성.
 
         prefix 예: "DB_" (writable), "DB_READONLY_" (readonly)
@@ -49,37 +57,38 @@ class DatabasePoolHelper:
         db_password = os.getenv(password_env)
         if require_password and not db_password:
             raise ValueError(f"{password_env} environment variable is required")
-        
+
         host = os.getenv(f"{prefix}HOST", os.getenv("DB_HOST", ""))
         port = os.getenv(f"{prefix}PORT", os.getenv("DB_PORT", ""))
         dbname = os.getenv(f"{prefix}NAME", os.getenv("DB_NAME", ""))
         user = os.getenv(f"{prefix}USER", os.getenv("DB_USER", ""))
         password = db_password or os.getenv("DB_PASSWORD", "")
-        
+
         return f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
-    
+
     @staticmethod
     def configure_readonly_dsn() -> tuple[str, str]:
         """Writable/Readonly DSN 구성.
-        
+
         Returns:
             (dsn_write, dsn_readonly): readonly가 설정되지 않으면 write로 폴백.
         """
         dsn_write = DatabasePoolHelper.build_connection_string(prefix="DB_")
-        
+
         readonly_enabled = os.getenv("DB_READONLY_ENABLED", "false").lower() == "true"
         if readonly_enabled:
             try:
                 dsn_readonly = DatabasePoolHelper.build_connection_string(
-                    prefix="DB_READONLY_", 
-                    require_password=False
+                    prefix="DB_READONLY_", require_password=False
                 )
             except Exception as exc:
-                logger.warning("Readonly DSN 구성 실패, write DSN으로 폴백합니다: %s", exc)
+                logger.warning(
+                    "Readonly DSN 구성 실패, write DSN으로 폴백합니다: %s", exc
+                )
                 dsn_readonly = dsn_write
         else:
             dsn_readonly = dsn_write
-        
+
         return dsn_write, dsn_readonly
 
 
@@ -87,18 +96,19 @@ class DatabasePoolHelper:
 # Transaction Implementations
 # ============================================================================
 
+
 class PsycopgTransaction(TransactionProtocol):
     """psycopg 기반 트랜잭션 구현."""
-    
+
     def __init__(self, conn: AsyncConnection, mode: TransactionMode = "writable"):
         self._conn = conn
         self.mode = mode
-    
+
     @property
     def connection(self) -> Connection:
         """트랜잭션이 관리하는 DB 연결."""
         return self._conn
-    
+
     async def commit(self) -> None:
         """트랜잭션 커밋."""
         try:
@@ -106,7 +116,7 @@ class PsycopgTransaction(TransactionProtocol):
         except Exception as exc:
             logger.error(f"Commit failed: {exc}")
             raise InfraError("Failed to commit transaction", origin_exc=exc)
-    
+
     async def rollback(self) -> None:
         """트랜잭션 롤백."""
         try:
@@ -118,19 +128,19 @@ class PsycopgTransaction(TransactionProtocol):
 
 class SQLAlchemyTransaction(TransactionProtocol):
     """SQLAlchemy 기반 비동기 트랜잭션 구현.
-    
+
     AsyncSession 컨텍스트 매니저로 자동 commit/rollback 관리.
     """
-    
+
     def __init__(self, session: AsyncSession, mode: TransactionMode = "writable"):
         self._session = session
         self.mode = mode
-    
+
     @property
     def connection(self) -> Connection:
         """트랜잭션이 관리하는 DB 연결."""
         return self._session
-    
+
     async def commit(self) -> None:
         """트랜잭션 커밋."""
         try:
@@ -138,7 +148,7 @@ class SQLAlchemyTransaction(TransactionProtocol):
         except Exception as exc:
             logger.error(f"Commit failed: {exc}")
             raise InfraError("Failed to commit transaction", origin_exc=exc)
-    
+
     async def rollback(self) -> None:
         """트랜잭션 롤백."""
         try:
@@ -152,13 +162,14 @@ class SQLAlchemyTransaction(TransactionProtocol):
 # Database Pool Implementations
 # ============================================================================
 
+
 class SQLAlchemyDatabasePool(DatabasePool):
     """SQLAlchemy 기반 데이터베이스 연결 풀.
-    
+
     - writable / readonly 엔진 분리 지원
     - AsyncSession 기반 트랜잭션 관리
     """
-    
+
     def __init__(self):
         self._dsn_write: str | None = None
         self._dsn_readonly: str | None = None
@@ -166,14 +177,18 @@ class SQLAlchemyDatabasePool(DatabasePool):
         self._engine_readonly = None
         self._session_factory_write = None
         self._session_factory_readonly = None
-    
+
     async def initialize(self) -> None:
         """SQLAlchemy 엔진 및 세션 팩토리 초기화."""
-        self._dsn_write, self._dsn_readonly = DatabasePoolHelper.configure_readonly_dsn()
-        
+        self._dsn_write, self._dsn_readonly = (
+            DatabasePoolHelper.configure_readonly_dsn()
+        )
+
         try:
             # SQLAlchemy async engine 생성 (writable)
-            async_dsn = self._dsn_write.replace("postgresql://", "postgresql+asyncpg://")
+            async_dsn = self._dsn_write.replace(
+                "postgresql://", "postgresql+asyncpg://"
+            )
             self._engine_write = create_async_engine(
                 async_dsn,
                 echo=os.getenv("SQL_ECHO", "false").lower() == "true",
@@ -188,10 +203,12 @@ class SQLAlchemyDatabasePool(DatabasePool):
                 expire_on_commit=False,
             )
             logger.info("SQLAlchemy async engine (writable) initialized")
-            
+
             # SQLAlchemy async engine (readonly) - 별도 설정 시 분리, 없으면 동일 엔진 사용
             if self._dsn_readonly and self._dsn_readonly != self._dsn_write:
-                async_dsn_ro = self._dsn_readonly.replace("postgresql://", "postgresql+asyncpg://")
+                async_dsn_ro = self._dsn_readonly.replace(
+                    "postgresql://", "postgresql+asyncpg://"
+                )
                 self._engine_readonly = create_async_engine(
                     async_dsn_ro,
                     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
@@ -211,7 +228,7 @@ class SQLAlchemyDatabasePool(DatabasePool):
                 self._session_factory_readonly = self._session_factory_write
         except Exception as exc:
             raise DbConnectionError(os.getenv("DB_HOST", "localhost"), origin_exc=exc)
-    
+
     async def close(self) -> None:
         """SQLAlchemy 엔진 종료."""
         engines = {"write": self._engine_write, "readonly": self._engine_readonly}
@@ -222,16 +239,22 @@ class SQLAlchemyDatabasePool(DatabasePool):
                 disposed.add(engine)
                 logger.info("SQLAlchemy engine (%s) disposed", name)
         logger.info("SQLAlchemy database pool closed")
-    
+
     async def get_connection(self, mode: TransactionMode = "writable") -> AsyncSession:
         """SQLAlchemy 세션 획득."""
-        factory = self._session_factory_readonly if mode == "readonly" else self._session_factory_write
+        factory = (
+            self._session_factory_readonly
+            if mode == "readonly"
+            else self._session_factory_write
+        )
         if not factory:
             raise InfraError("SQLAlchemy not initialized")
         return factory()
-    
+
     @asynccontextmanager
-    async def connection(self, mode: TransactionMode = "writable") -> AsyncGenerator[AsyncSession, None]:
+    async def connection(
+        self, mode: TransactionMode = "writable"
+    ) -> AsyncGenerator[AsyncSession, None]:
         """SQLAlchemy 세션 컨텍스트 매니저."""
         session = await self.get_connection(mode=mode)
         try:
@@ -242,38 +265,46 @@ class SQLAlchemyDatabasePool(DatabasePool):
 
 class PsycopgDatabasePool(DatabasePool):
     """Psycopg 기반 데이터베이스 연결 풀 (레거시).
-    
+
     - writable / readonly 연결 분리 지원
     - AsyncConnection 기반 트랜잭션 관리
     """
-    
+
     def __init__(self):
         self._dsn_write: str | None = None
         self._dsn_readonly: str | None = None
-    
+
     async def initialize(self) -> None:
         """Psycopg DSN 초기화."""
-        self._dsn_write, self._dsn_readonly = DatabasePoolHelper.configure_readonly_dsn()
+        self._dsn_write, self._dsn_readonly = (
+            DatabasePoolHelper.configure_readonly_dsn()
+        )
         logger.info("Psycopg database pool initialized (legacy)")
-    
+
     async def close(self) -> None:
         """Psycopg 풀 종료 (연결은 각각 종료됨)."""
         logger.info("Psycopg database pool closed")
-    
-    async def get_connection(self, mode: TransactionMode = "writable") -> AsyncConnection:
+
+    async def get_connection(
+        self, mode: TransactionMode = "writable"
+    ) -> AsyncConnection:
         """Psycopg 연결 획득."""
         target_dsn = self._dsn_readonly if mode == "readonly" else self._dsn_write
         if not target_dsn:
             raise InfraError("Database pool not initialized")
-        
+
         try:
-            conn = await psycopg.AsyncConnection.connect(target_dsn, row_factory=dict_row)
+            conn = await psycopg.AsyncConnection.connect(
+                target_dsn, row_factory=dict_row
+            )
             return conn
         except Exception as exc:
             raise InfraError("Failed to get database connection", origin_exc=exc)
-    
+
     @asynccontextmanager
-    async def connection(self, mode: TransactionMode = "writable") -> AsyncGenerator[AsyncConnection, None]:
+    async def connection(
+        self, mode: TransactionMode = "writable"
+    ) -> AsyncGenerator[AsyncConnection, None]:
         """Psycopg 연결 컨텍스트 매니저."""
         conn = await self.get_connection(mode=mode)
         try:
@@ -289,12 +320,13 @@ class PsycopgDatabasePool(DatabasePool):
 # Database Pool Factory
 # ============================================================================
 
+
 def db_pool_factory(repository_type: str = "sqlalchemy") -> DatabasePool:
     """DatabasePool 구현체 생성 팩토리.
-    
+
     Args:
         repository_type: "sqlalchemy" 또는 "psycopg"
-    
+
     Returns:
         DatabasePool 추상 인터페이스를 구현한 구체 클래스 인스턴스
     """
@@ -310,17 +342,18 @@ def db_pool_factory(repository_type: str = "sqlalchemy") -> DatabasePool:
 # Transaction Manager Implementations
 # ============================================================================
 
+
 class SQLAlchemyTransactionManager(TransactionManager):
     """SQLAlchemy 기반 트랜잭션 매니저."""
-    
+
     def __init__(self, db_pool: DatabasePool):
         self._db_pool = db_pool
-    
+
     async def create_readonly_transaction(self) -> TransactionProtocol:
         """읽기 전용 트랜잭션 생성."""
         session = await self._db_pool.get_connection(mode="readonly")
         return SQLAlchemyTransaction(session, mode="readonly")
-    
+
     async def create_writable_transaction(self) -> TransactionProtocol:
         """쓰기 트랜잭션 생성."""
         session = await self._db_pool.get_connection(mode="writable")
@@ -329,15 +362,15 @@ class SQLAlchemyTransactionManager(TransactionManager):
 
 class PsycopgTransactionManager(TransactionManager):
     """Psycopg 기반 트랜잭션 매니저."""
-    
+
     def __init__(self, db_pool: DatabasePool):
         self._db_pool = db_pool
-    
+
     async def create_readonly_transaction(self) -> TransactionProtocol:
         """읽기 전용 트랜잭션 생성."""
         conn = await self._db_pool.get_connection(mode="readonly")
         return PsycopgTransaction(conn, mode="readonly")
-    
+
     async def create_writable_transaction(self) -> TransactionProtocol:
         """쓰기 트랜잭션 생성."""
         conn = await self._db_pool.get_connection(mode="writable")
