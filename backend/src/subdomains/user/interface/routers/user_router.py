@@ -43,7 +43,6 @@ from dependencies import get_user_app_service
 # ============================================================================
 
 router = APIRouter(
-    prefix="/api/users",
     tags=["users"],
     responses={
         400: {"description": "Bad request"},
@@ -57,7 +56,7 @@ router = APIRouter(
 
 
 @router.post(
-    "",
+    "/",
     response_model=PostUserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create User",
@@ -110,7 +109,7 @@ async def create_user(
 
 
 @router.get(
-    "",
+    "/",
     response_model=GetUserPagedListResponse,
     summary="List Users",
     description=(
