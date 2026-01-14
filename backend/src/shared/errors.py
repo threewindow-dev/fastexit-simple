@@ -124,20 +124,6 @@ class InsufficientBalanceError(DomainError):
 # ============================================================================
 
 
-class DuplicateUserError(ApplicationError):
-    code = "USER_CREATE_DUPLICATED"
-
-    def __init__(self, identifier: str, origin_exc: Exception | None = None):
-        super().__init__(f"User already exists: {identifier}", origin_exc)
-
-
-class UserNotFoundError(ApplicationError):
-    code = "USER_GET_NOT_FOUND"
-
-    def __init__(self, user_id: int, origin_exc: Exception | None = None):
-        super().__init__(f"User not found: {user_id}", origin_exc)
-
-
 class UnauthorizedActionError(ApplicationError):
     code = "UNAUTHORIZED_ACTION"
 

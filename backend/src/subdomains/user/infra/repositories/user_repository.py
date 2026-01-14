@@ -8,7 +8,8 @@ from typing import Optional
 
 from subdomains.user.domain.models.user import User
 from subdomains.user.domain.protocols.user_repository_protocol import UserRepository
-from shared.errors import DuplicateUserError, InfraError
+from subdomains.user.domain.errors import DuplicateUserError
+from shared.errors import InfraError
 
 import psycopg
 import psycopg.errors

@@ -17,8 +17,8 @@ from shared.errors import (
     ApplicationError,
     InfraError,
     ValidationError,
-    UserNotFoundError,
 )
+from subdomains.user.domain.errors import UserNotFoundError
 
 
 logger = logging.getLogger(__name__)

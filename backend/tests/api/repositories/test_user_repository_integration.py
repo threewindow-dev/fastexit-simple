@@ -8,12 +8,40 @@ import pytest
 import pytest_asyncio
 import psycopg
 from datetime import datetime
+from pathlib import Path
 from testcontainers.postgres import PostgresContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 
 from subdomains.user.domain.models import User
-from subdomains.user.infra.repositories import PsycopgUserRepository
-from shared.errors import DuplicateUserError, InfraError
+from subdomains.user.domain.errors import DuplicateUserError
+from subdomains.user.infra.repositories import SQLAlchemyUserRepository
+from subdomains.user.infra.repositories.user_repository import PsycopgUserRepository
+from shared.errors import InfraError
+
+
+def _get_schema_files() -> list[Path]:
+    """Get all SQL schema files in order (numerically sorted)"""
+    schema_dir = Path(__file__).parent.parent.parent.parent / "sql" / "schema"
+    if not schema_dir.exists():
+        raise FileNotFoundError(f"Schema directory not found: {schema_dir}")
+    
+    sql_files = sorted(schema_dir.glob("*.sql"))
+    if not sql_files:
+        raise FileNotFoundError(f"No SQL files found in {schema_dir}")
+    
+    return sql_files
+
+
+async def _initialize_schema(conn: psycopg.AsyncConnection) -> None:
+    """Initialize database schema by executing all SQL files"""
+    schema_files = _get_schema_files()
+    
+    async with conn.cursor() as cur:
+        for sql_file in schema_files:
+            sql_content = sql_file.read_text()
+            await cur.execute(sql_content)
+    
+    await conn.commit()
 
 
 @pytest.fixture(scope="module")
@@ -28,7 +56,7 @@ def postgres_container():
 
 @pytest_asyncio.fixture()
 async def db_connection(postgres_container):
-    """Create database connection and initialize schema"""
+    """Create database connection and initialize schema from SQL files"""
     conn_str = postgres_container.get_connection_url()
     # Convert SQLAlchemy-style URL to plain psycopg DSN
     conn_str = conn_str.replace("postgresql+psycopg2", "postgresql").replace(
@@ -38,20 +66,8 @@ async def db_connection(postgres_container):
     async with await psycopg.AsyncConnection.connect(
         conn_str, autocommit=False, row_factory=psycopg.rows.dict_row
     ) as conn:
-        # Create users table
-        async with conn.cursor() as cur:
-            await cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(100) UNIQUE NOT NULL,
-                    email VARCHAR(255) UNIQUE NOT NULL,
-                    full_name VARCHAR(255),
-                    created_at TIMESTAMP NOT NULL
-                )
-            """
-            )
-        await conn.commit()
+        # Initialize schema from SQL files
+        await _initialize_schema(conn)
 
         yield conn
 
