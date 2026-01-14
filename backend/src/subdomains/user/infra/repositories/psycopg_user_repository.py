@@ -3,6 +3,7 @@ User Repository Implementation (PostgreSQL with Psycopg)
 
 인프라 계층: 실제 데이터 접근 구현
 """
+
 from typing import Optional
 
 from subdomains.user.domain.models.user import User
@@ -17,11 +18,11 @@ from datetime import datetime
 class PsycopgUserRepository(UserRepository):
     """
     PostgreSQL User Repository Implementation
-    
+
     psycopg (async PostgreSQL driver) 사용
     Connection을 메서드 파라미터로 받아 동작.
     """
-    
+
     async def add(self, conn: Connection, user: User) -> User:
         """새 사용자 저장"""
         connection = conn
@@ -36,7 +37,7 @@ class PsycopgUserRepository(UserRepository):
                     (user.username, user.email, user.full_name, user.created_at),
                 )
                 row = await cur.fetchone()
-        
+
         except psycopg.errors.UniqueViolation as exc:
             raise DuplicateUserError(
                 user.username or user.email,
@@ -48,7 +49,7 @@ class PsycopgUserRepository(UserRepository):
                 message="Failed to save user to database",
                 origin_exc=exc,
             )
-        
+
         if row:
             return User(
                 id=row["id"],
@@ -57,12 +58,12 @@ class PsycopgUserRepository(UserRepository):
                 full_name=row["full_name"],
                 created_at=row["created_at"],
             )
-        
+
         raise InfraError(
             code="USER_SAVE_FAILED",
             message="Failed to save user: no row returned",
         )
-    
+
     async def update(self, conn: Connection, user: User) -> User:
         """사용자 정보 업데이트"""
         connection = conn
@@ -78,14 +79,14 @@ class PsycopgUserRepository(UserRepository):
                     (user.full_name, user.id),
                 )
                 row = await cur.fetchone()
-        
+
         except Exception as exc:
             raise InfraError(
                 code="USER_UPDATE_FAILED",
                 message="Failed to update user in database",
                 origin_exc=exc,
             )
-        
+
         if row:
             return User(
                 id=row["id"],
@@ -94,12 +95,12 @@ class PsycopgUserRepository(UserRepository):
                 full_name=row["full_name"],
                 created_at=row["created_at"],
             )
-        
+
         raise InfraError(
             code="USER_UPDATE_FAILED",
             message="Failed to update user: no row returned",
         )
-    
+
     async def remove(self, conn: Connection, user_id: int) -> None:
         """사용자 삭제"""
         connection = conn
@@ -115,7 +116,7 @@ class PsycopgUserRepository(UserRepository):
                 message="Failed to delete user from database",
                 origin_exc=exc,
             )
-    
+
     async def find_by_id(self, conn: Connection, user_id: int) -> Optional[User]:
         """ID로 사용자 검색"""
         connection = conn
@@ -132,7 +133,7 @@ class PsycopgUserRepository(UserRepository):
                 message="Failed to find user in database",
                 origin_exc=exc,
             )
-        
+
         if row:
             return User(
                 id=row["id"],
@@ -141,10 +142,12 @@ class PsycopgUserRepository(UserRepository):
                 full_name=row["full_name"],
                 created_at=row["created_at"],
             )
-        
+
         return None
-    
-    async def find_all(self, conn: Connection, skip: int = 0, limit: int = 100) -> tuple[list[User], int]:
+
+    async def find_all(
+        self, conn: Connection, skip: int = 0, limit: int = 100
+    ) -> tuple[list[User], int]:
         """모든 사용자 조회 (페이징)"""
         connection = conn
         try:
@@ -153,7 +156,7 @@ class PsycopgUserRepository(UserRepository):
                 await cur.execute("SELECT COUNT(*) as count FROM users")
                 count_row = await cur.fetchone()
                 total = count_row["count"] if count_row else 0
-                
+
                 # 페이지별 조회
                 await cur.execute(
                     "SELECT id, username, email, full_name, created_at FROM users ORDER BY id OFFSET %s LIMIT %s",
@@ -166,7 +169,7 @@ class PsycopgUserRepository(UserRepository):
                 message="Failed to list users from database",
                 origin_exc=exc,
             )
-        
+
         users = [
             User(
                 id=row["id"],
@@ -177,9 +180,9 @@ class PsycopgUserRepository(UserRepository):
             )
             for row in rows
         ]
-        
+
         return users, total
-    
+
     async def exists_by_username(self, conn: Connection, username: str) -> bool:
         """사용자명 존재 여부"""
         connection = conn
@@ -197,7 +200,7 @@ class PsycopgUserRepository(UserRepository):
                 message="Failed to check username existence",
                 origin_exc=exc,
             )
-    
+
     async def exists_by_email(self, conn: Connection, email: str) -> bool:
         """이메일 존재 여부"""
         connection = conn

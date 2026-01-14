@@ -3,6 +3,7 @@ User Pydantic Schemas (API 요청/응답)
 
 인터페이스 계층: HTTP 요청/응답 모델
 """
+
 from typing import Optional
 
 from pydantic import BaseModel, Field, EmailStr
@@ -10,11 +11,10 @@ from pydantic import BaseModel, Field, EmailStr
 from shared.schemas import ApiResponse
 
 
-
-
 # ============================================================================
 # POST /api/users - 사용자 생성
 # ============================================================================
+
 
 class PostUserRequest(BaseModel):
     """사용자 생성 요청"""
@@ -63,6 +63,7 @@ class PostUserResponse(ApiResponse[PostUserResponseData]):
 # PATCH /api/users/{user_id} - 사용자 업데이트
 # ============================================================================
 
+
 class PatchUserRequest(BaseModel):
     """사용자 업데이트 요청"""
 
@@ -97,6 +98,7 @@ class PatchUserResponse(ApiResponse[PatchUserResponseData]):
 # ============================================================================
 # GET /api/users/{user_id} - 사용자 단건 조회
 # ============================================================================
+
 
 class GetUserResponseItemInfo(BaseModel):
     """사용자 조회 응답 아이템"""
@@ -137,6 +139,7 @@ class GetUserResponse(ApiResponse[GetUserResponseItemInfo]):
 # ============================================================================
 # GET /api/users - 사용자 목록 조회 (페이징)
 # ============================================================================
+
 
 class GetUserPagedListRequest(BaseModel):
     """사용자 목록 조회 요청"""
@@ -185,6 +188,7 @@ class GetUserPagedListResponse(ApiResponse[GetUserPagedListResponseData]):
 # DELETE /api/users/{user_id} - 사용자 삭제
 # ============================================================================
 
+
 class DeleteUserResponseData(BaseModel):
     """사용자 삭제 응답 데이터"""
 
@@ -198,5 +202,3 @@ class DeleteUserResponse(ApiResponse[DeleteUserResponseData]):
     """사용자 삭제 응답"""
 
     pass
-
-

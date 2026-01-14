@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def register_exception_handlers(app: FastAPI) -> None:
     """FastAPI 애플리케이션에 전역 예외 핸들러 등록."""
-    
+
     @app.exception_handler(DomainError)
     async def handle_domain_error(request: Request, exc: DomainError):
         """비즈니스 규칙 위반 (400 Bad Request)."""
@@ -38,7 +38,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "data": None,
             },
         )
-    
+
     @app.exception_handler(ApplicationError)
     async def handle_application_error(request: Request, exc: ApplicationError):
         """유스케이스/애플리케이션 실패 (400 Bad Request)."""
@@ -62,7 +62,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "data": None,
             },
         )
-    
+
     @app.exception_handler(InfraError)
     async def handle_infra_error(request: Request, exc: InfraError):
         """기술적 장애 (503 Service Unavailable)."""
@@ -84,7 +84,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "data": None,
             },
         )
-    
+
     @app.exception_handler(ValidationError)
     async def handle_validation_error(request: Request, exc: ValidationError):
         """입력 검증 실패 (400 Bad Request)."""
@@ -96,9 +96,11 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "data": exc.details if exc.details else None,
             },
         )
-    
+
     @app.exception_handler(PydanticValidationError)
-    async def handle_pydantic_validation_error(request: Request, exc: PydanticValidationError):
+    async def handle_pydantic_validation_error(
+        request: Request, exc: PydanticValidationError
+    ):
         """Pydantic 스키마 검증 실패 (400 Bad Request)."""
         # errors()는 복잡한 중첩 구조이므로 요약/필드 기준으로 가공
         simplified = [
@@ -117,7 +119,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "data": simplified,
             },
         )
-    
+
     @app.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception):
         """미처리 예외 (500 Internal Server Error)."""
@@ -137,4 +139,3 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "data": None,
             },
         )
-
