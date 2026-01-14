@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from subdomains.user.domain.models.user import User
 from subdomains.user.domain.protocols.user_repository_protocol import UserRepository
-from subdomains.user.infra.models import UserORM
+from subdomains.user.infra.entities.user_entity import UserEntity
 from shared.errors import DuplicateUserError, InfraError
 from shared.protocols.transaction import Connection
 
@@ -35,7 +35,7 @@ class SQLAlchemyUserRepository(UserRepository):
         """
         session: AsyncSession = conn
         try:
-            orm_user = UserORM(
+            orm_user = UserEntity(
                 username=user.username,
                 email=user.email,
                 full_name=user.full_name,
@@ -72,7 +72,7 @@ class SQLAlchemyUserRepository(UserRepository):
         """
         session: AsyncSession = conn
         try:
-            stmt = select(UserORM).where(UserORM.id == user.id)
+            stmt = select(UserEntity).where(UserEntity.id == user.id)
             result = await session.execute(stmt)
             orm_user = result.scalars().first()
 
@@ -107,7 +107,7 @@ class SQLAlchemyUserRepository(UserRepository):
         """
         session: AsyncSession = conn
         try:
-            stmt = select(UserORM).where(UserORM.id == user_id)
+            stmt = select(UserEntity).where(UserEntity.id == user_id)
             result = await session.execute(stmt)
             orm_user = result.scalars().first()
 
@@ -137,7 +137,7 @@ class SQLAlchemyUserRepository(UserRepository):
         """
         session: AsyncSession = conn
         try:
-            stmt = select(UserORM).where(UserORM.id == user_id)
+            stmt = select(UserEntity).where(UserEntity.id == user_id)
             result = await session.execute(stmt)
             orm_user = result.scalars().first()
 
@@ -173,12 +173,12 @@ class SQLAlchemyUserRepository(UserRepository):
         session: AsyncSession = conn
         try:
             # 전체 개수 조회
-            count_stmt = select(func.count(UserORM.id))
+            count_stmt = select(func.count(UserEntity.id))
             count_result = await session.execute(count_stmt)
             total = count_result.scalar() or 0
 
             # 페이징된 데이터 조회
-            stmt = select(UserORM).offset(skip).limit(limit).order_by(UserORM.id)
+            stmt = select(UserEntity).offset(skip).limit(limit).order_by(UserEntity.id)
             result = await session.execute(stmt)
             orm_users = result.scalars().all()
 
@@ -211,7 +211,9 @@ class SQLAlchemyUserRepository(UserRepository):
         """
         session: AsyncSession = conn
         try:
-            stmt = select(func.count(UserORM.id)).where(UserORM.username == username)
+            stmt = select(func.count(UserEntity.id)).where(
+                UserEntity.username == username
+            )
             result = await session.execute(stmt)
             count = result.scalar() or 0
             return count > 0
@@ -233,7 +235,7 @@ class SQLAlchemyUserRepository(UserRepository):
         """
         session: AsyncSession = conn
         try:
-            stmt = select(func.count(UserORM.id)).where(UserORM.email == email)
+            stmt = select(func.count(UserEntity.id)).where(UserEntity.email == email)
             result = await session.execute(stmt)
             count = result.scalar() or 0
             return count > 0
