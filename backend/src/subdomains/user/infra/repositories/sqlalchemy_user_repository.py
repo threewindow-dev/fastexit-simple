@@ -1,6 +1,5 @@
 """SQLAlchemy-based User Repository Implementation."""
 
-from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -124,7 +123,7 @@ class SQLAlchemyUserRepository(UserRepository):
             raise InfraError("USER_DELETE_FAILED", origin_exc=exc)
 
     @use_transaction()
-    async def find_by_id(self, conn: AsyncSession, user_id: int) -> Optional[User]:
+    async def find_by_id(self, conn: AsyncSession, user_id: int) -> User | None:
         """ID로 사용자 검색.
 
         Args:

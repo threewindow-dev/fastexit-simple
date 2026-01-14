@@ -7,6 +7,8 @@ User API Router (FastAPI endpoints)
 - 구체적 구현체 참조 제거 (개발 표준 준수)
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, status, Depends
 from fastapi import Path, Query
 
@@ -300,8 +302,6 @@ async def delete_user(
     """
     command = DeleteUserCommand(user_id=user_id)
     await service.delete_user(command)
-
-    from datetime import datetime, timezone
 
     data = DeleteUserResponseData(
         id=user_id,

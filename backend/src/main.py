@@ -1,7 +1,10 @@
 import logging
 import os
+import uvicorn
 from contextlib import asynccontextmanager
 from pathlib import Path
+from shared.infra.database import Base
+from subdomains.user.infra.entities.user_entity import UserEntity  # noqa: F401
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -56,11 +59,6 @@ async def lifespan(app: FastAPI):
 
 def _create_all_tables(sync_conn):
     """SQLAlchemy ORM 모델의 모든 테이블 생성."""
-    from shared.infra.database import Base
-
-    # ORM 모델 import하여 메타데이터 등록
-    from subdomains.user.infra.entities.user_entity import UserEntity  # noqa: F401
-
     Base.metadata.create_all(sync_conn)
 
 
@@ -135,6 +133,4 @@ async def root():
 
 
 if __name__ == "__main__":
-    import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)

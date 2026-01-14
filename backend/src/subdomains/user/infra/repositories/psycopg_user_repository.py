@@ -4,16 +4,16 @@ User Repository Implementation (PostgreSQL with Psycopg)
 인프라 계층: 실제 데이터 접근 구현
 """
 
-from typing import Optional
+from datetime import datetime
+
+import psycopg
+import psycopg.errors
 
 from subdomains.user.domain.models.user import User
 from subdomains.user.domain.protocols.user_repository_protocol import UserRepository
 from subdomains.user.domain.errors import DuplicateUserError
 from shared.errors import InfraError
 from shared.protocols.transaction import Connection
-import psycopg
-import psycopg.errors
-from datetime import datetime
 
 
 class PsycopgUserRepository(UserRepository):
@@ -118,7 +118,7 @@ class PsycopgUserRepository(UserRepository):
                 origin_exc=exc,
             )
 
-    async def find_by_id(self, conn: Connection, user_id: int) -> Optional[User]:
+    async def find_by_id(self, conn: Connection, user_id: int) -> User | None:
         """ID로 사용자 검색"""
         connection = conn
         try:
