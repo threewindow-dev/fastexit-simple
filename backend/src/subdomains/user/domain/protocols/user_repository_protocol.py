@@ -5,7 +5,6 @@ User Repository Protocol (추상 계약)
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from subdomains.user.domain.models.user import User
 from shared.protocols.transaction import Connection
@@ -73,7 +72,7 @@ class UserRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, conn: Connection, user_id: int) -> Optional[User]:
+    async def find_by_id(self, conn: Connection, user_id: int) -> User | None:
         """
         ID로 사용자 검색
 

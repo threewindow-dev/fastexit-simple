@@ -4,15 +4,13 @@ User Repository Implementations (Infra Layer)
 인프라 계층: Repository 프로토콜 구현체
 """
 
-from typing import Optional
+import psycopg
+import psycopg.errors
 
 from subdomains.user.domain.models.user import User
 from subdomains.user.domain.protocols.user_repository_protocol import UserRepository
 from subdomains.user.domain.errors import DuplicateUserError
 from shared.errors import InfraError
-
-import psycopg
-import psycopg.errors
 
 
 class PsycopgUserRepository(UserRepository):
@@ -85,7 +83,7 @@ class PsycopgUserRepository(UserRepository):
                 origin_exc=exc,
             )
 
-    async def find_by_id(self, user_id: int) -> Optional[User]:
+    async def find_by_id(self, user_id: int) -> User | None:
         """ID로 사용자 검색"""
         try:
             async with self.connection.cursor() as cur:

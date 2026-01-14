@@ -8,6 +8,7 @@ Structured logging configuration.
 import logging
 import logging.config
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -101,8 +102,6 @@ class RequestContextLogger:
     @staticmethod
     def _generate_id() -> str:
         """간단한 ID 생성 (프로덕션에서는 UUID 권장)."""
-        import uuid
-
         return str(uuid.uuid4())[:8]
 
     def info(self, message: str, **kwargs) -> None:

@@ -6,18 +6,17 @@ ContextVar를 사용한 트랜잭션 컨텍스트 관리.
 """
 
 from contextvars import ContextVar
-from typing import Optional
 
 from shared.protocols.transaction import TransactionProtocol, Connection
 
 
 # ContextVar: 비동기 컨텍스트별로 격리된 트랜잭션 저장
-_transaction_context: ContextVar[Optional[TransactionProtocol]] = ContextVar(
+_transaction_context: ContextVar[TransactionProtocol | None] = ContextVar(
     "transaction_context", default=None
 )
 
 
-def get_current_transaction() -> Optional[TransactionProtocol]:
+def get_current_transaction() -> TransactionProtocol | None:
     """현재 활성화된 트랜잭션을 반환합니다.
     
     Returns:
@@ -26,7 +25,7 @@ def get_current_transaction() -> Optional[TransactionProtocol]:
     return _transaction_context.get()
 
 
-def get_current_connection() -> Optional[Connection]:
+def get_current_connection() -> Connection | None:
     """현재 트랜잭션의 DB 커넥션을 반환합니다.
     
     Returns:

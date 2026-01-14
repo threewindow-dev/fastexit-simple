@@ -4,8 +4,6 @@ User Pydantic Schemas (API 요청/응답)
 인터페이스 계층: HTTP 요청/응답 모델
 """
 
-from typing import Optional
-
 from pydantic import BaseModel, Field, EmailStr
 
 from shared.schemas import ApiResponse
@@ -31,7 +29,7 @@ class PostUserRequest(BaseModel):
         description="이메일 주소",
         examples=["john@example.com", "alice@example.com"],
     )
-    full_name: Optional[str] = Field(
+    full_name: str | None = Field(
         None,
         max_length=255,
         description="전체 이름 (선택)",
@@ -45,7 +43,7 @@ class PostUserResponseData(BaseModel):
     id: int = Field(..., description="사용자 ID", examples=[1])
     username: str = Field(..., description="사용자명", examples=["john_doe"])
     email: str = Field(..., description="이메일 주소", examples=["john@example.com"])
-    full_name: Optional[str] = Field(
+    full_name: str | None = Field(
         None, description="전체 이름", examples=["John Doe", None]
     )
     created_at: str = Field(
@@ -67,7 +65,7 @@ class PostUserResponse(ApiResponse[PostUserResponseData]):
 class PatchUserRequest(BaseModel):
     """사용자 업데이트 요청"""
 
-    full_name: Optional[str] = Field(
+    full_name: str | None = Field(
         ...,
         max_length=255,
         description="전체 이름",
@@ -81,7 +79,7 @@ class PatchUserResponseData(BaseModel):
     id: int = Field(..., description="사용자 ID", examples=[1])
     username: str = Field(..., description="사용자명", examples=["john_doe"])
     email: str = Field(..., description="이메일 주소", examples=["john@example.com"])
-    full_name: Optional[str] = Field(
+    full_name: str | None = Field(
         None, description="전체 이름", examples=["John Doe", None]
     )
     updated_at: str = Field(
@@ -118,7 +116,7 @@ class GetUserResponseItemInfo(BaseModel):
         description="이메일 주소",
         examples=["john@example.com"],
     )
-    full_name: Optional[str] = Field(
+    full_name: str | None = Field(
         None,
         description="전체 이름",
         examples=["John Doe", None],
@@ -165,7 +163,7 @@ class GetUserPagedListItemInfo(BaseModel):
     id: int = Field(..., examples=[1])
     username: str = Field(..., examples=["john_doe"])
     email: str = Field(..., examples=["john@example.com"])
-    full_name: Optional[str] = Field(None, examples=["John Doe", None])
+    full_name: str | None = Field(None, examples=["John Doe", None])
     created_at: str = Field(..., examples=["2025-01-11T10:30:00"])
 
 

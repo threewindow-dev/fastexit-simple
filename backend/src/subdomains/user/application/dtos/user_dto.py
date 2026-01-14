@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from subdomains.user.domain.models.user import User
@@ -25,7 +25,7 @@ class RegisterUserCommand:
 
     username: str
     email: str
-    full_name: Optional[str] = None
+    full_name: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "RegisterUserCommand":
@@ -41,7 +41,7 @@ class UpdateUserCommand:
     """사용자 수정 명령"""
 
     user_id: int
-    full_name: Optional[str] = None
+    full_name: str | None = None
 
 
 @dataclass
@@ -67,10 +67,10 @@ class UserPagedListQuery:
 class RegisterUserCommandResult:
     """사용자 결과 DTO"""
 
-    id: Optional[int]
+    id: int | None
     username: str
     email: str
-    full_name: Optional[str]
+    full_name: str | None
     created_at: datetime
 
     def to_dict(self) -> dict:

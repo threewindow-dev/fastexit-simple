@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+
+from shared.errors import DomainError
 
 
 @dataclass
@@ -22,10 +23,10 @@ class User:
     - id는 Aggregate Root의 식별자
     """
 
-    id: Optional[int]
+    id: int | None
     username: str
     email: str
-    full_name: Optional[str]
+    full_name: str | None
     created_at: datetime
 
     def __post_init__(self) -> None:
@@ -35,8 +36,6 @@ class User:
         강제 검증은 `create()` 팩토리에서 수행한다.
         """
         if self.username is None or self.email is None:
-            from shared.errors import DomainError
-
             raise DomainError(
                 code="USER_INVALID_STATE",
                 message="Username and email must not be None",
@@ -47,7 +46,7 @@ class User:
         cls,
         username: str,
         email: str,
-        full_name: Optional[str] = None,
+        full_name: str | None = None,
     ) -> User:
         """
         팩토리 메서드: 새로운 User 생성
@@ -68,16 +67,12 @@ class User:
         # 입력값 검증 (팩토리에서 강제 수행)
         # 사용자명: 3글자 이상
         if not username or len(username) < 3:
-            from shared.errors import DomainError
-
             raise DomainError(
                 code="USER_INVALID_USERNAME",
                 message="Username must be at least 3 characters",
             )
         # 이메일: local@domain, local/domain 공백 금지, domain에 '.' 포함
         if "@" not in email:
-            from shared.errors import DomainError
-
             raise DomainError(code="USER_INVALID_EMAIL", message="Invalid email format")
         local, _, domain = email.partition("@")
         if (
@@ -87,8 +82,6 @@ class User:
             or domain.startswith(".")
             or domain.endswith(".")
         ):
-            from shared.errors import DomainError
-
             raise DomainError(code="USER_INVALID_EMAIL", message="Invalid email format")
 
         return cls(
@@ -102,8 +95,6 @@ class User:
     def _validate_username(self) -> None:
         """사용자명 검증 (도메인 규칙)"""
         if not self.username or len(self.username) < 3:
-            from shared.errors import DomainError
-
             raise DomainError(
                 code="USER_INVALID_USERNAME",
                 message="Username must be at least 3 characters",
@@ -113,8 +104,6 @@ class User:
         """이메일 검증 (도메인 규칙)"""
         # 간단한 이메일 형식 검증: local@domain, domain에 '.' 포함
         if "@" not in self.email:
-            from shared.errors import DomainError
-
             raise DomainError(
                 code="USER_INVALID_EMAIL",
                 message="Invalid email format",
@@ -127,8 +116,6 @@ class User:
             or domain.startswith(".")
             or domain.endswith(".")
         ):
-            from shared.errors import DomainError
-
             raise DomainError(
                 code="USER_INVALID_EMAIL",
                 message="Invalid email format",
@@ -137,8 +124,6 @@ class User:
     def change_full_name(self, new_full_name: str) -> None:
         """이름 변경 (도메인 로직)"""
         if not new_full_name:
-            from shared.errors import DomainError
-
             raise DomainError(
                 code="USER_INVALID_FULL_NAME",
                 message="Full name cannot be empty",
