@@ -1,6 +1,7 @@
 """
 Pytest configuration and fixtures for User domain tests
 """
+
 import pytest
 from unittest.mock import AsyncMock
 from datetime import datetime
@@ -13,6 +14,7 @@ from tests.test_helpers import MockTransactionManager
 # ============================================================================
 # Domain Model Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_user() -> User:
@@ -57,11 +59,12 @@ def sample_users() -> list[User]:
 # Mock Repository Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_user_repository() -> AsyncMock:
     """Mock UserRepository for unit tests"""
     mock_repo = AsyncMock(spec=UserRepository)
-    
+
     # Configure default behaviors
     mock_repo.exists_by_username = AsyncMock(return_value=False)
     mock_repo.exists_by_email = AsyncMock(return_value=False)
@@ -70,7 +73,7 @@ def mock_user_repository() -> AsyncMock:
     mock_repo.add = AsyncMock()
     mock_repo.update = AsyncMock()
     mock_repo.remove = AsyncMock()
-    
+
     return mock_repo
 
 

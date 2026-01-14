@@ -3,6 +3,7 @@ User Application DTOs (Commands & Queries)
 
 애플리케이션 계층: Use Case 입/출력 인터페이스
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,9 +18,11 @@ if TYPE_CHECKING:
 # Commands (쓰기 작업 - Create, Update, Delete)
 # ============================================================================
 
+
 @dataclass
 class RegisterUserCommand:
     """사용자 등록 명령"""
+
     username: str
     email: str
     full_name: Optional[str] = None
@@ -36,6 +39,7 @@ class RegisterUserCommand:
 @dataclass
 class UpdateUserCommand:
     """사용자 수정 명령"""
+
     user_id: int
     full_name: Optional[str] = None
 
@@ -43,12 +47,14 @@ class UpdateUserCommand:
 @dataclass
 class DeleteUserCommand:
     """사용자 삭제 명령"""
+
     user_id: int
 
 
 @dataclass
 class UserPagedListQuery:
     """사용자 페이징 목록 조회 쿼리"""
+
     skip: int = 0
     limit: int = 100
 
@@ -60,6 +66,7 @@ class UserPagedListQuery:
 @dataclass
 class RegisterUserCommandResult:
     """사용자 결과 DTO"""
+
     id: Optional[int]
     username: str
     email: str
@@ -89,6 +96,7 @@ class RegisterUserCommandResult:
 @dataclass
 class UserPagedListQueryResult:
     """사용자 페이징 목록 조회 결과 DTO"""
+
     items: list[RegisterUserCommandResult]
     total_count: int
     skip: int
