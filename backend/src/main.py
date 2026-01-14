@@ -9,7 +9,7 @@ from core.exception_handlers import register_exception_handlers
 from shared.schemas import ApiResponse
 from core.logging import configure_logging
 from shared.infra.database import db_pool_factory
-from core.dependencies import set_db_pool
+from dependencies import set_db_pool
 from subdomains.user.interface.routers.user_router import router as user_router
 
 # 로깅 설정

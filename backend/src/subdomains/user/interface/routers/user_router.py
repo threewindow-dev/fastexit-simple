@@ -34,8 +34,8 @@ from subdomains.user.interface.schemas import (
     DeleteUserResponseData,
 )
 from shared.schemas import ApiResponse
-from shared.common_responses import common_responses
-from core.dependencies import get_user_app_service
+from core.common_responses import common_responses
+from dependencies import get_user_app_service
 
 
 # ============================================================================
