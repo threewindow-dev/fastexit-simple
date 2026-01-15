@@ -195,9 +195,9 @@ docker push 123456789.dkr.ecr.us-east-1.amazonaws.com/fastexit:latest
 docker run -d \
   --name fastexit-prod \
   --restart unless-stopped \
-  -p 3001:3000 \
-  -p 8001:8000 \
-  -p 5433:5432 \
+  -p 3010:3000 \
+  -p 8010:8000 \
+  -p 5442:5432 \
   -e POSTGRES_PASSWORD=${SECURE_PASSWORD} \
   -e NODE_ENV=production \
   -v fastexit-data:/var/lib/postgresql/data \

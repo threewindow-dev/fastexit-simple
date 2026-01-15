@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-fastexit}
     ports:
-      - "5433:5432"
+      - "5442:5432"
     volumes:
       - ~/data/fast-exit:/var/lib/postgresql/data
     healthcheck:
@@ -30,7 +30,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       DB_PORT: 5432
     ports:
-      - "8001:8000"
+      - "8010:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,7 +47,7 @@ services:
       BACKEND_URL: http://backend:8000
       NODE_ENV: production
     ports:
-      - "3000:3000"
+      - "3010:3000"
     depends_on:
       - backend
     networks:
