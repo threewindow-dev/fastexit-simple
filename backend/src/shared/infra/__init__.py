@@ -10,7 +10,7 @@ from .database import (
     SQLAlchemyTransactionManager,
     PsycopgTransactionManager,
 )
-from ..context import (
+from shared.context import (
     get_current_transaction,
     get_current_connection,
     set_current_transaction,
