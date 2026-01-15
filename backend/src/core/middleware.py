@@ -12,7 +12,7 @@ import logging
 from shared.context import (
     AuthenticatedUser,
     set_authenticated_user,
-    clear_authenticated_user,
+    clear_all_contexts,
 )
 from shared.protocols.auth import TokenManager
 
@@ -72,7 +72,13 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         if token:
             # 토큰 검증
-            payload = self.token_manager.verify_token(token)
+            try:
+                payload = self.token_manager.verify_token(token)
+            except Exception as e:
+                # 구현체가 예외를 던지는 경우도 안전하게 처리
+                logger.debug(f"Token verification error: {e}")
+                payload = None
+
             if payload:
                 # AuthenticatedUser 생성 및 ContextVar에 저장
                 authenticated_user = AuthenticatedUser(
@@ -92,8 +98,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             return response
         finally:
-            # 응답 후 ContextVar 초기화 (중요: 메모리 누수 방지)
-            clear_authenticated_user()
+            # 응답 후 모든 요청 컨텍스트 초기화 (메모리 누수 방지)
+            # 인증 컨텍스트와 트랜잭션 컨텍스트를 함께 초기화합니다.
+            clear_all_contexts()
 
     @staticmethod
     def _extract_bearer_token(auth_header: str) -> str | None:

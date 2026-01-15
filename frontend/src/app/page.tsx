@@ -31,8 +31,10 @@ export default function Home() {
       if (!response.ok) {
         throw new Error('Failed to fetch users');
       }
-      const data = await response.json();
-      setUsers(data);
+      const result = await response.json();
+      // Backend returns {code, message, data: {items: [], total_count}}
+      const users = result.data?.items || [];
+      setUsers(users);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');

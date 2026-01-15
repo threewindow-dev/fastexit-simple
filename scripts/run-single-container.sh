@@ -24,9 +24,9 @@ fi
 # 컨테이너 실행
 docker run -d \
     --name $CONTAINER_NAME \
-    -p 3001:3000 \
-    -p 8001:8000 \
-    -p 5433:5432 \
+    -p 3010:3000 \
+    -p 8010:8000 \
+    -p 5442:5432 \
     -e POSTGRES_USER=postgres \
     -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
     -e POSTGRES_DB=fastexit \
@@ -40,9 +40,9 @@ echo "=================================================="
 echo "Container started successfully!"
 echo ""
 echo "Services:"
-echo "  Frontend:  http://localhost:3001"
-echo "  Backend:   http://localhost:8001"
-echo "  Database:  localhost:5433"
+echo "  Frontend:  http://localhost:3010"
+echo "  Backend:   http://localhost:8010"
+echo "  Database:  localhost:5442"
 echo ""
 echo "View logs:"
 echo "  docker logs -f $CONTAINER_NAME"
