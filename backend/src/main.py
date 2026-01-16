@@ -1,5 +1,4 @@
 import logging
-import os
 import uvicorn
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,19 +8,35 @@ from subdomains.user.infra.entities.user_entity import UserEntity  # noqa: F401
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.config import get_config
 from core.exception_handlers import register_exception_handlers
-from shared.schemas import ApiResponse
 from core.logging import configure_logging
-from shared.infra.database import db_pool_factory
+from shared.schemas import ApiResponse
+from shared.infra.database import create_sqlalchemy_pool, create_psycopg_pool
 from dependencies import set_db_pool
 from subdomains.user.interface.routers import router as user_router
 
+# 설정 로드
+config = get_config()
+
 # 로깅 설정
-configure_logging(log_level="INFO", json_format=True)
+configure_logging(log_level=config.log_level, json_format=config.log_json_format)
 logger = logging.getLogger(__name__)
 
-# DatabasePool 생성 (환경변수 기반 factory)
-db_pool = db_pool_factory(os.getenv("REPOSITORY_TYPE", "sqlalchemy"))
+# DatabasePool 생성 (설정 기반)
+if config.repository_type == "sqlalchemy":
+    db_pool = create_sqlalchemy_pool(
+        dsn_write=config.database.get_connection_string(readonly=False),
+        dsn_readonly=config.database.get_connection_string(readonly=True),
+        pool_size=config.database.pool_size,
+        max_overflow=config.database.max_overflow,
+        sql_echo=config.database.sql_echo,
+    )
+else:
+    db_pool = create_psycopg_pool(
+        dsn_write=config.database.get_connection_string(readonly=False),
+        dsn_readonly=config.database.get_connection_string(readonly=True),
+    )
 
 
 @asynccontextmanager
@@ -33,10 +48,8 @@ async def lifespan(app: FastAPI):
     # 전역 DatabasePool 설정 (dependencies.py에서 사용)
     set_db_pool(db_pool)
 
-    # 데이터베이스 테이블 초기화 (Psycopg용, SQLAlchemy는 필요 시에만 생성)
-    repository_type = os.getenv("REPOSITORY_TYPE", "sqlalchemy")
-
-    if repository_type == "psycopg":
+    # 데이터베이스 테이블 초기화
+    if config.repository_type == "psycopg":
         # SQL 파일에서 스키마 로드
         await _initialize_schema_from_sql(db_pool)
     else:
@@ -48,7 +61,7 @@ async def lifespan(app: FastAPI):
                 await conn.run_sync(lambda sync_conn: _create_all_tables(sync_conn))
 
     logger.info(
-        f"Database initialized successfully (repository_type={repository_type})"
+        f"Database initialized successfully (repository_type={config.repository_type})"
     )
     try:
         yield

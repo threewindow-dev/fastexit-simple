@@ -4,7 +4,7 @@ Authentication protocols.
 인증 관련 Protocol 정의 (의존성 역전 원칙 적용)
 """
 
-from typing import Protocol, dict
+from typing import Protocol
 
 
 class TokenManager(Protocol):

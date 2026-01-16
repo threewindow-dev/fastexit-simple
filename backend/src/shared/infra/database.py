@@ -3,10 +3,9 @@ Database connection and session management.
 
 기준: .dev-standards/python/DATABASE_STANDARDS.md
 현재: psycopg + SQLAlchemy async 모두 지원
-- REPOSITORY_TYPE 환경변수로 선택: "psycopg" | "sqlalchemy" (기본값: "sqlalchemy")
+- 설정은 외부(dependencies/main)에서 주입받음
 """
 
-import os
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -35,61 +34,6 @@ logger = logging.getLogger(__name__)
 
 # ORM Base (모든 모델이 상속)
 Base = declarative_base()
-
-
-# ============================================================================
-# Database Pool Helper (공용 로직)
-# ============================================================================
-
-
-class DatabasePoolHelper:
-    """DatabasePool 구현체 간 공용 로직 제공."""
-
-    @staticmethod
-    def build_connection_string(
-        prefix: str = "DB_", require_password: bool = True
-    ) -> str:
-        """환경 변수에서 DB 연결 문자열 구성.
-
-        prefix 예: "DB_" (writable), "DB_READONLY_" (readonly)
-        """
-        password_env = f"{prefix}PASSWORD"
-        db_password = os.getenv(password_env)
-        if require_password and not db_password:
-            raise ValueError(f"{password_env} environment variable is required")
-
-        host = os.getenv(f"{prefix}HOST", os.getenv("DB_HOST", ""))
-        port = os.getenv(f"{prefix}PORT", os.getenv("DB_PORT", ""))
-        dbname = os.getenv(f"{prefix}NAME", os.getenv("DB_NAME", ""))
-        user = os.getenv(f"{prefix}USER", os.getenv("DB_USER", ""))
-        password = db_password or os.getenv("DB_PASSWORD", "")
-
-        return f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
-
-    @staticmethod
-    def configure_readonly_dsn() -> tuple[str, str]:
-        """Writable/Readonly DSN 구성.
-
-        Returns:
-            (dsn_write, dsn_readonly): readonly가 설정되지 않으면 write로 폴백.
-        """
-        dsn_write = DatabasePoolHelper.build_connection_string(prefix="DB_")
-
-        readonly_enabled = os.getenv("DB_READONLY_ENABLED", "false").lower() == "true"
-        if readonly_enabled:
-            try:
-                dsn_readonly = DatabasePoolHelper.build_connection_string(
-                    prefix="DB_READONLY_", require_password=False
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Readonly DSN 구성 실패, write DSN으로 폴백합니다: %s", exc
-                )
-                dsn_readonly = dsn_write
-        else:
-            dsn_readonly = dsn_write
-
-        return dsn_write, dsn_readonly
 
 
 # ============================================================================
@@ -170,9 +114,27 @@ class SQLAlchemyDatabasePool(DatabasePool):
     - AsyncSession 기반 트랜잭션 관리
     """
 
-    def __init__(self):
-        self._dsn_write: str | None = None
-        self._dsn_readonly: str | None = None
+    def __init__(
+        self,
+        dsn_write: str,
+        dsn_readonly: str | None = None,
+        pool_size: int = 5,
+        max_overflow: int = 10,
+        sql_echo: bool = False,
+    ):
+        """
+        Args:
+            dsn_write: Writable DB 연결 문자열
+            dsn_readonly: Readonly DB 연결 문자열 (None이면 dsn_write 사용)
+            pool_size: 연결 풀 크기
+            max_overflow: 최대 오버플로우 연결 수
+            sql_echo: SQL 쿼리 로깅 여부
+        """
+        self._dsn_write = dsn_write
+        self._dsn_readonly = dsn_readonly or dsn_write
+        self._pool_size = pool_size
+        self._max_overflow = max_overflow
+        self._sql_echo = sql_echo
         self._engine_write = None
         self._engine_readonly = None
         self._session_factory_write = None
@@ -180,10 +142,6 @@ class SQLAlchemyDatabasePool(DatabasePool):
 
     async def initialize(self) -> None:
         """SQLAlchemy 엔진 및 세션 팩토리 초기화."""
-        self._dsn_write, self._dsn_readonly = (
-            DatabasePoolHelper.configure_readonly_dsn()
-        )
-
         try:
             # SQLAlchemy async engine 생성 (writable)
             async_dsn = self._dsn_write.replace(
@@ -191,10 +149,10 @@ class SQLAlchemyDatabasePool(DatabasePool):
             )
             self._engine_write = create_async_engine(
                 async_dsn,
-                echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+                echo=self._sql_echo,
                 future=True,
-                pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
-                max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
+                pool_size=self._pool_size,
+                max_overflow=self._max_overflow,
                 pool_pre_ping=True,
             )
             self._session_factory_write = async_sessionmaker(
@@ -205,16 +163,16 @@ class SQLAlchemyDatabasePool(DatabasePool):
             logger.info("SQLAlchemy async engine (writable) initialized")
 
             # SQLAlchemy async engine (readonly) - 별도 설정 시 분리, 없으면 동일 엔진 사용
-            if self._dsn_readonly and self._dsn_readonly != self._dsn_write:
+            if self._dsn_readonly != self._dsn_write:
                 async_dsn_ro = self._dsn_readonly.replace(
                     "postgresql://", "postgresql+asyncpg://"
                 )
                 self._engine_readonly = create_async_engine(
                     async_dsn_ro,
-                    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+                    echo=self._sql_echo,
                     future=True,
-                    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
-                    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
+                    pool_size=self._pool_size,
+                    max_overflow=self._max_overflow,
                     pool_pre_ping=True,
                 )
                 self._session_factory_readonly = async_sessionmaker(
@@ -227,7 +185,13 @@ class SQLAlchemyDatabasePool(DatabasePool):
                 self._engine_readonly = self._engine_write
                 self._session_factory_readonly = self._session_factory_write
         except Exception as exc:
-            raise DbConnectionError(os.getenv("DB_HOST", "localhost"), origin_exc=exc)
+            # DSN에서 호스트 추출 시도
+            host = "unknown"
+            try:
+                host = self._dsn_write.split("@")[1].split(":")[0]
+            except Exception:
+                pass
+            raise DbConnectionError(host, origin_exc=exc)
 
     async def close(self) -> None:
         """SQLAlchemy 엔진 종료."""
@@ -270,15 +234,17 @@ class PsycopgDatabasePool(DatabasePool):
     - AsyncConnection 기반 트랜잭션 관리
     """
 
-    def __init__(self):
-        self._dsn_write: str | None = None
-        self._dsn_readonly: str | None = None
+    def __init__(self, dsn_write: str, dsn_readonly: str | None = None):
+        """
+        Args:
+            dsn_write: Writable DB 연결 문자열
+            dsn_readonly: Readonly DB 연결 문자열 (None이면 dsn_write 사용)
+        """
+        self._dsn_write = dsn_write
+        self._dsn_readonly = dsn_readonly or dsn_write
 
     async def initialize(self) -> None:
         """Psycopg DSN 초기화."""
-        self._dsn_write, self._dsn_readonly = (
-            DatabasePoolHelper.configure_readonly_dsn()
-        )
         logger.info("Psycopg database pool initialized (legacy)")
 
     async def close(self) -> None:
@@ -321,21 +287,47 @@ class PsycopgDatabasePool(DatabasePool):
 # ============================================================================
 
 
-def db_pool_factory(repository_type: str = "sqlalchemy") -> DatabasePool:
-    """DatabasePool 구현체 생성 팩토리.
+def create_sqlalchemy_pool(
+    dsn_write: str,
+    dsn_readonly: str | None = None,
+    pool_size: int = 5,
+    max_overflow: int = 10,
+    sql_echo: bool = False,
+) -> SQLAlchemyDatabasePool:
+    """SQLAlchemy DatabasePool 생성.
 
     Args:
-        repository_type: "sqlalchemy" 또는 "psycopg"
+        dsn_write: Writable DB 연결 문자열
+        dsn_readonly: Readonly DB 연결 문자열 (None이면 dsn_write 사용)
+        pool_size: 연결 풀 크기
+        max_overflow: 최대 오버플로우 연결 수
+        sql_echo: SQL 쿼리 로깅 여부
 
     Returns:
-        DatabasePool 추상 인터페이스를 구현한 구체 클래스 인스턴스
+        SQLAlchemyDatabasePool 인스턴스
     """
-    if repository_type == "sqlalchemy":
-        return SQLAlchemyDatabasePool()
-    elif repository_type == "psycopg":
-        return PsycopgDatabasePool()
-    else:
-        raise ValueError(f"Unknown repository type: {repository_type}")
+    return SQLAlchemyDatabasePool(
+        dsn_write=dsn_write,
+        dsn_readonly=dsn_readonly,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        sql_echo=sql_echo,
+    )
+
+
+def create_psycopg_pool(
+    dsn_write: str, dsn_readonly: str | None = None
+) -> PsycopgDatabasePool:
+    """Psycopg DatabasePool 생성.
+
+    Args:
+        dsn_write: Writable DB 연결 문자열
+        dsn_readonly: Readonly DB 연결 문자열 (None이면 dsn_write 사용)
+
+    Returns:
+        PsycopgDatabasePool 인스턴스
+    """
+    return PsycopgDatabasePool(dsn_write=dsn_write, dsn_readonly=dsn_readonly)
 
 
 # ============================================================================

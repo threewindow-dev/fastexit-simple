@@ -6,7 +6,6 @@ JWT 토큰 관리 구현체
 
 import jwt
 from datetime import datetime, timezone, timedelta
-from typing import dict
 
 
 class JWTTokenManager:

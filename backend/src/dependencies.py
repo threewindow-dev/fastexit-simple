@@ -3,18 +3,20 @@ FastAPI Dependency Injection.
 
 기준: .dev-standards/python/FASTAPI_DEVELOPMENT_STANDARDS.md
 - Router에서 구체적 구현체 직접 참조 제거
-- 환경변수 기반 저장소 타입 선택
+- core에서 설정 읽기, shared에 주입
 - FastAPI Depends()로 의존성 주입
 """
 
-import os
 from typing import AsyncGenerator
 
+from core.config import get_config
 from shared.protocols.database import DatabasePool
+from shared.protocols.auth import TokenManager
 from shared.infra.database import (
     SQLAlchemyTransactionManager,
     PsycopgTransactionManager,
 )
+from shared.infra.auth import JWTTokenManager
 from subdomains.user.infra.repositories import (
     SQLAlchemyUserRepository,
     PsycopgUserRepository,
@@ -23,10 +25,11 @@ from subdomains.user.application.services.user_app_service import UserAppService
 
 
 # ============================================================================
-# 전역 DatabasePool 인스턴스
+# 전역 인스턴스
 # ============================================================================
 
 _db_pool: DatabasePool | None = None
+_token_manager: TokenManager | None = None
 
 
 def set_db_pool(pool: DatabasePool) -> None:
@@ -42,6 +45,18 @@ def get_db_pool() -> DatabasePool:
     return _db_pool
 
 
+def get_token_manager() -> TokenManager:
+    """TokenManager 인스턴스 반환 (싱글톤)."""
+    global _token_manager
+    if _token_manager is None:
+        config = get_config()
+        _token_manager = JWTTokenManager(
+            secret_key=config.auth.jwt_secret,
+            algorithm=config.auth.jwt_algorithm,
+        )
+    return _token_manager
+
+
 # ============================================================================
 # Application Service 의존성
 # ============================================================================
@@ -51,7 +66,7 @@ async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
     """
     UserAppService 인스턴스 생성 및 의존성 주입.
 
-    - repository: 환경변수 기반 자동 선택
+    - repository: 설정 기반 자동 선택
     - transaction_manager: readonly/writable 트랜잭션 생성 관리
 
     사용 예시 (Router):
@@ -63,10 +78,10 @@ async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
             result = await service.create_user(command)
             return result
     """
+    config = get_config()
     db_pool = get_db_pool()
-    repository_type = os.getenv("REPOSITORY_TYPE", "sqlalchemy")
 
-    if repository_type == "sqlalchemy":
+    if config.repository_type == "sqlalchemy":
         # SQLAlchemy: TransactionManager가 세션 생성 관리
         tx_manager = SQLAlchemyTransactionManager(db_pool)
         repository = SQLAlchemyUserRepository()

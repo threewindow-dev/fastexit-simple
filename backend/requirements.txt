@@ -3,6 +3,7 @@ uvicorn[standard]==0.32.1
 psycopg[binary]==3.2.3
 pydantic==2.12.5
 python-dotenv==1.0.1
+PyJWT==2.10.1
 
 # SQLAlchemy
 sqlalchemy==2.0.41

@@ -4,15 +4,45 @@ API integration tests for User router
 Tests full HTTP endpoints with real database using Testcontainers
 """
 
+import os
 import re
+
 import pytest
 import pytest_asyncio
 import psycopg
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 from testcontainers.postgres import PostgresContainer
 
-from main import app
-from shared.infra.database import db_pool_factory
+import core.config
+from dependencies import set_db_pool
+from main import register_exception_handlers
+from shared.infra.database import create_sqlalchemy_pool
+from subdomains.user.interface.routers import router as user_router
+
+
+@pytest.fixture(scope="module")
+def test_app():
+    """Create a test FastAPI app without lifespan"""
+    app = FastAPI(title="FastExit API Test")
+
+    # 전역 예외 핸들러 등록
+    register_exception_handlers(app)
+
+    # User 라우터 등록
+    app.include_router(user_router)
+
+    # CORS 설정
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    return app
 
 
 @pytest.fixture(scope="module")
@@ -23,6 +53,17 @@ def postgres_container():
     container.waiting_for(
         re.compile(r".*database system is ready to accept connections.*", re.DOTALL)
     )
+
+    # Set environment variables immediately after container starts
+    os.environ["DB_HOST"] = str(container.get_container_host_ip())
+    os.environ["DB_PORT"] = str(container.get_exposed_port(5432))
+    os.environ["DB_NAME"] = str(container.dbname)
+    os.environ["DB_USER"] = str(container.username)
+    os.environ["DB_PASSWORD"] = str(container.password)
+
+    # Reset config cache to pick up new environment variables
+    core.config._config = None
+
     yield container
     container.stop()
 
@@ -53,17 +94,10 @@ async def test_db_pool(postgres_container):
             """
             )
 
-    # Create pool
-    pool = db_pool_factory("sqlalchemy")
-    # Override connection string
-    import os
+    # Build DSN from container
+    dsn = f"postgresql://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
 
-    os.environ["DB_HOST"] = str(postgres_container.get_container_host_ip())
-    os.environ["DB_PORT"] = str(postgres_container.get_exposed_port(5432))
-    os.environ["DB_NAME"] = str(postgres_container.dbname)
-    os.environ["DB_USER"] = str(postgres_container.username)
-    os.environ["DB_PASSWORD"] = str(postgres_container.password)
-
+    pool = create_sqlalchemy_pool(dsn_write=dsn)
     await pool.initialize()
 
     yield pool
@@ -75,8 +109,6 @@ async def test_db_pool(postgres_container):
 async def clean_db(test_db_pool):
     """Clean database before each test"""
     # Use psycopg connection directly for table cleanup
-    import os
-
     conn_str = f"postgresql://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
 
     async with await psycopg.AsyncConnection.connect(
@@ -106,12 +138,13 @@ async def clean_db(test_db_pool):
 
 
 @pytest.fixture
-def client(test_db_pool):
+def client(test_app, test_db_pool):
     """Create FastAPI test client with test database"""
     # Override app's database pool
-    app.state.db_pool = test_db_pool
+    set_db_pool(test_db_pool)
 
-    with TestClient(app) as client:
+    # Create TestClient with test app
+    with TestClient(test_app) as client:
         yield client
 
 
