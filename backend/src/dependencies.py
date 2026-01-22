@@ -9,6 +9,8 @@ FastAPI Dependency Injection.
 
 from typing import AsyncGenerator
 
+from fastapi.security import OAuth2PasswordBearer
+
 from core.config import get_config
 from shared.protocols.database import DatabasePool
 from shared.protocols.auth import TokenManager
@@ -30,6 +32,7 @@ from subdomains.user.application.services.user_app_service import UserAppService
 
 _db_pool: DatabasePool | None = None
 _token_manager: TokenManager | None = None
+_oauth2_scheme: OAuth2PasswordBearer | None = None
 
 
 def set_db_pool(pool: DatabasePool) -> None:
@@ -55,6 +58,30 @@ def get_token_manager() -> TokenManager:
             algorithm=config.auth.jwt_algorithm,
         )
     return _token_manager
+
+
+def get_oauth2_scheme() -> OAuth2PasswordBearer:
+    """OAuth2PasswordBearer 인스턴스 반환 (싱글톤).
+
+    Swagger UI의 Authorize 버튼을 표시하기 위해 데코레이터에서 사용되며,
+    tokenUrl은 실제 토큰 엔드포인트 경로로 설정됩니다.
+
+    Returns:
+        OAuth2PasswordBearer: Bearer 토큰 기반 보안 스킴
+
+    Raises:
+        RuntimeError: JWT 설정이 없는 경우
+    """
+    global _oauth2_scheme
+    if _oauth2_scheme is None:
+        config = get_config()
+        if not hasattr(config, "auth") or not hasattr(config.auth, "token_url"):
+            raise RuntimeError(
+                "OAuth2 configuration not found. "
+                "Ensure AUTH_TOKEN_URL is set in environment."
+            )
+        _oauth2_scheme = OAuth2PasswordBearer(tokenUrl=config.auth.token_url, scopes={})
+    return _oauth2_scheme
 
 
 # ============================================================================

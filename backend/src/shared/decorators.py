@@ -6,10 +6,11 @@ AppService와 Repository에서 트랜잭션을 자동으로 관리하고,
 엔드포인트에서 인증을 검증합니다.
 """
 
+import inspect
 from functools import wraps
-from typing import Callable, Any
+from typing import Any, Callable
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Depends, status
 
 from shared.context import (
     get_current_transaction,
@@ -187,8 +188,10 @@ def propagates_transaction(func: Callable) -> Callable:
 
 
 def authenticate_required(func: Callable) -> Callable:
-    """
-    인증된 사용자만 접근 가능한 엔드포인트를 표시하는 데코레이터
+    """인증된 사용자만 접근 가능한 엔드포인트를 표시하는 데코레이터.
+
+    Swagger UI에 Authorize 버튼을 자동으로 추가하기 위해
+    함수에 OAuth2PasswordBearer dependency를 동적으로 추가합니다.
 
     ContextVar에서 현재 인증된 사용자 정보를 확인하고,
     없으면 401 Unauthorized 에러를 반환합니다.
@@ -206,9 +209,45 @@ def authenticate_required(func: Callable) -> Callable:
     Returns:
         인증 검증이 추가된 래퍼 함수
     """
+    # Circular import 방지를 위한 지연 import
+    from dependencies import get_oauth2_scheme
+
+    # Swagger UI에 Authorize 버튼을 표시하기 위해 OAuth2PasswordBearer dependency 추가
+    try:
+        oauth2_scheme = get_oauth2_scheme()
+    except RuntimeError:
+        # OAuth2 설정이 없는 경우 경고 없이 계속 진행
+        oauth2_scheme = None
+
+    # 함수의 시그니처를 수정하여 token 파라미터 추가 (Swagger UI용)
+    if oauth2_scheme is not None:
+        sig = inspect.signature(func)
+        params = list(sig.parameters.values())
+
+        # token 파라미터가 이미 있는지 확인
+        has_token_param = any(p.name == "token" for p in params)
+
+        # ⚠️ 이 코드 블록이 핵심입니다!
+        # 이 코드가 없으면 FastAPI가 OpenAPI 스키마에 security 정보를 추가하지 않습니다.
+        if not has_token_param:
+            # token 파라미터를 추가 (Swagger UI용, 실제로는 사용하지 않음)
+            token_param = inspect.Parameter(
+                "token",
+                inspect.Parameter.KEYWORD_ONLY,
+                default=Depends(
+                    oauth2_scheme
+                ),  # ← 이 Depends가 Swagger UI 연결의 핵심!
+                annotation=str | None,
+            )
+            params.append(token_param)
+            new_sig = sig.replace(parameters=params)
+            func.__signature__ = new_sig  # ← 함수 시그니처를 동적으로 수정
 
     @wraps(func)
     async def wrapper(*args, **kwargs) -> Any:
+        # token 파라미터가 kwargs에 있으면 제거 (실제로는 사용하지 않음)
+        kwargs.pop("token", None)
+
         authenticated_user = get_authenticated_user()
 
         if not authenticated_user:
@@ -224,8 +263,10 @@ def authenticate_required(func: Callable) -> Callable:
 
 
 def role_required(*allowed_roles: str) -> Callable:
-    """
-    특정 역할을 가진 사용자만 접근 가능한 엔드포인트를 표시하는 데코레이터
+    """특정 역할을 가진 사용자만 접근 가능한 엔드포인트를 표시하는 데코레이터.
+
+    Swagger UI에 Authorize 버튼을 자동으로 추가하기 위해
+    함수에 OAuth2PasswordBearer dependency를 동적으로 추가합니다.
 
     ContextVar에서 현재 인증된 사용자의 역할을 확인하고,
     필요한 역할이 없으면 403 Forbidden 에러를 반환합니다.
@@ -245,8 +286,45 @@ def role_required(*allowed_roles: str) -> Callable:
     """
 
     def decorator(func: Callable) -> Callable:
+        # Circular import 방지를 위한 지연 import
+        from dependencies import get_oauth2_scheme
+
+        # Swagger UI에 Authorize 버튼을 표시하기 위해 OAuth2PasswordBearer dependency 추가
+        try:
+            oauth2_scheme = get_oauth2_scheme()
+        except RuntimeError:
+            # OAuth2 설정이 없는 경우 경고 없이 계속 진행
+            oauth2_scheme = None
+
+        # 함수의 시그니처를 수정하여 token 파라미터 추가 (Swagger UI용)
+        if oauth2_scheme is not None:
+            sig = inspect.signature(func)
+            params = list(sig.parameters.values())
+
+            # token 파라미터가 이미 있는지 확인
+            has_token_param = any(p.name == "token" for p in params)
+
+            # ⚠️ 이 코드 블록이 핵심입니다!
+            # 이 코드가 없으면 FastAPI가 OpenAPI 스키마에 security 정보를 추가하지 않습니다.
+            if not has_token_param:
+                # token 파라미터를 추가 (Swagger UI용, 실제로는 사용하지 않음)
+                token_param = inspect.Parameter(
+                    "token",
+                    inspect.Parameter.KEYWORD_ONLY,
+                    default=Depends(
+                        oauth2_scheme
+                    ),  # ← 이 Depends가 Swagger UI 연결의 핵심!
+                    annotation=str | None,
+                )
+                params.append(token_param)
+                new_sig = sig.replace(parameters=params)
+                func.__signature__ = new_sig  # ← 함수 시그니처를 동적으로 수정
+
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
+            # token 파라미터가 kwargs에 있으면 제거 (실제로는 사용하지 않음)
+            kwargs.pop("token", None)
+
             authenticated_user = get_authenticated_user()
 
             # 1. 먼저 인증 여부 확인
