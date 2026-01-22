@@ -1,0 +1,1414 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: FastExit API
+  version: 1.0.0
+  description: |
+    FastExit 사용자 자산 관리 시스템의 REST API
+    
+    ## 인증
+    - 모든 엔드포인트는 Bearer JWT 토큰을 사용한 인증이 필요합니다.
+    - 토큰 형식: `Authorization: Bearer <token>`
+    
+    ## 권한
+    - `admin`: 관리자 기능 (금융사, 상품, 계좌, 자산 관리)
+    - `user`: 일반 사용자 (조회 기능만)
+    
+    ## 응답 포맷
+    모든 응답은 다음 구조를 따릅니다:
+    ```json
+    {
+      "code": 0,
+      "message": "success",
+      "data": {...}
+    }
+    ```
+
+servers:
+  - url: /fastexit/v1
+    description: FastExit API v1
+  - url: http://localhost:8000/fastexit/v1
+    description: Local Development
+
+paths:
+  # ============================================================================
+  # 관리자 기능: 금융사 관리
+  # ============================================================================
+  
+  /admin/institutions:
+    post:
+      summary: 금융사 등록
+      description: |
+        관리자는 자산을 보관할 금융사 정보를 등록합니다.
+        
+        **관련 기능**: F2 금융사 정보 추가
+      tags: [Admin - Institution]
+      operationId: createInstitution
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInstitutionRequest'
+      responses:
+        '201':
+          description: 금융사 등록 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/InstitutionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+
+  # ============================================================================
+  # 관리자 기능: 상품 관리
+  # ============================================================================
+  
+  /admin/products:
+    post:
+      summary: 상품 등록
+      description: |
+        관리자는 투자 상품 정보를 등록합니다.
+        
+        **관련 기능**: F2-1 상품 정보 추가
+      tags: [Admin - Product]
+      operationId: createProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: 상품 등록 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+
+  # ============================================================================
+  # 관리자 기능: 계좌 관리
+  # ============================================================================
+  
+  /admin/accounts:
+    post:
+      summary: 계좌 등록
+      description: |
+        관리자는 특정 금융사에 보관한 계좌 정보를 등록합니다.
+        
+        **관련 기능**: F3 계좌 정보 추가
+      tags: [Admin - Account]
+      operationId: createAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: 계좌 등록 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/AccountResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+
+  # ============================================================================
+  # 관리자 기능: 자산 관리
+  # ============================================================================
+  
+  /admin/holdings:
+    post:
+      summary: 자산 추가
+      description: |
+        관리자는 계좌에 보유 중인 자산(상품)을 등록합니다.
+        
+        **관련 기능**: F4-1 자산 추가
+      tags: [Admin - Holding]
+      operationId: createHolding
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHoldingRequest'
+      responses:
+        '201':
+          description: 자산 추가 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/HoldingResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+
+  /admin/holdings/{holding_id}:delete:
+    post:
+      summary: 자산 삭제 (2단계, F4-4)
+      description: |
+        자산을 숨김 또는 완전 삭제합니다.
+        - 첫 단계(hide): 목록에서 숨김 (논리적 삭제)
+        - 두 번째 단계(hard_delete): 데이터 완전 삭제 (30일 후 자동)
+      tags: [Admin - Holding]
+      operationId: deleteHolding
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: holding_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteHoldingRequest'
+      responses:
+        '200':
+          description: 자산 삭제 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/DeleteHoldingResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+        '404':
+          $ref: '#/components/responses/ErrorResponse404'
+
+  # ============================================================================
+  # 관리자 기능: 스냅샷 관리
+  # ============================================================================
+  
+  /admin/snapshots:
+    post:
+      summary: 일반 스냅샷 생성
+      description: |
+        관리자는 특정 기준일(토요일)의 계좌별 자산 평가금액을 기록할 스냅샷을 생성합니다.
+        
+        **관련 기능**: F4-1 스냅샷 생성
+        - 일반 스냅샷 생성(비완성 상태)
+        - 자산별 평가금액 입력 가능
+        - 완료 후 잠금
+      tags: [Admin - Snapshot]
+      operationId: createSnapshot
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSnapshotRequest'
+      responses:
+        '201':
+          description: 스냅샷 생성 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/SnapshotResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+
+  /admin/snapshots/{snapshot_id}/holdings/{holding_id}:
+    put:
+      summary: 스냅샷 내 자산 평가금액 입력/수정
+      description: |
+        스냅샷에서 특정 자산의 평가금액을 입력하거나 수정합니다.
+        
+        **관련 기능**: F4-1 자산 평가금액 입력
+        - 스냅샷이 잠기지 않은 상태에서만 수정 가능
+      tags: [Admin - Snapshot]
+      operationId: updateSnapshotHolding
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: snapshot_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: holding_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSnapshotHoldingRequest'
+      responses:
+        '200':
+          description: 평가금액 입력 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/SnapshotHoldingResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+        '404':
+          $ref: '#/components/responses/ErrorResponse404'
+
+  /admin/snapshots/{snapshot_id}:lock:
+    post:
+      summary: 스냅샷 잠금 (확정)
+      description: |
+        일반 스냅샷을 잠금(확정) 상태로 전환합니다.
+        - 잠금 후에는 수정 불가능합니다.
+        - 주간/연간 스냅샷 생성 시 원본으로 사용됩니다.
+      tags: [Admin - Snapshot]
+      operationId: lockSnapshot
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: snapshot_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 스냅샷 잠금 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/SnapshotResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+        '404':
+          $ref: '#/components/responses/ErrorResponse404'
+        '409':
+          $ref: '#/components/responses/ErrorResponse409'
+
+  /admin/snapshots:create-weekly:
+    post:
+      summary: 주간 스냅샷 생성 (F4-2)
+      description: |
+        일반 스냅샷을 기반으로 주간 스냅샷을 생성합니다.
+        - 기준: 토요일에 잠긴 스냅샷
+        - 주간 데이터는 자동으로 잠금 상태
+      tags: [Admin - Snapshot]
+      operationId: createWeeklySnapshot
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWeeklySnapshotRequest'
+      responses:
+        '201':
+          description: 주간 스냅샷 생성 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/WeeklySnapshotResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+
+  /admin/snapshots:create-annual:
+    post:
+      summary: 연간 스냅샷 생성 (F4-3)
+      description: |
+        일반 스냅샷을 기반으로 연간 스냅샷을 생성합니다.
+        - 기준: 1월 1일에 잠긴 스냅샷
+        - 연간 데이터는 자동으로 잠금 상태
+      tags: [Admin - Snapshot]
+      operationId: createAnnualSnapshot
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAnnualSnapshotRequest'
+      responses:
+        '201':
+          description: 연간 스냅샷 생성 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/AnnualSnapshotResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+
+  # ============================================================================
+  # 관리자 기능: 계좌 그룹 관리
+  # ============================================================================
+  
+  /admin/account-groups:
+    post:
+      summary: 계좌 그룹 생성
+      description: |
+        관리자는 여러 계좌를 하나의 그룹으로 묶어서 관리합니다.
+        
+        **관련 기능**: F7 계좌 그룹 생성
+      tags: [Admin - Account Group]
+      operationId: createAccountGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountGroupRequest'
+      responses:
+        '201':
+          description: 계좌 그룹 생성 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/AccountGroupResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '403':
+          $ref: '#/components/responses/ErrorResponse403'
+
+  # ============================================================================
+  # 사용자 기능: 조회
+  # ============================================================================
+  
+  /reports/accounts/weekly:
+    get:
+      summary: 계좌별 주간 조회
+      description: |
+        로그인한 사용자가 계좌별로 자산의 평가금액을 주 단위로 조회합니다.
+        
+        **관련 기능**: F5 계좌별 자산 평가금액 주간 조회
+        - 기준일: 토요일 (스냅샷 기준일)
+        - 출력: 금융사별, 계좌별 총 평가금액
+      tags: [User - Report]
+      operationId: getWeeklyAccountReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - name: start_date
+          in: query
+          required: false
+          description: 조회 시작 날짜 (ISO 8601, 예: 2026-01-01)
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: false
+          description: 조회 종료 날짜 (ISO 8601, 예: 2026-01-31)
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 주간 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/WeeklyAccountReportResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+
+  /reports/accounts/annual:
+    get:
+      summary: 계좌별 연간 조회
+      description: |
+        로그인한 사용자가 계좌별로 자산의 평가금액을 연 단위로 조회합니다.
+        
+        **관련 기능**: F6 계좌별 자산 평가금액 연간 조회
+        - 기준일: 1월 1일 (스냅샷 기준일)
+        - 출력: 금융사별, 계좌별 총 평가금액
+      tags: [User - Report]
+      operationId: getAnnualAccountReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - name: year
+          in: query
+          required: false
+          description: 조회 연도 (예: 2026)
+          schema:
+            type: integer
+            example: 2026
+      responses:
+        '200':
+          description: 연간 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/AnnualAccountReportResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+
+  /reports/account-groups/weekly:
+    get:
+      summary: 계좌 그룹별 주간 조회
+      description: |
+        로그인한 사용자가 관리자가 정의한 계좌 그룹으로 정렬된 상태에서 주 단위 조회를 합니다.
+        
+        **관련 기능**: F8 계좌 그룹별 주간 조회
+        - 정렬: 계좌 그룹별, 그룹 내 계좌별
+        - 출력: 그룹명, 각 계좌의 평가금액, 그룹별 소계
+      tags: [User - Report]
+      operationId: getWeeklyAccountGroupReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - name: start_date
+          in: query
+          required: false
+          description: 조회 시작 날짜 (ISO 8601)
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: false
+          description: 조회 종료 날짜 (ISO 8601)
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 계좌 그룹별 주간 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/WeeklyAccountGroupReportResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+
+  /reports/asset-class:
+    get:
+      summary: 자산군별 집계 조회
+      description: |
+        로그인한 사용자가 자산군(자산 클래스)에 따라 집계된 자산 현황을 조회합니다.
+        
+        **관련 기능**: F9 자산군별 집계 조회
+        - 자산군별로 보유 상품 목록
+        - 자산군별 평가금액 소계
+        - 전체 자산 총액
+      tags: [User - Report]
+      operationId: getAssetClassReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestIdHeader'
+        - $ref: '#/components/parameters/TraceparentHeader'
+        - name: snapshot_date
+          in: query
+          required: true
+          description: 스냅샷 기준일 (ISO 8601, 예: 2026-01-01)
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 자산군별 집계 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/AssetClassReportResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse400'
+        '401':
+          $ref: '#/components/responses/ErrorResponse401'
+        '404':
+          $ref: '#/components/responses/ErrorResponse404'
+
+components:
+  schemas:
+    # ========================================================================
+    # 공통 응답
+    # ========================================================================
+    
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 응답 코드
+        message:
+          type: string
+          description: 응답 메시지
+        data:
+          type: object
+          description: 응답 데이터
+      required: [code, message, data]
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 에러 코드 (예: VALIDATION_ERROR, NOT_FOUND)
+        message:
+          type: string
+          description: 에러 메시지
+        details:
+          oneOf:
+            - type: "null"
+            - type: object
+          description: 추가 세부 정보
+      required: [code, message]
+
+    # ========================================================================
+    # 금융사 (Institution)
+    # ========================================================================
+    
+    CreateInstitutionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: 금융사명
+        type:
+          type: string
+          enum: [증권사, 은행, 기타]
+          description: 금융사 유형
+      required: [name, type]
+
+    InstitutionResponse:
+      type: object
+      properties:
+        institution_id:
+          type: integer
+          description: 금융사 ID
+        name:
+          type: string
+          description: 금융사명
+        type:
+          type: string
+          description: 금융사 유형
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    # ========================================================================
+    # 상품 (Product)
+    # ========================================================================
+    
+    CreateProductRequest:
+      type: object
+      properties:
+        product_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: 상품명
+        asset_class:
+          type: string
+          enum: [주식, 채권, 통화, 금, 부동산, 가상자산, 기타자산]
+          description: 자산군
+        region:
+          type: string
+          enum: [대한민국, 미국]
+          description: 투자 지역
+        currency:
+          type: string
+          enum: [KRW, USD]
+          description: 화폐
+        investment_type:
+          type: string
+          enum: [직접, ETF]
+          description: 투자유형
+        characteristics:
+          type: array
+          items:
+            type: string
+          description: 자산특징 (예: [개별종목, 지수추종])
+        risk_level:
+          type: string
+          enum: [안전, 위험]
+          description: 위험도
+      required: [product_name, asset_class, region, currency, investment_type]
+
+    ProductResponse:
+      type: object
+      properties:
+        product_id:
+          type: integer
+          description: 상품 ID
+        product_name:
+          type: string
+          description: 상품명
+        asset_class:
+          type: string
+          description: 자산군
+        region:
+          type: string
+          description: 투자 지역
+        currency:
+          type: string
+          description: 화폐
+        investment_type:
+          type: string
+          description: 투자유형
+        characteristics:
+          type: array
+          items:
+            type: string
+          description: 자산특징
+        risk_level:
+          type: string
+          description: 위험도
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    # ========================================================================
+    # 계좌 (Account)
+    # ========================================================================
+    
+    CreateAccountRequest:
+      type: object
+      properties:
+        institution_id:
+          type: integer
+          description: 금융사 ID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: 계좌명
+        type:
+          type: string
+          description: 계좌 유형 (예: ISA, CMA, 일반 증권, 예금)
+      required: [institution_id, name, type]
+
+    AccountResponse:
+      type: object
+      properties:
+        account_id:
+          type: integer
+          description: 계좌 ID
+        institution_id:
+          type: integer
+          description: 금융사 ID
+        name:
+          type: string
+          description: 계좌명
+        type:
+          type: string
+          description: 계좌 유형
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    # ========================================================================
+    # 자산 (Holding)
+    # ========================================================================
+    
+    CreateHoldingRequest:
+      type: object
+      properties:
+        account_id:
+          type: integer
+          description: 계좌 ID
+        product_id:
+          type: integer
+          description: 상품 ID
+      required: [account_id, product_id]
+
+    HoldingResponse:
+      type: object
+      properties:
+        holding_id:
+          type: integer
+          description: 자산 ID
+        account_id:
+          type: integer
+          description: 계좌 ID
+        product_id:
+          type: integer
+          description: 상품 ID
+        is_visible:
+          type: boolean
+          description: 표시 여부
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    DeleteHoldingRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [hide, hard_delete]
+          description: 삭제 단계 (hide=숨김, hard_delete=완전삭제)
+        reason:
+          type: ["string", "null"]
+          description: 삭제 사유 (선택)
+      required: [action]
+
+    DeleteHoldingResponse:
+      type: object
+      properties:
+        holding_id:
+          type: integer
+          description: 자산 ID
+        action:
+          type: string
+          description: 수행된 삭제 단계
+        deleted_at:
+          type: string
+          format: date-time
+          description: 삭제 시간
+
+    # ========================================================================
+    # 스냅샷 (Snapshot)
+    # ========================================================================
+    
+    CreateSnapshotRequest:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          description: 사용자 ID
+        reference_date:
+          type: string
+          format: date
+          description: 기준일 (ISO 8601)
+      required: [user_id, reference_date]
+
+    SnapshotResponse:
+      type: object
+      properties:
+        snapshot_id:
+          type: integer
+          description: 스냅샷 ID
+        user_id:
+          type: integer
+          description: 사용자 ID
+        reference_date:
+          type: string
+          format: date
+          description: 기준일
+        status:
+          type: string
+          enum: [in_progress, locked]
+          description: 상태
+        locked_at:
+          type: ["string", "null"]
+          format: date-time
+          description: 잠금 시간
+        editable_until:
+          type: ["string", "null"]
+          format: date-time
+          description: 수정 가능 기한
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    UpdateSnapshotHoldingRequest:
+      type: object
+      properties:
+        valuation_amount:
+          type: number
+          format: double
+          description: 평가금액
+      required: [valuation_amount]
+
+    SnapshotHoldingResponse:
+      type: object
+      properties:
+        snapshot_holding_id:
+          type: integer
+          description: 스냅샷 자산 ID
+        snapshot_id:
+          type: integer
+          description: 스냅샷 ID
+        holding_id:
+          type: integer
+          description: 자산 ID
+        valuation_amount:
+          type: number
+          format: double
+          description: 평가금액
+        data_source:
+          type: string
+          enum: [auto, manual, missing]
+          description: 데이터 소스
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    # ========================================================================
+    # 주간 스냅샷 (Weekly Snapshot)
+    # ========================================================================
+    
+    CreateWeeklySnapshotRequest:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          description: 사용자 ID
+        reference_date:
+          type: string
+          format: date
+          description: 토요일 기준일 (ISO 8601)
+      required: [user_id, reference_date]
+
+    WeeklySnapshotResponse:
+      type: object
+      properties:
+        weekly_snapshot_id:
+          type: integer
+          description: 주간 스냅샷 ID
+        user_id:
+          type: integer
+          description: 사용자 ID
+        reference_date:
+          type: string
+          format: date
+          description: 기준일
+        source_snapshot_id:
+          type: integer
+          description: 원본 스냅샷 ID
+        status:
+          type: string
+          enum: [locked]
+          description: 상태
+        editable_until:
+          type: ["string", "null"]
+          format: date-time
+          description: 수정 가능 기한
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    # ========================================================================
+    # 연간 스냅샷 (Annual Snapshot)
+    # ========================================================================
+    
+    CreateAnnualSnapshotRequest:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          description: 사용자 ID
+        reference_date:
+          type: string
+          format: date
+          description: 1월 1일 기준일 (ISO 8601)
+      required: [user_id, reference_date]
+
+    AnnualSnapshotResponse:
+      type: object
+      properties:
+        annual_snapshot_id:
+          type: integer
+          description: 연간 스냅샷 ID
+        user_id:
+          type: integer
+          description: 사용자 ID
+        reference_date:
+          type: string
+          format: date
+          description: 기준일
+        source_snapshot_id:
+          type: integer
+          description: 원본 스냅샷 ID
+        status:
+          type: string
+          enum: [locked]
+          description: 상태
+        editable_until:
+          type: ["string", "null"]
+          format: date-time
+          description: 수정 가능 기한
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    # ========================================================================
+    # 계좌 그룹 (Account Group)
+    # ========================================================================
+    
+    CreateAccountGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: 그룹명
+        account_ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+          description: 포함 계좌 ID 목록
+      required: [name, account_ids]
+
+    AccountGroupResponse:
+      type: object
+      properties:
+        account_group_id:
+          type: integer
+          description: 그룹 ID
+        name:
+          type: string
+          description: 그룹명
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountResponse'
+          description: 포함 계좌
+        created_at:
+          type: string
+          format: date-time
+          description: 생성 시간
+
+    # ========================================================================
+    # 보고서 응답
+    # ========================================================================
+    
+    WeeklyAccountReportItem:
+      type: object
+      properties:
+        reference_date:
+          type: string
+          format: date
+          description: 기준일
+        institution_name:
+          type: string
+          description: 금융사명
+        account_id:
+          type: integer
+          description: 계좌 ID
+        account_name:
+          type: string
+          description: 계좌명
+        total_valuation:
+          type: number
+          format: double
+          description: 계좌별 총 평가금액
+
+    WeeklyAccountReportResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeeklyAccountReportItem'
+          description: 계좌별 조회 결과
+        total_amount:
+          type: number
+          format: double
+          description: 전체 자산 총액
+
+    AnnualAccountReportItem:
+      type: object
+      properties:
+        year:
+          type: integer
+          description: 연도
+        reference_date:
+          type: string
+          format: date
+          description: 1월 1일 기준일
+        institution_name:
+          type: string
+          description: 금융사명
+        account_id:
+          type: integer
+          description: 계좌 ID
+        account_name:
+          type: string
+          description: 계좌명
+        total_valuation:
+          type: number
+          format: double
+          description: 계좌별 총 평가금액
+
+    AnnualAccountReportResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnualAccountReportItem'
+          description: 계좌별 연간 조회 결과
+        total_amount:
+          type: number
+          format: double
+          description: 전체 자산 총액
+
+    WeeklyAccountGroupReportItem:
+      type: object
+      properties:
+        reference_date:
+          type: string
+          format: date
+          description: 기준일
+        account_group_name:
+          type: string
+          description: 계좌 그룹명
+        accounts:
+          type: array
+          items:
+            type: object
+            properties:
+              institution_name:
+                type: string
+              account_name:
+                type: string
+              valuation:
+                type: number
+                format: double
+          description: 그룹 내 계좌별 정보
+        group_total:
+          type: number
+          format: double
+          description: 그룹별 소계
+
+    WeeklyAccountGroupReportResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeeklyAccountGroupReportItem'
+          description: 계좌 그룹별 조회 결과
+        total_amount:
+          type: number
+          format: double
+          description: 전체 자산 총액
+
+    AssetClassReportItem:
+      type: object
+      properties:
+        asset_class:
+          type: string
+          description: 자산군
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              product_name:
+                type: string
+              valuation_amount:
+                type: number
+                format: double
+          description: 자산군 내 상품별 정보
+        subtotal:
+          type: number
+          format: double
+          description: 자산군별 소계
+
+    AssetClassReportResponse:
+      type: object
+      properties:
+        snapshot_date:
+          type: string
+          format: date
+          description: 스냅샷 기준일
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetClassReportItem'
+          description: 자산군별 집계 결과
+        total_amount:
+          type: number
+          format: double
+          description: 전체 자산 총액
+
+  parameters:
+    XRequestIdHeader:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: 요청 추적 ID. 없으면 서버에서 생성합니다.
+      schema:
+        type: string
+        format: uuid
+        example: "550e8400-e29b-41d4-a716-446655440000"
+
+    TraceparentHeader:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C Trace Context (분산 추적 활성화 시)
+      schema:
+        type: string
+        example: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: 동등성 처리를 위한 고유 키. 중복 요청 시 같은 응답 반환. (24시간 유효)
+      schema:
+        type: string
+        format: uuid
+        example: "550e8400-e29b-41d4-a716-446655440000"
+
+  responses:
+    ErrorResponse400:
+      description: 잘못된 입력 (VALIDATION_ERROR)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ErrorResponse401:
+      description: 인증 실패 (UNAUTHORIZED)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ErrorResponse403:
+      description: 권한 부족 (FORBIDDEN)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ErrorResponse404:
+      description: 리소스 미존재 (NOT_FOUND)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ErrorResponse409:
+      description: 충돌 (CONFLICT)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        사용자 인증은 Bearer 토큰을 사용합니다.
+        
+        형식: Authorization: Bearer <token>
+        
+        토큰 타입: JWT
+        토큰 만료: 1시간
+        
+        유효하지 않거나 만료된 토큰은 401 Unauthorized 응답합니다.
+
+security:
+  - bearerAuth: []

@@ -84,63 +84,109 @@
 
 ---
 
-## 자산 현황 (Asset Status)
+## 자산 현황 (Asset Status / Portfolio Snapshot)
 
-**정의**: 사용자의 금융 자산에 대한 현재 정보. 금융회사이름, 계좌이름, 자산의 속성, 상품명, 평가금액으로 구성됨
+**정의**: 사용자의 금융 자산 전체에 대한 특정 기준일의 현황. 금융사, 계좌, 자산(보유 상품), 자산 속성, 평가금액으로 구성됨
 
-**동의어**: 자산 정보
+**도메인 모델**: `AssetStatus` (Value Object) 또는 `Portfolio` (Aggregate Root)
 
-**사용 예시**: 삼성증권 ISA 계좌의 TIGER 미국S&P500 ETF 1,500,000원
+**인프라 모델**: `AssetStatusEntity`, `PortfolioSnapshotEntity`
 
-**관련 유스케이스**: -
+**인터페이스**: `AssetStatusResponse`, `PortfolioResponse`
 
-**API 매핑**: `components/schemas/AssetStatus`
+**동의어**: 자산 정보, 포트폴리오, 자산 조회 결과
 
-**소유자**: Product Owner
+**사용 예시**: 2025년 1월 22일 기준 삼성증권 ISA 계좌의 TIGER 미국S&P500 ETF 1,500,000원
 
----
+**관련 유스케이스**: 자산 현황 조회, 자산 변동 추적
 
-## 금융회사이름 (Financial Institution Name)
-
-**정의**: 자산이 보관된 금융회사의 명칭
-
-**동의어**: 금융기관명
-
-**사용 예시**: 삼성증권, KB증권, 신한은행
-
-**관련 유스케이스**: -
-
-**API 매핑**: `components/schemas/AssetStatus/properties/institutionName`
+**API 매핑**: `components/schemas/AssetStatus`, `components/schemas/Portfolio`
 
 **소유자**: Product Owner
 
 ---
 
-## 계좌이름 (Account Name)
+## 금융사 (Institution)
 
-**정의**: 금융회사 내 자산이 속한 계좌의 명칭
+**정의**: 사용자의 자산을 보관/관리하는 금융기관
 
-**동의어**: 없음
+**도메인 모델**: `Institution` (Entity)
 
-**사용 예시**: ISA 계좌, CMA 계좌, 연금저축
+**인프라 모델**: `InstitutionEntity`
 
-**관련 유스케이스**: -
+**인터페이스**: `InstitutionResponse`
 
-**API 매핑**: `components/schemas/AssetStatus/properties/accountName`
+**동의어**: 금융회사, 금융기관, 금융회사이름
+
+**사용 예시**: 삼성증권, KB증권, 신한은행, 토스뱅크
+
+**관련 유스케이스**: 자산 조회, 계좌 등록
+
+**API 매핑**: `components/schemas/Institution`, `components/schemas/AssetStatus/properties/institution`
 
 **소유자**: Product Owner
 
 ---
 
-## 자산의 속성 (Asset Attributes)
+## 계좌 (Account)
 
-**정의**: 자산을 분류하기 위한 다차원 속성. 투자 지역, 자산 종류, 화폐, 투자유형, 자산특징, 위험도로 구성됨
+**정의**: 금융사 내에서 자산을 관리하는 단위. 식별자는 금융사와 계좌번호의 조합
 
-**동의어**: 자산 분류, 자산 메타데이터
+**도메인 모델**: `Account` (Entity)
 
-**사용 예시**: 한국/주식/원화/ETF/지수추종/위험
+**인프라 모델**: `AccountEntity`
 
-**관련 유스케이스**: -
+**인터페이스**: `AccountResponse`
+
+**동의어**: 계좌이름, 없음
+
+**사용 예시**: ISA 계좌, CMA 계좌, 연금저축, 일반 증권 계좌
+
+**관련 유스케이스**: 계좌 등록, 자산 조회
+
+**API 매핑**: `components/schemas/Account`, `components/schemas/AssetStatus/properties/account`
+
+**소유자**: Product Owner
+
+---
+
+## 자산 (Holding)
+
+**정의**: 특정 계좌에서 보유 중인 개별 금융상품의 한 단위
+
+**도메인 모델**: `Holding` (Entity)
+
+**인프라 모델**: `HoldingEntity`
+
+**인터페이스**: `HoldingResponse`
+
+**동의어**: 보유 자산, 자산 항목
+
+**사용 예시**: AAPL 주식 10주, TIGER S&P500 ETF 100주, KB Star 정기예금 500만원
+
+**관련 유스케이스**: 자산 현황 조회, 자산 추적
+
+**API 매핑**: `components/schemas/Holding`, `components/schemas/AssetStatus/properties/holding`
+
+**소유자**: Product Owner
+
+---
+
+## 자산 속성 (Asset Attributes)
+
+**정의**: 상품을 분류하고 분석하기 위한 다차원 속성. 투자 지역, 자산 종류, 화폐, 투자유형, 자산특징, 위험도로 구성됨
+
+**도메인 모델**: `AssetAttributes` (Value Object) — Product에 귀속
+
+**인프라 모델**: 정규화된 별도 테이블 또는 JSON 컬럼으로 저장
+
+**인터페이스**: `AssetAttributesResponse`
+
+**동의어**: 자산 분류, 자산 메타데이터, 자산 정보
+
+**사용 예시**: 한국/주식/원화/직접투자/개별종목/위험 (또는 미국/ETF/달러/지수추종/저위험)
+
+**관련 유스케이스**: 상품 등록, 자산 분류, 포트폴리오 분석, 자산 필터링
 
 **API 매핑**: `components/schemas/AssetAttributes`
 
@@ -278,15 +324,26 @@
 
 ## 스냅샷 (Snapshot)
 
-**정의**: 자산의 특정 기준일의 현황
+**정의**: 사용자의 자산 포트폴리오에 대한 특정 기준일의 기록. 기준일 시점의 모든 자산 현황을 캡처하며, 수정 가능 기한 내에는 수정 가능
 
-**동의어**: 자산 스냅샷, 기준일 현황
+**도메인 모델**: `PortfolioSnapshot` (Value Object 또는 Aggregate)
 
-**사용 예시**: 2025년 1월 4일의 자산 현황
+**인프라 모델**: `SnapshotEntity`, `PortfolioSnapshotEntity`
 
-**관련 유스케이스**: -
+**인터페이스**: `SnapshotResponse`, `PortfolioSnapshotResponse`
 
-**API 매핑**: `components/schemas/Snapshot`
+**동의어**: 자산 스냅샷, 기준일 현황, 포트폴리오 기록
+
+**사용 예시**: 2025년 1월 4일(토) 기준 자산 현황
+
+**수정 정책**:
+- 주간 스냅샷: 다음 주간 스냅샷 생성 전까지 수정 가능 (최대 1주)
+- 연간 스냅샷: 생성 후 1주일간 수정 가능
+- 수정 가능 기한 경과 후 과거 기록으로 확정
+
+**관련 유스케이스**: 자산 추적, 성과 분석, 과거 자산 조회
+
+**API 매핑**: `components/schemas/Snapshot`, `components/schemas/PortfolioSnapshot`
 
 **소유자**: Product Owner
 
@@ -294,13 +351,19 @@
 
 ## 주간 스냅샷 (Weekly Snapshot)
 
-**정의**: 매주 토요일을 기준일로 하는 자산 현황 스냅샷
+**정의**: 매주 토요일 자동 생성되는 자산 포트폴리오 스냅샷. 주 단위의 자산 변동을 추적하는 기준
 
-**동의어**: 주별 스냅샷
+**도메인 모델**: `WeeklySnapshot` (Value Object)
 
-**사용 예시**: 2025년 1월 4일(토) 기준 자산 현황
+**인프라 모델**: `WeeklySnapshotEntity`
 
-**관련 유스케이스**: -
+**인터페이스**: `WeeklySnapshotResponse`
+
+**동의어**: 주별 스냅샷, 주간 기록
+
+**사용 예시**: 2025년 1월 4일(토), 2025년 1월 11일(토)
+
+**관련 유스케이스**: 주간 자산 조회, 주 단위 성과 분석
 
 **API 매핑**: `components/schemas/WeeklySnapshot`
 
@@ -310,17 +373,103 @@
 
 ## 연간 스냅샷 (Annual Snapshot)
 
-**정의**: 다음 연도 1월 1일을 기준일로 하는 자산 현황 스냅샷
+**정의**: 매년 1월 1일 자동 생성되는 자산 포트폴리오 스냅샷. 연 단위의 장기 자산 변동을 추적하는 기준
 
-**동의어**: 연별 스냅샷, 연초 스냅샷
+**도메인 모델**: `AnnualSnapshot` (Value Object)
 
-**사용 예시**: 2025년 1월 1일 기준 자산 현황
+**인프라 모델**: `AnnualSnapshotEntity`
 
-**관련 유스케이스**: -
+**인터페이스**: `AnnualSnapshotResponse`
+
+**동의어**: 연별 스냅샷, 연초 스냅샷, 연간 기록
+
+**사용 예시**: 2024년 1월 1일, 2025년 1월 1일
+
+**관련 유스케이스**: 연간 자산 조회, 연 단위 성과 분석, 연 초 비교
 
 **API 매핑**: `components/schemas/AnnualSnapshot`
 
 **소유자**: Product Owner
+
+---
+
+## 자산군 (Asset Class)
+
+**정의**: 금융상품을 분류하는 상위 카테고리. 포트폴리오 구성의 기본 분류 단위
+
+**도메인 모델**: `AssetClass` (Value Object, 열거형)
+
+**인프라 모델**: `asset_class` 컬럼 (ENUM 타입)
+
+**인터페이스**: `AssetClassResponse`
+
+**동의어**: 자산 분류, 자산 타입 (상위 카테고리)
+
+**사용 예시**: 주식, 채권, 통화, 금, 부동산, 가상자산, 기타자산
+
+**허용된 값**: 주식, 채권, 통화, 금, 부동산, 가상자산, 기타자산
+
+**관련 유스케이스**: 자산 분류, 포트폴리오 자산군별 집계, 자산 필터링
+
+**API 매핑**: `components/schemas/AssetClass`, `components/schemas/Holding/properties/assetClass`
+
+**소유자**: Product Owner
+
+---
+
+## 상품 (Product)
+
+**정의**: 투자 가능한 금융상품의 마스터 데이터. 자산군 및 분류 속성을 보유하며, 계좌에 편입될 때 자산(Holding)과 연결됨
+
+**도메인 모델**: `Product` (Entity)
+
+**인프라 모델**: `ProductEntity`
+
+**인터페이스**: `ProductResponse`
+
+**동의어**: 금융상품, 종목
+
+**사용 예시**: VOO, TLT, AAPL, 달러, 금현물, BITO, 청약저축, 현금, 정기예금, RP, 발행어음
+
+**주요 속성**: 상품코드, 상품명, 자산군, 자산 속성(지역/화폐/위험도 등)
+
+**관련 유스케이스**: 상품 등록, 자산 추가, 자산 조회
+
+**API 매핑**: `components/schemas/Product`
+
+**소유자**: Product Owner
+
+---
+
+## 계좌 그룹 (Account Group)
+
+**정의**: 관리자가 정의한 논리적 계좌 그룹핑. 서로 다른 금융사의 계좌를 하나의 그룹으로 관리 가능
+
+**도메인 모델**: `AccountGroup` (Entity)
+
+**인프라 모델**: `AccountGroupEntity`
+
+**인터페이스**: `AccountGroupResponse`
+
+**동의어**: 계좌 묶음, 포트폴리오 부분집합
+
+**사용 예시**: "미국 투자 계좌", "장기 저축", "단기 트레이딩"
+
+**주요 속성**:
+- 그룹명 (name)
+- 포함 계좌 (accounts): 1개 이상의 계좌, 다양한 금융사 가능
+
+**불변식**:
+- 같은 사용자 내에서 그룹명은 고유
+- 계좌는 여러 그룹에 동시 포함 가능 (M:N 관계)
+
+**관련 유스케이스**: 계좌 그룹화, 그룹별 조회, 그룹별 정렬된 조회
+
+**API 매핑**: `components/schemas/AccountGroup`
+
+**소유자**: Product Owner
+
+**권한**: 관리자만 생성/수정/삭제 가능
 
 ---
 
