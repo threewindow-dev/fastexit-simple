@@ -12,8 +12,29 @@
 }
 
 .App-header h1 {
-  margin: 0;
+  margin: 0 0 1rem 0;
   font-size: 2rem;
+}
+
+.nav {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.navLink {
+  color: #61dafb;
+  text-decoration: none;
+  font-size: 1.1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.navLink:hover {
+  background-color: rgba(97, 218, 251, 0.1);
+  transform: translateY(-1px);
 }
 
 .App-main {

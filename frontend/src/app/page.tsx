@@ -111,6 +111,10 @@ export default function Home() {
     <div className={styles.App}>
       <header className={styles['App-header']}>
         <h1>FastExit - User Management</h1>
+        <nav className={styles.nav}>
+          <a href="/" className={styles.navLink}>Users</a>
+          <a href="/portfolio" className={styles.navLink}>Portfolio</a>
+        </nav>
       </header>
 
       <main className={styles['App-main']}>

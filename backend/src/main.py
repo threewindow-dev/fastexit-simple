@@ -4,6 +4,20 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from shared.infra.database import Base
 from subdomains.user.infra.entities.user_entity import UserEntity  # noqa: F401
+from subdomains.portfolio.infra.entities import (  # noqa: F401
+    InstitutionEntity,
+    ProductEntity,
+    AccountEntity,
+    AccountGroupEntity,
+    AccountGroupAccountEntity,
+    HoldingEntity,
+    SnapshotEntity,
+    SnapshotHoldingEntity,
+    WeeklySnapshotEntity,
+    WeeklySnapshotHoldingEntity,
+    AnnualSnapshotEntity,
+    AnnualSnapshotHoldingEntity,
+)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +29,7 @@ from shared.schemas import ApiResponse
 from shared.infra.database import create_sqlalchemy_pool, create_psycopg_pool
 from dependencies import set_db_pool
 from subdomains.user.interface.routers import router as user_router
+from subdomains.portfolio.interface.routers import router as portfolio_router
 
 # 설정 로드
 config = get_config()
@@ -126,8 +141,9 @@ app = FastAPI(title="FastExit API", lifespan=lifespan)
 # 전역 예외 핸들러 등록
 register_exception_handlers(app)
 
-# User 라우터 등록 (Depends를 통한 DI)
+# User / Portfolio 라우터 등록 (Depends를 통한 DI)
 app.include_router(user_router)
+app.include_router(portfolio_router)
 
 # CORS 설정
 app.add_middleware(

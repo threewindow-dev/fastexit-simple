@@ -29,6 +29,8 @@ services:
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       DB_PORT: 5432
+      PYTHONPATH: /app/src
+      REPOSITORY_TYPE: sqlalchemy
     ports:
       - "8010:8000"
     depends_on:

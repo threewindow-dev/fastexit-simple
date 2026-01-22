@@ -24,6 +24,23 @@ from subdomains.user.infra.repositories import (
     PsycopgUserRepository,
 )
 from subdomains.user.application.services.user_app_service import UserAppService
+from subdomains.portfolio.infra.repositories import (
+    SQLAlchemyInstitutionRepository,
+    SQLAlchemyProductRepository,
+    SQLAlchemyAccountRepository,
+    SQLAlchemyAccountGroupRepository,
+    SQLAlchemyHoldingRepository,
+    SQLAlchemySnapshotRepository,
+    SQLAlchemyReportQueryRepository,
+    PsycopgInstitutionRepository,
+    PsycopgProductRepository,
+    PsycopgAccountRepository,
+    PsycopgAccountGroupRepository,
+    PsycopgHoldingRepository,
+    PsycopgSnapshotRepository,
+    PsycopgReportQueryRepository,
+)
+from subdomains.portfolio.application.services import PortfolioAppService
 
 
 # ============================================================================
@@ -118,13 +135,45 @@ async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
             transaction_manager=tx_manager,
         )
         yield service
-    else:
-        # Psycopg: TransactionManager가 연결 생성 관리
-        tx_manager = PsycopgTransactionManager(db_pool)
-        repository = PsycopgUserRepository()
 
-        service = UserAppService(
-            user_repository=repository,
+
+# ============================================================================
+# Portfolio Application Service 의존성
+# ============================================================================
+
+
+async def get_portfolio_app_service() -> AsyncGenerator[PortfolioAppService, None]:
+    """
+    PortfolioAppService 인스턴스 생성 및 의존성 주입.
+
+    repository_type 설정(sqlalchemy|psycopg)에 따라 구현체를 선택합니다.
+    """
+    config = get_config()
+    db_pool = get_db_pool()
+
+    if config.repository_type == "sqlalchemy":
+        tx_manager = SQLAlchemyTransactionManager(db_pool)
+        service = PortfolioAppService(
+            institution_repo=SQLAlchemyInstitutionRepository(),
+            product_repo=SQLAlchemyProductRepository(),
+            account_repo=SQLAlchemyAccountRepository(),
+            account_group_repo=SQLAlchemyAccountGroupRepository(),
+            holding_repo=SQLAlchemyHoldingRepository(),
+            snapshot_repo=SQLAlchemySnapshotRepository(),
+            report_repo=SQLAlchemyReportQueryRepository(),
+            transaction_manager=tx_manager,
+        )
+        yield service
+    else:
+        tx_manager = PsycopgTransactionManager(db_pool)
+        service = PortfolioAppService(
+            institution_repo=PsycopgInstitutionRepository(),
+            product_repo=PsycopgProductRepository(),
+            account_repo=PsycopgAccountRepository(),
+            account_group_repo=PsycopgAccountGroupRepository(),
+            holding_repo=PsycopgHoldingRepository(),
+            snapshot_repo=PsycopgSnapshotRepository(),
+            report_repo=PsycopgReportQueryRepository(),
             transaction_manager=tx_manager,
         )
         yield service

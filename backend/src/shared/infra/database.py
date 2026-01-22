@@ -56,7 +56,7 @@ class PsycopgTransaction(TransactionProtocol):
     async def commit(self) -> None:
         """트랜잭션 커밋."""
         try:
-            await self.conn.commit()
+            await self._conn.commit()
         except Exception as exc:
             logger.error(f"Commit failed: {exc}")
             raise InfraError("Failed to commit transaction", origin_exc=exc)
@@ -64,7 +64,7 @@ class PsycopgTransaction(TransactionProtocol):
     async def rollback(self) -> None:
         """트랜잭션 롤백."""
         try:
-            await self.conn.rollback()
+            await self._conn.rollback()
         except Exception as exc:
             logger.error(f"Rollback failed: {exc}")
             raise InfraError("Failed to rollback transaction", origin_exc=exc)
