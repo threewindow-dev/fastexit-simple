@@ -179,7 +179,6 @@ class SnapshotResponse(ApiResponse[SnapshotResponseData]):
 
 
 class UpsertSnapshotHoldingRequest(BaseModel):
-    holding_id: int = Field(..., description="보유자산 ID")
     valuation_amount: float = Field(..., description="평가 금액")
     data_source: str = Field(..., description="데이터 출처", examples=["auto"])
 

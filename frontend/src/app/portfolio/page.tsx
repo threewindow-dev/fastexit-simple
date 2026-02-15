@@ -68,6 +68,15 @@ interface Report {
 
 const API_BASE_URL = '/api';
 
+const getDataSourceLabel = (dataSource: string): string => {
+  const labels: { [key: string]: string } = {
+    manual: '수동입력',
+    auto: 'API연동',
+    missing: '엑셀업로드',
+  };
+  return labels[dataSource] || dataSource;
+};
+
 export default function PortfolioPage() {
   const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'snapshots' | 'holdings' | 'snapshotHoldings' | 'clone' | 'reports'>('institutions');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
@@ -123,7 +132,7 @@ export default function PortfolioPage() {
     snapshot_id: '',
     holding_id: '',
     valuation_amount: '',
-    data_source: '수동입력',
+    data_source: 'manual',
   });
   const [showSnapshotHoldingForm, setShowSnapshotHoldingForm] = useState(false);
 
@@ -384,7 +393,7 @@ export default function PortfolioPage() {
         }
       );
       if (!response.ok) throw new Error('Failed to create snapshot holding');
-      setNewSnapshotHolding({ snapshot_id: '', holding_id: '', valuation_amount: '', data_source: '수동입력' });
+      setNewSnapshotHolding({ snapshot_id: '', holding_id: '', valuation_amount: '', data_source: 'manual' });
       setShowSnapshotHoldingForm(false);
       fetchSnapshotHoldings();
     } catch (err) {
@@ -856,20 +865,24 @@ export default function PortfolioPage() {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>계좌ID</th>
-                  <th>상품ID</th>
+                  <th>계좌이름</th>
+                  <th>상품이름</th>
                   <th>생성일</th>
                 </tr>
               </thead>
               <tbody>
-                {holdings.filter(h => !h.deleted_at).map((holding) => (
-                  <tr key={holding.holding_id}>
-                    <td>{holding.holding_id}</td>
-                    <td>{holding.account_id}</td>
-                    <td>{holding.product_id}</td>
-                    <td>{new Date(holding.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
+                {holdings.filter(h => !h.deleted_at).map((holding) => {
+                  const account = accounts.find((a) => a.account_id === holding.account_id);
+                  const product = products.find((p) => p.product_id === holding.product_id);
+                  return (
+                    <tr key={holding.holding_id}>
+                      <td>{holding.holding_id}</td>
+                      <td>{account?.name || holding.account_id}</td>
+                      <td>{product?.product_name || holding.product_id}</td>
+                      <td>{new Date(holding.created_at).toLocaleDateString()}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -906,11 +919,15 @@ export default function PortfolioPage() {
                 required
               >
                 <option value="">보유자산 선택</option>
-                {holdings.filter(h => !h.deleted_at).map((holding) => (
-                  <option key={holding.holding_id} value={holding.holding_id}>
-                    보유자산 ID: {holding.holding_id} (계좌: {holding.account_id})
-                  </option>
-                ))}
+                {holdings.filter(h => !h.deleted_at).map((holding) => {
+                  const account = accounts.find((a) => a.account_id === holding.account_id);
+                  const product = products.find((p) => p.product_id === holding.product_id);
+                  return (
+                    <option key={holding.holding_id} value={holding.holding_id}>
+                      {account?.name || `계좌 ${holding.account_id}`} - {product?.product_name || `상품 ${holding.product_id}`}
+                    </option>
+                  );
+                })}
               </select>
               <input
                 type="number"
@@ -924,9 +941,9 @@ export default function PortfolioPage() {
                 value={newSnapshotHolding.data_source}
                 onChange={(e) => setNewSnapshotHolding({ ...newSnapshotHolding, data_source: e.target.value })}
               >
-                <option value="수동입력">수동입력</option>
-                <option value="API연동">API연동</option>
-                <option value="엑셀업로드">엑셀업로드</option>
+                <option value="manual">수동입력</option>
+                <option value="auto">API연동</option>
+                <option value="missing">엑셀업로드</option>
               </select>
               <button type="submit">생성</button>
             </form>
@@ -939,24 +956,32 @@ export default function PortfolioPage() {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>스냅샷ID</th>
-                  <th>보유자산ID</th>
+                  <th>스냅샷일자</th>
+                  <th>계좌이름</th>
+                  <th>상품이름</th>
                   <th>평가금액</th>
                   <th>데이터소스</th>
                   <th>생성일</th>
                 </tr>
               </thead>
               <tbody>
-                {snapshotHoldings.map((sh) => (
-                  <tr key={sh.snapshot_holding_id}>
-                    <td>{sh.snapshot_holding_id}</td>
-                    <td>{sh.snapshot_id}</td>
-                    <td>{sh.holding_id}</td>
-                    <td>{sh.valuation_amount}</td>
-                    <td>{sh.data_source}</td>
-                    <td>{new Date(sh.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
+                {snapshotHoldings.map((sh) => {
+                  const holding = holdings.find((h) => h.holding_id === sh.holding_id);
+                  const account = holding ? accounts.find((a) => a.account_id === holding.account_id) : null;
+                  const product = holding ? products.find((p) => p.product_id === holding.product_id) : null;
+                  const snapshot = snapshots.find((s) => s.snapshot_id === sh.snapshot_id);
+                  return (
+                    <tr key={sh.snapshot_holding_id}>
+                      <td>{sh.snapshot_holding_id}</td>
+                      <td>{snapshot?.reference_date || sh.snapshot_id}</td>
+                      <td>{account?.name || holding?.account_id || '-'}</td>
+                      <td>{product?.product_name || holding?.product_id || '-'}</td>
+                      <td>{sh.valuation_amount}</td>
+                      <td>{getDataSourceLabel(sh.data_source)}</td>
+                      <td>{new Date(sh.created_at).toLocaleDateString()}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

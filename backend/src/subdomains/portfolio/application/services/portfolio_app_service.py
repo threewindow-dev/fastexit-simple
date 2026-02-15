@@ -377,7 +377,7 @@ class PortfolioAppService:
                 locked_at=snap.locked_at,
                 editable_until=snap.editable_until,
                 created_at=snap.created_at,
-                holdings_count=len(snap.holdings),
+                holdings=[],
             )
             for snap in user_snapshots
         ]

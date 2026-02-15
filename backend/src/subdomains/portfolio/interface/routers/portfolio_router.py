@@ -446,7 +446,7 @@ async def create_snapshot(
 
 
 @router.post(
-    "/snapshots/{snapshot_id}/holdings",
+    "/snapshots/{snapshot_id}/holdings/{holding_id}",
     response_model=SnapshotHoldingResponse,
     status_code=status.HTTP_200_OK,
     summary="스냅샷 보유자산 업서트",
@@ -455,11 +455,12 @@ async def create_snapshot(
 async def upsert_snapshot_holding(
     request: UpsertSnapshotHoldingRequest,
     snapshot_id: int = Path(..., description="스냅샷 ID"),
+    holding_id: int = Path(..., description="보유자산 ID"),
     service: PortfolioAppService = Depends(get_portfolio_app_service),
 ) -> SnapshotHoldingResponse:
     cmd = UpsertSnapshotHoldingCommand(
         snapshot_id=snapshot_id,
-        holding_id=request.holding_id,
+        holding_id=holding_id,
         valuation_amount=request.valuation_amount,
         data_source=request.data_source,
     )

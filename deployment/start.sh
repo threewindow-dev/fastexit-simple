@@ -52,4 +52,15 @@ su - postgres -c "/usr/lib/postgresql/17/bin/pg_ctl -D /var/lib/postgresql/data 
 
 # Supervisord로 모든 서비스 시작
 echo "Step 8: Starting all services with supervisord..."
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/fastexit.conf
+
+# supervisord 실행 (graceful shutdown 처리)
+trap "supervisorctl shutdown; exit 0" SIGTERM SIGINT
+/usr/bin/supervisord -c /etc/supervisor/conf.d/fastexit.conf &
+SUPERVISOR_PID=$!
+
+# supervisord 프로세스가 종료될 때까지 대기
+wait $SUPERVISOR_PID
+EXIT_CODE=$?
+
+# exit code 0으로 정상 종료
+exit 0
