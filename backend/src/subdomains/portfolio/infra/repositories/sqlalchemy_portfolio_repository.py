@@ -44,7 +44,6 @@ from subdomains.portfolio.infra.entities import (
     AnnualSnapshotHoldingEntity,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -74,6 +73,7 @@ class SQLAlchemyInstitutionRepository(_BaseRepo, InstitutionRepository):
         entity = InstitutionEntity(
             name=institution.name,
             type=institution.type,
+            display_order=institution.display_order,
         )
         session.add(entity)
         await session.flush()
@@ -81,6 +81,7 @@ class SQLAlchemyInstitutionRepository(_BaseRepo, InstitutionRepository):
             institution_id=entity.institution_id,
             name=entity.name,
             type=entity.type,
+            display_order=entity.display_order,
             created_at=entity.created_at,
         )
 
@@ -101,6 +102,7 @@ class SQLAlchemyInstitutionRepository(_BaseRepo, InstitutionRepository):
             institution_id=entity.institution_id,
             name=entity.name,
             type=entity.type,
+            display_order=entity.display_order,
             created_at=entity.created_at,
         )
 
@@ -124,10 +126,52 @@ class SQLAlchemyInstitutionRepository(_BaseRepo, InstitutionRepository):
                 institution_id=e.institution_id,
                 name=e.name,
                 type=e.type,
+                display_order=e.display_order,
                 created_at=e.created_at,
             )
             for e in entities
         ]
+
+    @use_transaction()
+    async def update(self, conn: Connection, institution: Institution) -> Institution:
+        session = self._require_session(conn)
+        await session.execute(
+            update(InstitutionEntity)
+            .where(InstitutionEntity.institution_id == institution.institution_id)
+            .values(
+                name=institution.name,
+                type=institution.type,
+                display_order=institution.display_order,
+            )
+        )
+        result = await session.execute(
+            select(InstitutionEntity).where(
+                InstitutionEntity.institution_id == institution.institution_id
+            )
+        )
+        entity = result.scalar_one()
+        return Institution(
+            institution_id=entity.institution_id,
+            name=entity.name,
+            type=entity.type,
+            display_order=entity.display_order,
+            created_at=entity.created_at,
+        )
+
+    @use_transaction()
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int:
+        session = self._require_session(conn)
+        updated = 0
+        for institution_id, display_order in orders:
+            await session.execute(
+                update(InstitutionEntity)
+                .where(InstitutionEntity.institution_id == institution_id)
+                .values(display_order=display_order)
+            )
+            updated += 1
+        return updated
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +191,7 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             investment_type=product.investment_type,
             characteristics=product.characteristics,
             risk_level=product.risk_level,
+            display_order=product.display_order,
         )
         session.add(entity)
         await session.flush()
@@ -159,6 +204,7 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             investment_type=entity.investment_type,
             characteristics=entity.characteristics,
             risk_level=entity.risk_level,
+            display_order=entity.display_order,
             created_at=entity.created_at,
         )
 
@@ -180,8 +226,28 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             investment_type=entity.investment_type,
             characteristics=entity.characteristics,
             risk_level=entity.risk_level,
+            display_order=entity.display_order,
             created_at=entity.created_at,
         )
+
+    @use_transaction()
+    async def update(self, conn: Connection, product: Product) -> Product:
+        session = self._require_session(conn)
+        await session.execute(
+            update(ProductEntity)
+            .where(ProductEntity.product_id == product.product_id)
+            .values(
+                product_name=product.product_name,
+                asset_class=product.asset_class,
+                region=product.region,
+                currency=product.currency,
+                investment_type=product.investment_type,
+                characteristics=product.characteristics,
+                risk_level=product.risk_level,
+                display_order=product.display_order,
+            )
+        )
+        return product
 
     @use_transaction()
     async def exists_identity(
@@ -209,7 +275,11 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
     @use_transaction()
     async def get_all(self, conn: Connection) -> list[Product]:
         session = self._require_session(conn)
-        result = await session.execute(select(ProductEntity))
+        result = await session.execute(
+            select(ProductEntity).order_by(
+                ProductEntity.display_order, ProductEntity.product_id
+            )
+        )
         entities = result.scalars().all()
         return [
             Product(
@@ -221,10 +291,26 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
                 investment_type=e.investment_type,
                 characteristics=e.characteristics,
                 risk_level=e.risk_level,
+                display_order=e.display_order,
                 created_at=e.created_at,
             )
             for e in entities
         ]
+
+    @use_transaction()
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int:
+        session = self._require_session(conn)
+        updated = 0
+        for product_id, display_order in orders:
+            await session.execute(
+                update(ProductEntity)
+                .where(ProductEntity.product_id == product_id)
+                .values(display_order=display_order)
+            )
+            updated += 1
+        return updated
 
 
 # ---------------------------------------------------------------------------
@@ -240,6 +326,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             institution_id=account.institution_id,
             name=account.name,
             type=account.type,
+            display_order=account.display_order,
         )
         session.add(entity)
         await session.flush()
@@ -248,6 +335,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             institution_id=entity.institution_id,
             name=entity.name,
             type=entity.type,
+            display_order=entity.display_order,
             created_at=entity.created_at,
         )
 
@@ -265,6 +353,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             institution_id=entity.institution_id,
             name=entity.name,
             type=entity.type,
+            display_order=entity.display_order,
             created_at=entity.created_at,
         )
 
@@ -280,6 +369,20 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             )
         )
         return result.scalar_one_or_none() is not None
+
+    @use_transaction()
+    async def update(self, conn: Connection, account: Account) -> Account:
+        session = self._require_session(conn)
+        await session.execute(
+            update(AccountEntity)
+            .where(AccountEntity.account_id == account.account_id)
+            .values(
+                name=account.name,
+                type=account.type,
+                display_order=account.display_order,
+            )
+        )
+        return account
 
     @use_transaction()
     async def find_many(
@@ -298,6 +401,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
                 institution_id=e.institution_id,
                 name=e.name,
                 type=e.type,
+                display_order=e.display_order,
                 created_at=e.created_at,
             )
             for e in entities
@@ -314,10 +418,26 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
                 institution_id=e.institution_id,
                 name=e.name,
                 type=e.type,
+                display_order=e.display_order,
                 created_at=e.created_at,
             )
             for e in entities
         ]
+
+    @use_transaction()
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int:
+        session = self._require_session(conn)
+        updated = 0
+        for account_id, display_order in orders:
+            await session.execute(
+                update(AccountEntity)
+                .where(AccountEntity.account_id == account_id)
+                .values(display_order=display_order)
+            )
+            updated += 1
+        return updated
 
 
 # ---------------------------------------------------------------------------
@@ -555,8 +675,7 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
     ) -> SnapshotHolding:
         session = self._require_session(conn)
         # upsert
-        stmt = text(
-            """
+        stmt = text("""
             INSERT INTO snapshot_holdings (snapshot_id, holding_id, valuation_amount, data_source, created_at)
             VALUES (:snapshot_id, :holding_id, :valuation_amount, :data_source, :created_at)
             ON CONFLICT (snapshot_id, holding_id)
@@ -564,8 +683,7 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
                           data_source = EXCLUDED.data_source,
                           created_at = EXCLUDED.created_at
             RETURNING holding_id, valuation_amount, data_source
-            """
-        )
+            """)
         result = await session.execute(
             stmt,
             {
@@ -600,13 +718,11 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
         reference_date: date,
     ) -> int:
         session = self._require_session(conn)
-        insert_snap = text(
-            """
+        insert_snap = text("""
             INSERT INTO weekly_snapshots (user_id, reference_date, source_snapshot_id, status, created_at)
             VALUES (:user_id, :reference_date, :source_snapshot_id, 'locked', :created_at)
             RETURNING weekly_snapshot_id
-            """
-        )
+            """)
         snap_res = await session.execute(
             insert_snap,
             {
@@ -617,14 +733,12 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
             },
         )
         weekly_id = snap_res.scalar_one()
-        insert_holdings = text(
-            """
+        insert_holdings = text("""
             INSERT INTO weekly_snapshot_holdings (weekly_snapshot_id, holding_id, valuation_amount, data_source, created_at)
             SELECT :weekly_id, holding_id, valuation_amount, data_source, :created_at
             FROM snapshot_holdings WHERE snapshot_id = :source_snapshot_id
             ON CONFLICT (weekly_snapshot_id, holding_id) DO NOTHING
-            """
-        )
+            """)
         await session.execute(
             insert_holdings,
             {
@@ -645,13 +759,11 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
         reference_date: date,
     ) -> int:
         session = self._require_session(conn)
-        insert_snap = text(
-            """
+        insert_snap = text("""
             INSERT INTO annual_snapshots (user_id, reference_date, source_snapshot_id, status, created_at)
             VALUES (:user_id, :reference_date, :source_snapshot_id, 'locked', :created_at)
             RETURNING annual_snapshot_id
-            """
-        )
+            """)
         snap_res = await session.execute(
             insert_snap,
             {
@@ -662,14 +774,12 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
             },
         )
         annual_id = snap_res.scalar_one()
-        insert_holdings = text(
-            """
+        insert_holdings = text("""
             INSERT INTO annual_snapshot_holdings (annual_snapshot_id, holding_id, valuation_amount, data_source, created_at)
             SELECT :annual_id, holding_id, valuation_amount, data_source, :created_at
             FROM snapshot_holdings WHERE snapshot_id = :source_snapshot_id
             ON CONFLICT (annual_snapshot_id, holding_id) DO NOTHING
-            """
-        )
+            """)
         await session.execute(
             insert_holdings,
             {
@@ -708,8 +818,7 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         end_date: date | None,
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text(
-            """
+        stmt = text("""
             SELECT ws.reference_date,
                    i.name AS institution_name,
                    a.account_id,
@@ -725,8 +834,7 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND (:end_date IS NULL OR ws.reference_date <= :end_date)
             GROUP BY ws.reference_date, i.name, a.account_id, a.name
             ORDER BY ws.reference_date DESC, i.name, a.account_id
-            """
-        )
+            """)
         result = await session.execute(
             stmt,
             {"user_id": user_id, "start_date": start_date, "end_date": end_date},
@@ -739,8 +847,7 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         self, conn: Connection, user_id: int, year: int | None
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text(
-            """
+        stmt = text("""
             SELECT EXTRACT(YEAR FROM asnap.reference_date) AS year,
                    asnap.reference_date,
                    i.name AS institution_name,
@@ -756,8 +863,7 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND (:year IS NULL OR EXTRACT(YEAR FROM asnap.reference_date) = :year)
             GROUP BY year, asnap.reference_date, i.name, a.account_id, a.name
             ORDER BY year DESC, i.name, a.account_id
-            """
-        )
+            """)
         result = await session.execute(stmt, {"user_id": user_id, "year": year})
         rows = result.mappings().all()
         return [dict(row) for row in rows]
@@ -771,8 +877,7 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         end_date: date | None,
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text(
-            """
+        stmt = text("""
             SELECT ws.reference_date,
                    ag.name AS account_group_name,
                    a.account_id,
@@ -790,8 +895,7 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND (:end_date IS NULL OR ws.reference_date <= :end_date)
             GROUP BY ws.reference_date, ag.account_group_id, ag.name, a.account_id, a.name
             ORDER BY ws.reference_date DESC, ag.name, a.account_id
-            """
-        )
+            """)
         result = await session.execute(
             stmt,
             {"user_id": user_id, "start_date": start_date, "end_date": end_date},
@@ -804,8 +908,7 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         self, conn: Connection, user_id: int, snapshot_date: date
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text(
-            """
+        stmt = text("""
             SELECT p.asset_class,
                    p.product_name,
                    SUM(sh.valuation_amount) AS valuation_amount,
@@ -819,8 +922,7 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND s.status = 'locked'
             GROUP BY p.asset_class, p.product_name
             ORDER BY p.asset_class, p.product_name
-            """
-        )
+            """)
         result = await session.execute(
             stmt, {"user_id": user_id, "snapshot_date": snapshot_date}
         )

@@ -4,8 +4,14 @@ from datetime import date
 
 from subdomains.portfolio.application.dtos import (
     CreateInstitutionCommand,
+    UpdateInstitutionCommand,
+    UpdateInstitutionDisplayOrdersCommand,
     CreateProductCommand,
+    UpdateProductCommand,
+    UpdateProductDisplayOrdersCommand,
     CreateAccountCommand,
+    UpdateAccountCommand,
+    UpdateAccountDisplayOrdersCommand,
     CreateHoldingCommand,
     DeleteHoldingCommand,
     CreateSnapshotCommand,
@@ -86,9 +92,42 @@ class PortfolioAppService:
     ) -> InstitutionResult:
         if await self._institution_repo.exists_by_name(command.name):
             raise DuplicateEntityError("institution", command.name)
-        model = Institution.create(name=command.name, type=command.type)
+        model = Institution.create(
+            name=command.name,
+            type=command.type,
+            display_order=command.display_order,
+        )
         saved = await self._institution_repo.add(model)
         return InstitutionResult.from_domain(saved)
+
+    @transactional(mode="writable")
+    async def update_institution(
+        self, command: UpdateInstitutionCommand
+    ) -> InstitutionResult:
+        existing = await self._institution_repo.find_by_id(command.institution_id)
+        if not existing:
+            raise NotFoundError("institution", command.institution_id)
+        if (
+            existing.name != command.name
+            and await self._institution_repo.exists_by_name(command.name)
+        ):
+            raise DuplicateEntityError("institution", command.name)
+        updated = Institution(
+            institution_id=command.institution_id,
+            name=command.name,
+            type=command.type,
+            display_order=command.display_order,
+            created_at=existing.created_at,
+        )
+        saved = await self._institution_repo.update(updated)
+        return InstitutionResult.from_domain(saved)
+
+    @transactional(mode="writable")
+    async def update_institution_display_orders(
+        self, command: UpdateInstitutionDisplayOrdersCommand
+    ) -> int:
+        orders = [(item.institution_id, item.display_order) for item in command.items]
+        return await self._institution_repo.update_display_orders(orders)
 
     # ------------------------------------------------------------------
     # Products
@@ -112,8 +151,48 @@ class PortfolioAppService:
             investment_type=command.investment_type,
             characteristics=command.characteristics,
             risk_level=command.risk_level,
+            display_order=command.display_order,
         )
         saved = await self._product_repo.add(model)
+        return ProductResult.from_domain(saved)
+
+    @transactional(mode="writable")
+    async def update_product_display_orders(
+        self, command: UpdateProductDisplayOrdersCommand
+    ) -> int:
+        orders = [(item.product_id, item.display_order) for item in command.items]
+        return await self._product_repo.update_display_orders(orders)
+
+    @transactional(mode="writable")
+    async def update_product(self, command: UpdateProductCommand) -> ProductResult:
+        product = await self._product_repo.find_by_id(command.product_id)
+        if product is None:
+            raise NotFoundError("product", command.product_id)
+        identity_changed = (
+            product.product_name != command.product_name
+            or product.asset_class != command.asset_class
+            or product.region != command.region
+            or product.currency != command.currency
+            or product.investment_type != command.investment_type
+        )
+        if identity_changed and await self._product_repo.exists_identity(
+            product_name=command.product_name,
+            asset_class=command.asset_class,
+            region=command.region,
+            currency=command.currency,
+            investment_type=command.investment_type,
+        ):
+            raise DuplicateEntityError("product", command.product_name)
+        product.update(
+            product_name=command.product_name,
+            asset_class=command.asset_class,
+            region=command.region,
+            currency=command.currency,
+            investment_type=command.investment_type,
+            characteristics=command.characteristics,
+            risk_level=command.risk_level,
+        )
+        saved = await self._product_repo.update(product)
         return ProductResult.from_domain(saved)
 
     # ------------------------------------------------------------------
@@ -133,9 +212,34 @@ class PortfolioAppService:
             institution_id=command.institution_id,
             name=command.name,
             type=command.type,
+            display_order=command.display_order,
         )
         saved = await self._account_repo.add(model)
         return AccountResult.from_domain(saved)
+
+    @transactional(mode="writable")
+    async def update_account(self, command: UpdateAccountCommand) -> AccountResult:
+        account = await self._account_repo.find_by_id(command.account_id)
+        if account is None:
+            raise NotFoundError("account", command.account_id)
+        if account.name != command.name and await self._account_repo.exists_by_name(
+            account.institution_id, command.name
+        ):
+            raise DuplicateEntityError("account", command.name)
+        account.update(
+            name=command.name,
+            type=command.type,
+            display_order=command.display_order,
+        )
+        saved = await self._account_repo.update(account)
+        return AccountResult.from_domain(saved)
+
+    @transactional(mode="writable")
+    async def update_account_display_orders(
+        self, command: UpdateAccountDisplayOrdersCommand
+    ) -> int:
+        orders = [(item.account_id, item.display_order) for item in command.items]
+        return await self._account_repo.update_display_orders(orders)
 
     # ------------------------------------------------------------------
     # Account Groups
@@ -323,6 +427,7 @@ class PortfolioAppService:
                 institution_id=inst.institution_id,
                 name=inst.name,
                 type=inst.type,
+                display_order=inst.display_order,
                 created_at=inst.created_at,
             )
             for inst in institutions
@@ -342,6 +447,7 @@ class PortfolioAppService:
                 investment_type=prod.investment_type,
                 characteristics=prod.characteristics,
                 risk_level=prod.risk_level,
+                display_order=prod.display_order,
                 created_at=prod.created_at,
             )
             for prod in products
@@ -357,6 +463,7 @@ class PortfolioAppService:
                 institution_id=acc.institution_id,
                 name=acc.name,
                 type=acc.type,
+                display_order=acc.display_order,
                 created_at=acc.created_at,
             )
             for acc in accounts

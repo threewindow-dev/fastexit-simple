@@ -30,6 +30,7 @@ class InstitutionEntity(Base):
     institution_id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, unique=True)
     type = Column(String(50), nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
 
     __table_args__ = (
@@ -53,6 +54,7 @@ class ProductEntity(Base):
     investment_type = Column(String(50), nullable=False)
     characteristics = Column(ARRAY(String), nullable=True)
     risk_level = Column(String(20), nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
 
     __table_args__ = (
@@ -91,6 +93,7 @@ class AccountEntity(Base):
     )
     name = Column(String(255), nullable=False)
     type = Column(String(100), nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
 
     __table_args__ = (

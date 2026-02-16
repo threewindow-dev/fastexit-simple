@@ -10,8 +10,17 @@ from core.common_responses import common_responses
 from dependencies import get_portfolio_app_service
 from subdomains.portfolio.application.dtos import (
     CreateInstitutionCommand,
+    UpdateInstitutionCommand,
+    UpdateInstitutionDisplayOrdersCommand,
+    InstitutionDisplayOrderItem,
     CreateProductCommand,
+    UpdateProductCommand,
+    UpdateProductDisplayOrdersCommand,
+    ProductDisplayOrderItem,
     CreateAccountCommand,
+    UpdateAccountCommand,
+    UpdateAccountDisplayOrdersCommand,
+    AccountDisplayOrderItem,
     CreateAccountGroupCommand,
     CreateHoldingCommand,
     DeleteHoldingCommand,
@@ -28,14 +37,24 @@ from subdomains.portfolio.application.dtos import (
 from subdomains.portfolio.application.services import PortfolioAppService
 from subdomains.portfolio.interface.schemas import (
     CreateInstitutionRequest,
+    UpdateInstitutionRequest,
+    UpdateInstitutionDisplayOrderRequest,
     InstitutionResponse,
     InstitutionResponseData,
+    InstitutionsResponse,
+    InstitutionsResponseData,
+    DisplayOrderUpdateResponse,
+    DisplayOrderUpdateResponseData,
     CreateProductRequest,
+    UpdateProductRequest,
     ProductResponse,
     ProductResponseData,
+    UpdateProductDisplayOrderRequest,
     CreateAccountRequest,
     AccountResponse,
     AccountResponseData,
+    UpdateAccountRequest,
+    UpdateAccountDisplayOrderRequest,
     CreateAccountGroupRequest,
     AccountGroupResponse,
     AccountGroupResponseData,
@@ -100,24 +119,34 @@ def _iso(dt) -> str | None:
 
 @router.get(
     "/institutions",
-    response_model=list[InstitutionResponseData],
+    response_model=InstitutionsResponse,
     summary="기관 목록 조회",
     responses={**common_responses},
 )
 async def list_institutions(
     service: PortfolioAppService = Depends(get_portfolio_app_service),
-) -> list[InstitutionResponseData]:
+) -> InstitutionsResponse:
     """모든 금융기관 목록 조회"""
     results = await service.list_institutions()
-    return [
+    items = [
         InstitutionResponseData(
             institution_id=r.institution_id,
             name=r.name,
             type=r.type,
+            display_order=r.display_order,
             created_at=_iso(r.created_at),
         )
         for r in results
     ]
+    max_display_order = max(
+        (r.display_order or 0 for r in results),
+        default=0,
+    )
+    data = InstitutionsResponseData(
+        items=items,
+        max_display_order=max_display_order,
+    )
+    return InstitutionsResponse(code=0, message="success", data=data)
 
 
 @router.post(
@@ -131,15 +160,74 @@ async def create_institution(
     request: CreateInstitutionRequest,
     service: PortfolioAppService = Depends(get_portfolio_app_service),
 ) -> InstitutionResponse:
-    cmd = CreateInstitutionCommand(name=request.name, type=request.type)
+    cmd = CreateInstitutionCommand(
+        name=request.name,
+        type=request.type,
+        display_order=request.display_order,
+    )
     result = await service.create_institution(cmd)
     data = InstitutionResponseData(
         institution_id=result.institution_id,
         name=result.name,
         type=result.type,
+        display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
     return InstitutionResponse(code=0, message="success", data=data)
+
+
+@router.put(
+    "/institutions/{institution_id}",
+    response_model=InstitutionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="기관 수정",
+    responses={**common_responses},
+)
+async def update_institution(
+    request: UpdateInstitutionRequest,
+    institution_id: int = Path(..., description="기관 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> InstitutionResponse:
+    cmd = UpdateInstitutionCommand(
+        institution_id=institution_id,
+        name=request.name,
+        type=request.type,
+        display_order=request.display_order,
+    )
+    result = await service.update_institution(cmd)
+    data = InstitutionResponseData(
+        institution_id=result.institution_id,
+        name=result.name,
+        type=result.type,
+        display_order=result.display_order,
+        created_at=_iso(result.created_at),
+    )
+    return InstitutionResponse(code=0, message="success", data=data)
+
+
+@router.post(
+    "/institutions:reorder",
+    response_model=DisplayOrderUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="기관 표시순서 일괄 변경",
+    responses={**common_responses},
+)
+async def update_institution_display_order(
+    request: UpdateInstitutionDisplayOrderRequest,
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DisplayOrderUpdateResponse:
+    cmd = UpdateInstitutionDisplayOrdersCommand(
+        items=[
+            InstitutionDisplayOrderItem(
+                institution_id=item.institution_id,
+                display_order=item.display_order,
+            )
+            for item in request.items
+        ]
+    )
+    updated_count = await service.update_institution_display_orders(cmd)
+    data = DisplayOrderUpdateResponseData(updated_count=updated_count)
+    return DisplayOrderUpdateResponse(code=0, message="success", data=data)
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +256,7 @@ async def list_products(
             investment_type=r.investment_type,
             risk_level=r.risk_level,
             characteristics=r.characteristics,
+            display_order=r.display_order,
             created_at=_iso(r.created_at),
         )
         for r in results
@@ -193,6 +282,7 @@ async def create_product(
         investment_type=request.investment_type,
         characteristics=request.characteristics,
         risk_level=request.risk_level,
+        display_order=request.display_order,
     )
     result = await service.create_product(cmd)
     data = ProductResponseData(
@@ -204,9 +294,73 @@ async def create_product(
         investment_type=result.investment_type,
         characteristics=result.characteristics,
         risk_level=result.risk_level,
+        display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
     return ProductResponse(code=0, message="success", data=data)
+
+
+@router.put(
+    "/products/{product_id}",
+    response_model=ProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="상품 수정",
+    responses={**common_responses},
+)
+async def update_product(
+    request: UpdateProductRequest,
+    product_id: int = Path(..., description="상품 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> ProductResponse:
+    cmd = UpdateProductCommand(
+        product_id=product_id,
+        product_name=request.product_name,
+        asset_class=request.asset_class,
+        region=request.region,
+        currency=request.currency,
+        investment_type=request.investment_type,
+        characteristics=request.characteristics,
+        risk_level=request.risk_level,
+    )
+    result = await service.update_product(cmd)
+    data = ProductResponseData(
+        product_id=result.product_id,
+        product_name=result.product_name,
+        asset_class=result.asset_class,
+        region=result.region,
+        currency=result.currency,
+        investment_type=result.investment_type,
+        characteristics=result.characteristics,
+        risk_level=result.risk_level,
+        display_order=result.display_order,
+        created_at=_iso(result.created_at),
+    )
+    return ProductResponse(code=0, message="success", data=data)
+
+
+@router.post(
+    "/products:reorder",
+    response_model=DisplayOrderUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="상품 표시순서 일괄 변경",
+    responses={**common_responses},
+)
+async def update_product_display_order(
+    request: UpdateProductDisplayOrderRequest,
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DisplayOrderUpdateResponse:
+    cmd = UpdateProductDisplayOrdersCommand(
+        items=[
+            ProductDisplayOrderItem(
+                product_id=item.product_id,
+                display_order=item.display_order,
+            )
+            for item in request.items
+        ]
+    )
+    updated_count = await service.update_product_display_orders(cmd)
+    data = DisplayOrderUpdateResponseData(updated_count=updated_count)
+    return DisplayOrderUpdateResponse(code=0, message="success", data=data)
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +385,7 @@ async def list_accounts(
             institution_id=r.institution_id,
             name=r.name,
             type=r.type,
+            display_order=r.display_order,
             created_at=_iso(r.created_at),
         )
         for r in results
@@ -252,6 +407,7 @@ async def create_account(
         institution_id=request.institution_id,
         name=request.name,
         type=request.type,
+        display_order=request.display_order,
     )
     result = await service.create_account(cmd)
     data = AccountResponseData(
@@ -259,9 +415,65 @@ async def create_account(
         institution_id=result.institution_id,
         name=result.name,
         type=result.type,
+        display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
     return AccountResponse(code=0, message="success", data=data)
+
+
+@router.put(
+    "/accounts/{account_id}",
+    response_model=AccountResponse,
+    status_code=status.HTTP_200_OK,
+    summary="계좌 수정",
+    responses={**common_responses},
+)
+async def update_account(
+    request: UpdateAccountRequest,
+    account_id: int = Path(..., description="계좌 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> AccountResponse:
+    cmd = UpdateAccountCommand(
+        account_id=account_id,
+        name=request.name,
+        type=request.type,
+        display_order=request.display_order,
+    )
+    result = await service.update_account(cmd)
+    data = AccountResponseData(
+        account_id=result.account_id,
+        institution_id=result.institution_id,
+        name=result.name,
+        type=result.type,
+        display_order=result.display_order,
+        created_at=_iso(result.created_at),
+    )
+    return AccountResponse(code=0, message="success", data=data)
+
+
+@router.post(
+    "/accounts:reorder",
+    response_model=DisplayOrderUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="계좌 표시순서 일괄 변경",
+    responses={**common_responses},
+)
+async def update_account_display_order(
+    request: UpdateAccountDisplayOrderRequest,
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DisplayOrderUpdateResponse:
+    cmd = UpdateAccountDisplayOrdersCommand(
+        items=[
+            AccountDisplayOrderItem(
+                account_id=item.account_id,
+                display_order=item.display_order,
+            )
+            for item in request.items
+        ]
+    )
+    updated_count = await service.update_account_display_orders(cmd)
+    data = DisplayOrderUpdateResponseData(updated_count=updated_count)
+    return DisplayOrderUpdateResponse(code=0, message="success", data=data)
 
 
 # ---------------------------------------------------------------------------
@@ -681,7 +893,7 @@ async def list_snapshot_holdings(
             snapshot_holding_id=r.snapshot_holding_id,
             snapshot_id=r.snapshot_id,
             holding_id=r.holding_id,
-            valuation_amount=str(r.valuation_amount),
+            valuation_amount=float(r.valuation_amount),
             data_source=r.data_source,
             created_at=_iso(r.created_at),
         )

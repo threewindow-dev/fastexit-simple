@@ -54,17 +54,23 @@ class PsycopgInstitutionRepository(_BaseRepo, InstitutionRepository):
         async with connection.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO institutions (name, type, created_at)
-                VALUES (%s, %s, %s)
-                RETURNING institution_id, name, type, created_at
+                INSERT INTO institutions (name, type, display_order, created_at)
+                VALUES (%s, %s, %s, %s)
+                RETURNING institution_id, name, type, display_order, created_at
                 """,
-                (institution.name, institution.type, _utc_now_naive()),
+                (
+                    institution.name,
+                    institution.type,
+                    institution.display_order,
+                    _utc_now_naive(),
+                ),
             )
             row = await cur.fetchone()
         return Institution(
             institution_id=row["institution_id"],
             name=row["name"],
             type=row["type"],
+            display_order=row["display_order"],
             created_at=row["created_at"],
         )
 
@@ -75,7 +81,7 @@ class PsycopgInstitutionRepository(_BaseRepo, InstitutionRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "SELECT institution_id, name, type, created_at FROM institutions WHERE institution_id = %s",
+                "SELECT institution_id, name, type, display_order, created_at FROM institutions WHERE institution_id = %s",
                 (institution_id,),
             )
             row = await cur.fetchone()
@@ -85,6 +91,7 @@ class PsycopgInstitutionRepository(_BaseRepo, InstitutionRepository):
             institution_id=row["institution_id"],
             name=row["name"],
             type=row["type"],
+            display_order=row["display_order"],
             created_at=row["created_at"],
         )
 
@@ -101,7 +108,7 @@ class PsycopgInstitutionRepository(_BaseRepo, InstitutionRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "SELECT institution_id, name, type, created_at FROM institutions ORDER BY institution_id"
+                "SELECT institution_id, name, type, display_order, created_at FROM institutions ORDER BY institution_id"
             )
             rows = await cur.fetchall()
         return [
@@ -109,10 +116,56 @@ class PsycopgInstitutionRepository(_BaseRepo, InstitutionRepository):
                 institution_id=row["institution_id"],
                 name=row["name"],
                 type=row["type"],
+                display_order=row["display_order"],
                 created_at=row["created_at"],
             )
             for row in rows
         ]
+
+    @use_transaction()
+    async def update(self, conn: Connection, institution: Institution) -> Institution:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE institutions
+                SET name = %s, type = %s, display_order = %s
+                WHERE institution_id = %s
+                RETURNING institution_id, name, type, display_order, created_at
+                """,
+                (
+                    institution.name,
+                    institution.type,
+                    institution.display_order,
+                    institution.institution_id,
+                ),
+            )
+            row = await cur.fetchone()
+        return Institution(
+            institution_id=row["institution_id"],
+            name=row["name"],
+            type=row["type"],
+            display_order=row["display_order"],
+            created_at=row["created_at"],
+        )
+
+    @use_transaction()
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int:
+        connection = self._require_conn(conn)
+        order_list = list(orders)
+        if not order_list:
+            return 0
+        async with connection.cursor() as cur:
+            await cur.executemany(
+                "UPDATE institutions SET display_order = %s WHERE institution_id = %s",
+                [
+                    (display_order, institution_id)
+                    for institution_id, display_order in order_list
+                ],
+            )
+        return len(order_list)
 
 
 # ---------------------------------------------------------------------------
@@ -129,11 +182,11 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 """
                 INSERT INTO products (
                     product_name, asset_class, region, currency,
-                    investment_type, characteristics, risk_level, created_at
+                    investment_type, characteristics, risk_level, display_order, created_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING product_id, product_name, asset_class, region, currency,
-                          investment_type, characteristics, risk_level, created_at
+                          investment_type, characteristics, risk_level, display_order, created_at
                 """,
                 (
                     product.product_name,
@@ -143,6 +196,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                     product.investment_type,
                     product.characteristics,
                     product.risk_level,
+                    product.display_order,
                     _utc_now_naive(),
                 ),
             )
@@ -156,6 +210,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             investment_type=row["investment_type"],
             characteristics=row["characteristics"],
             risk_level=row["risk_level"],
+            display_order=row["display_order"],
             created_at=row["created_at"],
         )
 
@@ -166,7 +221,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             await cur.execute(
                 """
                 SELECT product_id, product_name, asset_class, region, currency,
-                       investment_type, characteristics, risk_level, created_at
+                      investment_type, characteristics, risk_level, display_order, created_at
                 FROM products WHERE product_id = %s
                 """,
                 (product_id,),
@@ -183,8 +238,40 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             investment_type=row["investment_type"],
             characteristics=row["characteristics"],
             risk_level=row["risk_level"],
+            display_order=row["display_order"],
             created_at=row["created_at"],
         )
+
+    @use_transaction()
+    async def update(self, conn: Connection, product: Product) -> Product:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE products
+                SET product_name = %s,
+                    asset_class = %s,
+                    region = %s,
+                    currency = %s,
+                    investment_type = %s,
+                    characteristics = %s,
+                    risk_level = %s,
+                    display_order = %s
+                WHERE product_id = %s
+                """,
+                (
+                    product.product_name,
+                    product.asset_class,
+                    product.region,
+                    product.currency,
+                    product.investment_type,
+                    product.characteristics,
+                    product.risk_level,
+                    product.display_order,
+                    product.product_id,
+                ),
+            )
+        return product
 
     @use_transaction()
     async def exists_identity(
@@ -218,13 +305,11 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
     async def get_all(self, conn: Connection) -> list[Product]:
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
-            await cur.execute(
-                """
+            await cur.execute("""
                 SELECT product_id, product_name, asset_class, region, currency,
-                       investment_type, characteristics, risk_level, created_at
-                FROM products ORDER BY product_id
-                """
-            )
+                       investment_type, characteristics, risk_level, display_order, created_at
+                FROM products ORDER BY display_order, product_id
+                """)
             rows = await cur.fetchall()
         return [
             Product(
@@ -236,10 +321,29 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 investment_type=row["investment_type"],
                 characteristics=row["characteristics"],
                 risk_level=row["risk_level"],
+                display_order=row["display_order"],
                 created_at=row["created_at"],
             )
             for row in rows
         ]
+
+    @use_transaction()
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int:
+        connection = self._require_conn(conn)
+        order_list = list(orders)
+        if not order_list:
+            return 0
+        async with connection.cursor() as cur:
+            await cur.executemany(
+                "UPDATE products SET display_order = %s WHERE product_id = %s",
+                [
+                    (display_order, product_id)
+                    for product_id, display_order in order_list
+                ],
+            )
+        return len(order_list)
 
 
 # ---------------------------------------------------------------------------
@@ -254,11 +358,17 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
         async with connection.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO accounts (institution_id, name, type, created_at)
-                VALUES (%s, %s, %s, %s)
-                RETURNING account_id, institution_id, name, type, created_at
+                INSERT INTO accounts (institution_id, name, type, display_order, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING account_id, institution_id, name, type, display_order, created_at
                 """,
-                (account.institution_id, account.name, account.type, _utc_now_naive()),
+                (
+                    account.institution_id,
+                    account.name,
+                    account.type,
+                    account.display_order,
+                    _utc_now_naive(),
+                ),
             )
             row = await cur.fetchone()
         return Account(
@@ -266,6 +376,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
             institution_id=row["institution_id"],
             name=row["name"],
             type=row["type"],
+            display_order=row["display_order"],
             created_at=row["created_at"],
         )
 
@@ -274,7 +385,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "SELECT account_id, institution_id, name, type, created_at FROM accounts WHERE account_id = %s",
+                "SELECT account_id, institution_id, name, type, display_order, created_at FROM accounts WHERE account_id = %s",
                 (account_id,),
             )
             row = await cur.fetchone()
@@ -285,6 +396,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
             institution_id=row["institution_id"],
             name=row["name"],
             type=row["type"],
+            display_order=row["display_order"],
             created_at=row["created_at"],
         )
 
@@ -302,6 +414,22 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
             return row is not None
 
     @use_transaction()
+    async def update(self, conn: Connection, account: Account) -> Account:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE accounts
+                SET name = %s,
+                    type = %s,
+                    display_order = %s
+                WHERE account_id = %s
+                """,
+                (account.name, account.type, account.display_order, account.account_id),
+            )
+        return account
+
+    @use_transaction()
     async def find_many(
         self, conn: Connection, account_ids: Iterable[int]
     ) -> list[Account]:
@@ -311,7 +439,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "SELECT account_id, institution_id, name, type, created_at FROM accounts WHERE account_id = ANY(%s)",
+                "SELECT account_id, institution_id, name, type, display_order, created_at FROM accounts WHERE account_id = ANY(%s)",
                 (ids,),
             )
             rows = await cur.fetchall()
@@ -321,6 +449,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
                 institution_id=row["institution_id"],
                 name=row["name"],
                 type=row["type"],
+                display_order=row["display_order"],
                 created_at=row["created_at"],
             )
             for row in rows
@@ -331,7 +460,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "SELECT account_id, institution_id, name, type, created_at FROM accounts ORDER BY account_id"
+                "SELECT account_id, institution_id, name, type, display_order, created_at FROM accounts ORDER BY account_id"
             )
             rows = await cur.fetchall()
         return [
@@ -340,10 +469,29 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
                 institution_id=row["institution_id"],
                 name=row["name"],
                 type=row["type"],
+                display_order=row["display_order"],
                 created_at=row["created_at"],
             )
             for row in rows
         ]
+
+    @use_transaction()
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int:
+        connection = self._require_conn(conn)
+        order_list = list(orders)
+        if not order_list:
+            return 0
+        async with connection.cursor() as cur:
+            await cur.executemany(
+                "UPDATE accounts SET display_order = %s WHERE account_id = %s",
+                [
+                    (display_order, account_id)
+                    for account_id, display_order in order_list
+                ],
+            )
+        return len(order_list)
 
 
 # ---------------------------------------------------------------------------
@@ -500,12 +648,10 @@ class PsycopgHoldingRepository(_BaseRepo, HoldingRepository):
     async def get_all(self, conn: Connection) -> list[Holding]:
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
-            await cur.execute(
-                """
+            await cur.execute("""
                 SELECT holding_id, account_id, product_id, is_visible, deletion_reason, deleted_at, created_at
                 FROM holdings ORDER BY holding_id
-                """
-            )
+                """)
             rows = await cur.fetchall()
         return [
             Holding(
@@ -727,12 +873,10 @@ class PsycopgSnapshotRepository(_BaseRepo, SnapshotRepository):
     async def get_all(self, conn: Connection) -> list[Snapshot]:
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
-            await cur.execute(
-                """
+            await cur.execute("""
                 SELECT snapshot_id, user_id, reference_date, status, locked_at, editable_until, created_at
                 FROM snapshots ORDER BY snapshot_id
-                """
-            )
+                """)
             rows = await cur.fetchall()
         snapshots = []
         for row in rows:

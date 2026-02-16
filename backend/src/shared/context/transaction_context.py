@@ -9,7 +9,6 @@ from contextvars import ContextVar
 
 from shared.protocols.transaction import TransactionProtocol, Connection
 
-
 # ContextVar: 비동기 컨텍스트별로 격리된 트랜잭션 저장
 transaction_context: ContextVar[TransactionProtocol | None] = ContextVar(
     "transaction", default=None
@@ -18,7 +17,7 @@ transaction_context: ContextVar[TransactionProtocol | None] = ContextVar(
 
 def get_transaction() -> TransactionProtocol | None:
     """현재 활성화된 트랜잭션을 반환합니다.
-    
+
     Returns:
         TransactionProtocol | None: 활성 트랜잭션, 없으면 None
     """
@@ -27,7 +26,7 @@ def get_transaction() -> TransactionProtocol | None:
 
 def get_connection() -> Connection | None:
     """현재 트랜잭션의 DB 커넥션을 반환합니다.
-    
+
     Returns:
         Connection | None: DB 커넥션, 트랜잭션이 없으면 None
     """
@@ -37,7 +36,7 @@ def get_connection() -> Connection | None:
 
 def set_transaction(transaction: TransactionProtocol) -> None:
     """현재 트랜잭션을 설정합니다.
-    
+
     Args:
         transaction: 설정할 트랜잭션
     """
@@ -51,7 +50,7 @@ def clear_transaction() -> None:
 
 def has_active_transaction() -> bool:
     """현재 활성화된 트랜잭션이 있는지 확인합니다.
-    
+
     Returns:
         bool: 트랜잭션이 있으면 True
     """

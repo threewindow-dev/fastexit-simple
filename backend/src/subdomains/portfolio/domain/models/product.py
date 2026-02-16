@@ -5,7 +5,6 @@ from datetime import datetime
 
 from subdomains.portfolio.domain.errors import InvalidStateError
 
-
 _ASSET_CLASSES = {"주식", "채권", "통화", "금", "부동산", "가상자산", "기타자산"}
 _REGIONS = {"대한민국", "미국"}
 _CURRENCIES = {"KRW", "USD"}
@@ -23,6 +22,7 @@ class Product:
     investment_type: str
     characteristics: list[str] | None
     risk_level: str
+    display_order: int
     created_at: datetime
 
     def __post_init__(self) -> None:
@@ -49,6 +49,7 @@ class Product:
         investment_type: str,
         characteristics: list[str] | None,
         risk_level: str,
+        display_order: int = 0,
     ) -> "Product":
         return cls(
             product_id=None,
@@ -59,6 +60,7 @@ class Product:
             investment_type=investment_type,
             characteristics=characteristics,
             risk_level=risk_level,
+            display_order=display_order,
             created_at=datetime.utcnow(),
         )
 
@@ -72,5 +74,26 @@ class Product:
             "investment_type": self.investment_type,
             "characteristics": self.characteristics,
             "risk_level": self.risk_level,
+            "display_order": self.display_order,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+    def update(
+        self,
+        *,
+        product_name: str,
+        asset_class: str,
+        region: str,
+        currency: str,
+        investment_type: str,
+        characteristics: list[str] | None,
+        risk_level: str,
+    ) -> None:
+        self.product_name = product_name
+        self.asset_class = asset_class
+        self.region = region
+        self.currency = currency
+        self.investment_type = investment_type
+        self.characteristics = characteristics
+        self.risk_level = risk_level
+        self.__post_init__()

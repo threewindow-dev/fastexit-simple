@@ -7,7 +7,6 @@ Transaction protocol definition.
 from abc import ABC, abstractmethod
 from typing import Literal, Protocol
 
-
 TransactionMode = Literal["readonly", "writable"]
 
 

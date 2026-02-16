@@ -23,6 +23,21 @@ from subdomains.portfolio.domain import (
 class CreateInstitutionCommand:
     name: str
     type: str
+    display_order: int = 0
+
+
+@dataclass
+class UpdateInstitutionCommand:
+    institution_id: int
+    name: str
+    type: str
+    display_order: int = 0
+
+
+@dataclass
+class InstitutionDisplayOrderItem:
+    institution_id: int
+    display_order: int
 
 
 @dataclass
@@ -34,6 +49,25 @@ class CreateProductCommand:
     investment_type: str
     characteristics: list[str] | None
     risk_level: str
+    display_order: int = 0
+
+
+@dataclass
+class UpdateProductCommand:
+    product_id: int
+    product_name: str
+    asset_class: str
+    region: str
+    currency: str
+    investment_type: str
+    characteristics: list[str] | None
+    risk_level: str
+
+
+@dataclass
+class ProductDisplayOrderItem:
+    product_id: int
+    display_order: int
 
 
 @dataclass
@@ -41,6 +75,36 @@ class CreateAccountCommand:
     institution_id: int
     name: str
     type: str
+    display_order: int = 0
+
+
+@dataclass
+class AccountDisplayOrderItem:
+    account_id: int
+    display_order: int
+
+
+@dataclass
+class UpdateAccountCommand:
+    account_id: int
+    name: str
+    type: str
+    display_order: int = 0
+
+
+@dataclass
+class UpdateInstitutionDisplayOrdersCommand:
+    items: list[InstitutionDisplayOrderItem]
+
+
+@dataclass
+class UpdateAccountDisplayOrdersCommand:
+    items: list[AccountDisplayOrderItem]
+
+
+@dataclass
+class UpdateProductDisplayOrdersCommand:
+    items: list[ProductDisplayOrderItem]
 
 
 @dataclass
@@ -131,6 +195,7 @@ class InstitutionResult:
     institution_id: int | None
     name: str
     type: str
+    display_order: int
     created_at: datetime
 
     @classmethod
@@ -139,6 +204,7 @@ class InstitutionResult:
             institution_id=model.institution_id,
             name=model.name,
             type=model.type,
+            display_order=model.display_order,
             created_at=model.created_at,
         )
 
@@ -153,6 +219,7 @@ class ProductResult:
     investment_type: str
     characteristics: list[str] | None
     risk_level: str
+    display_order: int
     created_at: datetime
 
     @classmethod
@@ -166,6 +233,7 @@ class ProductResult:
             investment_type=model.investment_type,
             characteristics=model.characteristics,
             risk_level=model.risk_level,
+            display_order=model.display_order,
             created_at=model.created_at,
         )
 
@@ -176,6 +244,7 @@ class AccountResult:
     institution_id: int
     name: str
     type: str
+    display_order: int
     created_at: datetime
 
     @classmethod
@@ -185,6 +254,7 @@ class AccountResult:
             institution_id=model.institution_id,
             name=model.name,
             type=model.type,
+            display_order=model.display_order,
             created_at=model.created_at,
         )
 
@@ -234,6 +304,9 @@ class SnapshotHoldingResult:
     holding_id: int
     valuation_amount: float
     data_source: str
+    snapshot_id: int | None = None
+    snapshot_holding_id: int | None = None
+    created_at: datetime | None = None
 
     @classmethod
     def from_domain(cls, model: SnapshotHolding) -> "SnapshotHoldingResult":

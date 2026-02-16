@@ -3,6 +3,7 @@ import uvicorn
 from contextlib import asynccontextmanager
 from pathlib import Path
 from shared.infra.database import Base
+from sqlalchemy import text
 from subdomains.user.infra.entities.user_entity import UserEntity  # noqa: F401
 from subdomains.portfolio.infra.entities import (  # noqa: F401
     InstitutionEntity,
@@ -74,6 +75,7 @@ async def lifespan(app: FastAPI):
         if engine:
             async with engine.begin() as conn:
                 await conn.run_sync(lambda sync_conn: _create_all_tables(sync_conn))
+                await _ensure_display_order_columns(conn)
 
     logger.info(
         f"Database initialized successfully (repository_type={config.repository_type})"
@@ -88,6 +90,20 @@ async def lifespan(app: FastAPI):
 def _create_all_tables(sync_conn):
     """SQLAlchemy ORM 모델의 모든 테이블 생성."""
     Base.metadata.create_all(sync_conn)
+
+
+async def _ensure_display_order_columns(conn):
+    """Ensure display_order columns exist for institutions and accounts."""
+    await conn.execute(
+        text(
+            "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0"
+        )
+    )
+    await conn.execute(
+        text(
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0"
+        )
+    )
 
 
 async def _initialize_schema_from_sql(db_pool):

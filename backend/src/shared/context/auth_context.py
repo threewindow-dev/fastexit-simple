@@ -13,12 +13,13 @@ from dataclasses import dataclass
 class AuthenticatedUser:
     """
     인증된 사용자 정보
-    
+
     Attributes:
         user_id: 사용자 고유 ID (필수)
         role: 사용자의 역할 (선택적, 프로젝트별로 다를 수 있음)
         metadata: 추가 정보 저장 (선택적)
     """
+
     user_id: str
     role: str | None = None
     metadata: dict | None = None
@@ -32,7 +33,7 @@ authenticated_user_context: ContextVar[AuthenticatedUser | None] = ContextVar(
 
 def get_authenticated_user() -> AuthenticatedUser | None:
     """현재 요청의 인증된 사용자 정보를 반환합니다.
-    
+
     Returns:
         AuthenticatedUser | None: 인증된 사용자, 없으면 None
     """
@@ -41,7 +42,7 @@ def get_authenticated_user() -> AuthenticatedUser | None:
 
 def set_authenticated_user(user: AuthenticatedUser) -> None:
     """현재 요청의 인증된 사용자 정보를 설정합니다.
-    
+
     Args:
         user: 설정할 인증된 사용자
     """

@@ -25,7 +25,6 @@ from shared.protocols.transaction import (
 )
 from shared.protocols.database import DatabasePool
 
-
 logger = logging.getLogger(__name__)
 
 # ============================================================================

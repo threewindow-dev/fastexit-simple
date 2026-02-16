@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS institutions (
     institution_id SERIAL PRIMARY KEY,
     name           VARCHAR(255) NOT NULL UNIQUE,
     type           VARCHAR(50)  NOT NULL CHECK (type IN ('증권사', '은행', '기타')),
+    display_order  INTEGER      NOT NULL DEFAULT 0,
     created_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS products (
     investment_type  VARCHAR(50)  NOT NULL CHECK (investment_type IN ('직접', 'ETF')),
     characteristics  TEXT[]       NULL,
     risk_level       VARCHAR(20)  NOT NULL CHECK (risk_level IN ('안전', '위험')),
+    display_order    INTEGER      NOT NULL DEFAULT 0,
     created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     UNIQUE (product_name, asset_class, region, currency, investment_type)
 );
@@ -32,6 +34,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     institution_id INTEGER      NOT NULL REFERENCES institutions(institution_id) ON DELETE CASCADE,
     name           VARCHAR(255) NOT NULL,
     type           VARCHAR(100) NOT NULL,
+    display_order  INTEGER      NOT NULL DEFAULT 0,
     created_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     UNIQUE (institution_id, name)
 );

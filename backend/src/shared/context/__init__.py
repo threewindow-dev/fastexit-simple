@@ -39,7 +39,7 @@ from .transaction_context import (
 
 def clear_all_contexts() -> None:
     """모든 요청 컨텍스트를 초기화합니다.
-    
+
     Middleware에서 요청 종료 시 호출하여 메모리 누수를 방지합니다.
     """
     clear_authenticated_user()

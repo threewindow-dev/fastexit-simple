@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from shared.schemas import ApiResponse
 
-
 # ---------------------------------------------------------------------------
 # Institutions
 # ---------------------------------------------------------------------------
@@ -17,19 +16,55 @@ from shared.schemas import ApiResponse
 
 class CreateInstitutionRequest(BaseModel):
     name: str = Field(..., description="기관명", examples=["KB증권", "국민은행"])
-    type: str = Field(
-        ..., description="유형", examples=["증권사", "은행", "기타"]
-    )
+    type: str = Field(..., description="유형", examples=["증권사", "은행"])
+    display_order: int = Field(0, description="표시 순서", examples=[0])
+
+
+class UpdateInstitutionRequest(BaseModel):
+    name: str = Field(..., description="기관명", examples=["KB증권", "국민은행"])
+    type: str = Field(..., description="유형", examples=["증권사", "은행"])
+    display_order: int = Field(0, description="표시 순서", examples=[0])
 
 
 class InstitutionResponseData(BaseModel):
     institution_id: int | None = Field(None, description="기관 ID", examples=[1])
     name: str = Field(..., description="기관명", examples=["KB증권"])
     type: str = Field(..., description="유형", examples=["증권사"])
-    created_at: str = Field(..., description="생성 시각", examples=["2025-01-01T00:00:00"])
+    display_order: int = Field(0, description="표시 순서", examples=[0])
+    created_at: str = Field(
+        ..., description="생성 시각", examples=["2025-01-01T00:00:00"]
+    )
 
 
 class InstitutionResponse(ApiResponse[InstitutionResponseData]):
+    pass
+
+
+class InstitutionsResponseData(BaseModel):
+    items: list[InstitutionResponseData] = Field(..., description="기관 목록")
+    max_display_order: int = Field(0, description="최대 표시 순서", examples=[10])
+
+
+class InstitutionsResponse(ApiResponse[InstitutionsResponseData]):
+    pass
+
+
+class InstitutionDisplayOrderItem(BaseModel):
+    institution_id: int = Field(..., description="기관 ID", examples=[1])
+    display_order: int = Field(..., description="표시 순서", examples=[1])
+
+
+class UpdateInstitutionDisplayOrderRequest(BaseModel):
+    items: list[InstitutionDisplayOrderItem] = Field(
+        ..., description="표시 순서 변경 항목"
+    )
+
+
+class DisplayOrderUpdateResponseData(BaseModel):
+    updated_count: int = Field(..., description="갱신된 건수", examples=[3])
+
+
+class DisplayOrderUpdateResponse(ApiResponse[DisplayOrderUpdateResponseData]):
     pass
 
 
@@ -39,6 +74,17 @@ class InstitutionResponse(ApiResponse[InstitutionResponseData]):
 
 
 class CreateProductRequest(BaseModel):
+    product_name: str = Field(..., description="상품명", examples=["KOSPI ETF"])
+    asset_class: str = Field(..., description="자산군", examples=["주식"])
+    region: str = Field(..., description="지역", examples=["대한민국"])
+    currency: str = Field(..., description="통화", examples=["KRW", "USD"])
+    investment_type: str = Field(..., description="투자유형", examples=["ETF", "직접"])
+    characteristics: list[str] | None = Field(None, description="특성 태그")
+    risk_level: str = Field(..., description="위험도", examples=["안전", "위험"])
+    display_order: int = Field(0, description="표시 순서", examples=[0])
+
+
+class UpdateProductRequest(BaseModel):
     product_name: str = Field(..., description="상품명", examples=["KOSPI ETF"])
     asset_class: str = Field(..., description="자산군", examples=["주식"])
     region: str = Field(..., description="지역", examples=["대한민국"])
@@ -57,11 +103,21 @@ class ProductResponseData(BaseModel):
     investment_type: str = Field(..., description="투자유형")
     characteristics: list[str] | None = Field(None, description="특성 태그")
     risk_level: str = Field(..., description="위험도")
+    display_order: int = Field(0, description="표시 순서")
     created_at: str = Field(..., description="생성 시각")
 
 
 class ProductResponse(ApiResponse[ProductResponseData]):
     pass
+
+
+class ProductDisplayOrderItem(BaseModel):
+    product_id: int = Field(..., description="상품 ID", examples=[10])
+    display_order: int = Field(..., description="표시 순서", examples=[1])
+
+
+class UpdateProductDisplayOrderRequest(BaseModel):
+    items: list[ProductDisplayOrderItem] = Field(..., description="표시 순서 변경 항목")
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +128,22 @@ class ProductResponse(ApiResponse[ProductResponseData]):
 class CreateAccountRequest(BaseModel):
     institution_id: int = Field(..., description="기관 ID", examples=[1])
     name: str = Field(..., description="계좌명", examples=["위탁계좌-1"])
-    type: str = Field(..., description="계좌유형", examples=["위탁"])
+    type: str = Field(
+        ...,
+        description="계좌유형",
+        examples=["위탁계좌", "연금계좌", "ISA계좌", "예금계좌", "금현물계좌", "CMA"],
+    )
+    display_order: int = Field(0, description="표시 순서", examples=[0])
+
+
+class UpdateAccountRequest(BaseModel):
+    name: str = Field(..., description="계좌명", examples=["위탁계좌-1"])
+    type: str = Field(
+        ...,
+        description="계좌유형",
+        examples=["위탁계좌", "연금계좌", "ISA계좌", "예금계좌", "금현물계좌", "CMA"],
+    )
+    display_order: int = Field(0, description="표시 순서", examples=[0])
 
 
 class AccountResponseData(BaseModel):
@@ -80,11 +151,21 @@ class AccountResponseData(BaseModel):
     institution_id: int = Field(..., description="기관 ID", examples=[1])
     name: str = Field(..., description="계좌명")
     type: str = Field(..., description="계좌유형")
+    display_order: int = Field(0, description="표시 순서", examples=[0])
     created_at: str = Field(..., description="생성 시각")
 
 
 class AccountResponse(ApiResponse[AccountResponseData]):
     pass
+
+
+class AccountDisplayOrderItem(BaseModel):
+    account_id: int = Field(..., description="계좌 ID", examples=[3])
+    display_order: int = Field(..., description="표시 순서", examples=[1])
+
+
+class UpdateAccountDisplayOrderRequest(BaseModel):
+    items: list[AccountDisplayOrderItem] = Field(..., description="표시 순서 변경 항목")
 
 
 # ---------------------------------------------------------------------------
@@ -156,9 +237,14 @@ class CreateSnapshotRequest(BaseModel):
 
 
 class SnapshotHoldingResponseData(BaseModel):
+    snapshot_holding_id: int | None = Field(None, description="스냅샷 보유자산 ID")
+    snapshot_id: int | None = Field(None, description="스냅샷 ID")
     holding_id: int = Field(..., description="보유자산 ID")
     valuation_amount: float = Field(..., description="평가 금액")
-    data_source: str = Field(..., description="데이터 출처", examples=["auto", "manual"])
+    data_source: str = Field(
+        ..., description="데이터 출처", examples=["auto", "manual"]
+    )
+    created_at: str | None = Field(None, description="생성 시각")
 
 
 class SnapshotResponseData(BaseModel):
@@ -193,7 +279,9 @@ class LockSnapshotResponse(ApiResponse[dict[str, Any] | None]):
 
 class CreateWeeklySnapshotRequest(BaseModel):
     user_id: int = Field(..., description="사용자 ID", examples=[1])
-    reference_date: date = Field(..., description="주간 기준일", examples=["2025-01-10"])
+    reference_date: date = Field(
+        ..., description="주간 기준일", examples=["2025-01-10"]
+    )
     source_snapshot_id: int = Field(..., description="소스 스냅샷 ID", examples=[11])
 
 
@@ -207,7 +295,9 @@ class WeeklySnapshotResponse(ApiResponse[WeeklySnapshotResponseData]):
 
 class CreateAnnualSnapshotRequest(BaseModel):
     user_id: int = Field(..., description="사용자 ID", examples=[1])
-    reference_date: date = Field(..., description="연간 기준일", examples=["2025-12-31"])
+    reference_date: date = Field(
+        ..., description="연간 기준일", examples=["2025-12-31"]
+    )
     source_snapshot_id: int = Field(..., description="소스 스냅샷 ID", examples=[11])
 
 

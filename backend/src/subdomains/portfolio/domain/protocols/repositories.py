@@ -31,6 +31,16 @@ class InstitutionRepository(ABC):
     @abstractmethod
     async def get_all(self, conn: Connection) -> list[Institution]: ...
 
+    @abstractmethod
+    async def update(
+        self, conn: Connection, institution: Institution
+    ) -> Institution: ...
+
+    @abstractmethod
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int: ...
+
 
 class ProductRepository(ABC):
     @abstractmethod
@@ -52,7 +62,15 @@ class ProductRepository(ABC):
     ) -> bool: ...
 
     @abstractmethod
+    async def update(self, conn: Connection, product: Product) -> Product: ...
+
+    @abstractmethod
     async def get_all(self, conn: Connection) -> list[Product]: ...
+
+    @abstractmethod
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int: ...
 
 
 class AccountRepository(ABC):
@@ -68,12 +86,20 @@ class AccountRepository(ABC):
     ) -> bool: ...
 
     @abstractmethod
+    async def update(self, conn: Connection, account: Account) -> Account: ...
+
+    @abstractmethod
     async def find_many(
         self, conn: Connection, account_ids: Iterable[int]
     ) -> list[Account]: ...
 
     @abstractmethod
     async def get_all(self, conn: Connection) -> list[Account]: ...
+
+    @abstractmethod
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int: ...
 
 
 class AccountGroupRepository(ABC):

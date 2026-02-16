@@ -39,7 +39,6 @@ from shared.schemas import ApiResponse
 from core.common_responses import common_responses
 from dependencies import get_user_app_service
 
-
 # ============================================================================
 # Router 정의
 # ============================================================================

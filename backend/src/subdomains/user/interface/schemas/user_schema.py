@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field, EmailStr
 
 from shared.schemas import ApiResponse
 
-
 # ============================================================================
 # POST /api/users - 사용자 생성
 # ============================================================================

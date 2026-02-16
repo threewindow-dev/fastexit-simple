@@ -42,7 +42,6 @@ from subdomains.portfolio.infra.repositories import (
 )
 from subdomains.portfolio.application.services import PortfolioAppService
 
-
 # ============================================================================
 # 전역 인스턴스
 # ============================================================================
