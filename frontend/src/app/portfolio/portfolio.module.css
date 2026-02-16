@@ -287,6 +287,11 @@
   text-align: right;
 }
 
+.amountInputDirty {
+  background-color: #fff3cd;
+  border-color: #f0ad4e;
+}
+
 .amountCell {
   text-align: right;
 }

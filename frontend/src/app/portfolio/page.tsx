@@ -195,6 +195,33 @@ export default function PortfolioPage() {
   const [savingProductOrder, setSavingProductOrder] = useState(false);
 
   const snapshotDraftStorageKey = (snapshotId: number) => `snapshot-holdings-draft:${snapshotId}`;
+  const buildSnapshotDrafts = (snapshotId: number, useStored: boolean) => {
+    let storedDrafts: Record<number, string> = {};
+    if (useStored && typeof window !== 'undefined') {
+      const raw = window.localStorage.getItem(snapshotDraftStorageKey(snapshotId));
+      if (raw) {
+        try {
+          storedDrafts = JSON.parse(raw);
+        } catch {
+          storedDrafts = {};
+        }
+      }
+    }
+
+    const draftMap: Record<number, string> = {};
+    holdings
+      .filter((holding) => !holding.deleted_at)
+      .forEach((holding) => {
+        const existing = snapshotHoldings.find(
+          (item) => item.snapshot_id === snapshotId && item.holding_id === holding.holding_id
+        );
+        const storedValue = storedDrafts[holding.holding_id];
+        draftMap[holding.holding_id] = storedValue ?? (existing?.valuation_amount != null
+          ? formatSnapshotAmountInput(String(existing.valuation_amount))
+          : '');
+      });
+    return draftMap;
+  };
 
   const getSortedInstitutions = () =>
     [...institutions].sort((a, b) => a.display_order - b.display_order);
@@ -387,6 +414,21 @@ export default function PortfolioPage() {
     account_group_id: '',
   });
 
+  const sortedSnapshots = [...snapshots].sort((a, b) => {
+    const dateDiff =
+      new Date(b.reference_date).getTime() -
+      new Date(a.reference_date).getTime();
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+    return b.snapshot_id - a.snapshot_id;
+  });
+
+  const selectedSnapshot = selectedSnapshotId
+    ? snapshots.find((snap) => snap.snapshot_id === Number(selectedSnapshotId)) || null
+    : null;
+  const isSelectedSnapshotLocked = selectedSnapshot?.status === 'locked';
+
   useEffect(() => {
     if (activeTab === 'institutions') {
       fetchInstitutions();
@@ -420,32 +462,7 @@ export default function PortfolioPage() {
     }
 
     const snapshotId = parseInt(selectedSnapshotId, 10);
-    const draftMap: Record<number, string> = {};
-    let storedDrafts: Record<number, string> = {};
-
-    if (typeof window !== 'undefined') {
-      const raw = window.localStorage.getItem(snapshotDraftStorageKey(snapshotId));
-      if (raw) {
-        try {
-          storedDrafts = JSON.parse(raw);
-        } catch {
-          storedDrafts = {};
-        }
-      }
-    }
-
-    holdings
-      .filter((holding) => !holding.deleted_at)
-      .forEach((holding) => {
-        const existing = snapshotHoldings.find(
-          (item) => item.snapshot_id === snapshotId && item.holding_id === holding.holding_id
-        );
-        const storedValue = storedDrafts[holding.holding_id];
-        draftMap[holding.holding_id] = storedValue ?? (existing?.valuation_amount != null
-          ? formatSnapshotAmountInput(String(existing.valuation_amount))
-          : '');
-      });
-    setSnapshotHoldingDrafts(draftMap);
+    setSnapshotHoldingDrafts(buildSnapshotDrafts(snapshotId, true));
   }, [selectedSnapshotId, holdings, snapshotHoldings]);
 
   useEffect(() => {
@@ -1007,6 +1024,17 @@ export default function PortfolioPage() {
     }
   };
 
+  const handleResetSnapshotDrafts = () => {
+    if (!selectedSnapshotId) {
+      return;
+    }
+    const snapshotId = parseInt(selectedSnapshotId, 10);
+    setSnapshotHoldingDrafts(buildSnapshotDrafts(snapshotId, false));
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(snapshotDraftStorageKey(snapshotId));
+    }
+  };
+
   const handleCloneSnapshot = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -1062,8 +1090,14 @@ export default function PortfolioPage() {
         method: 'POST',
       });
       if (!response.ok) throw new Error('Failed to lock snapshot');
+      const lockedAt = new Date().toISOString();
+      setSnapshots((prev) => prev.map((snap) => (
+        snap.snapshot_id === snapshotId
+          ? { ...snap, status: 'locked', locked_at: lockedAt }
+          : snap
+      )));
       alert('스냅샷이 잠금 처리되었습니다.');
-      fetchSnapshots();
+      await fetchSnapshots();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to lock snapshot');
     }
@@ -1701,33 +1735,23 @@ export default function PortfolioPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...snapshots]
-                  .sort((a, b) => {
-                    const dateDiff =
-                      new Date(b.reference_date).getTime() -
-                      new Date(a.reference_date).getTime();
-                    if (dateDiff !== 0) {
-                      return dateDiff;
-                    }
-                    return b.snapshot_id - a.snapshot_id;
-                  })
-                  .map((snap, index) => (
+                {sortedSnapshots.map((snap, index) => (
                   <tr key={snap.snapshot_id}>
                     <td>{index + 1}</td>
                     <td>{snap.reference_date}</td>
                     <td>{snap.status === 'locked' ? '🔒 잠금' : '✏️ 편집 가능'}</td>
                     <td>{snap.locked_at ? new Date(snap.locked_at).toLocaleString() : '-'}</td>
                     <td>
-                      {snap.status !== 'locked' && (
-                        <div className={styles.actionButtons}>
-                          <button onClick={() => openSnapshotHoldings(snap.snapshot_id)}>
-                            보유자산 보기
-                          </button>
+                      <div className={styles.actionButtons}>
+                        <button onClick={() => openSnapshotHoldings(snap.snapshot_id)}>
+                          보유자산 보기
+                        </button>
+                        {snap.status !== 'locked' && (
                           <button onClick={() => handleLockSnapshot(snap.snapshot_id)}>
                             잠금
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1932,12 +1956,20 @@ export default function PortfolioPage() {
         <div className={styles.tabContent}>
           <div className={styles.sectionHeader}>
             <h2>스냅샷 보유자산 입력</h2>
-            <button
-              onClick={handleSaveSnapshotHoldings}
-              disabled={!selectedSnapshotId || savingSnapshotHoldings}
-            >
-              {savingSnapshotHoldings ? '저장 중...' : '일괄 저장'}
-            </button>
+            <div className={styles.actionButtons}>
+              <button
+                onClick={handleResetSnapshotDrafts}
+                disabled={!selectedSnapshotId}
+              >
+                로컬 값 초기화
+              </button>
+              <button
+                onClick={handleSaveSnapshotHoldings}
+                disabled={!selectedSnapshotId || savingSnapshotHoldings || isSelectedSnapshotLocked}
+              >
+                {savingSnapshotHoldings ? '저장 중...' : '일괄 저장'}
+              </button>
+            </div>
           </div>
 
           <div className={styles.form}>
@@ -1947,7 +1979,7 @@ export default function PortfolioPage() {
               required
             >
               <option value="">스냅샷 선택</option>
-              {snapshots.map((snap) => (
+              {sortedSnapshots.map((snap) => (
                 <option key={snap.snapshot_id} value={snap.snapshot_id}>
                   {snap.reference_date}
                 </option>
@@ -1956,7 +1988,7 @@ export default function PortfolioPage() {
             <select
               value={snapshotHoldingDataSource}
               onChange={(e) => setSnapshotHoldingDataSource(e.target.value)}
-              disabled={!selectedSnapshotId}
+              disabled={!selectedSnapshotId || isSelectedSnapshotLocked}
             >
               <option value="manual">수동입력</option>
               <option value="auto">API연동</option>
@@ -1972,6 +2004,7 @@ export default function PortfolioPage() {
             (() => {
               const snapshotId = parseInt(selectedSnapshotId, 10);
               const snapshot = snapshots.find((s) => s.snapshot_id === snapshotId) || null;
+              const isSnapshotLocked = snapshot?.status === 'locked';
               const holdingMap = new Map<number, SnapshotHolding>();
               snapshotHoldings
                 .filter((item) => item.snapshot_id === snapshotId)
@@ -2020,9 +2053,27 @@ export default function PortfolioPage() {
                 return Number.isNaN(parsed) ? 0 : parsed;
               };
 
-              const formatAmount = (value: number) => value.toLocaleString();
+              const isDraftDifferent = (
+                draftValue: string | number | null | undefined,
+                existingValue: string | number | null | undefined
+              ) => {
+                const draftNormalized = normalizeSnapshotAmountInput(String(draftValue ?? ''));
+                const existingNormalized = normalizeSnapshotAmountInput(String(existingValue ?? ''));
+                if (draftNormalized === '' && existingNormalized === '') {
+                  return false;
+                }
+                const draftNumber = parseAmount(draftNormalized);
+                const existingNumber = parseAmount(existingNormalized);
+                return draftNumber !== existingNumber;
+              };
 
-              let totalSum = 0;
+              const formatAmount = (value: number) => value.toLocaleString();
+              const formatRatio = (value: number) => `${value.toFixed(2)}%`;
+
+              const totalSum = views.reduce((sum, view) => {
+                const draftValue = snapshotHoldingDrafts[view.holding.holding_id] ?? '';
+                return sum + parseAmount(draftValue);
+              }, 0);
               let accountSum = 0;
               let currentAccountId: number | null = null;
               let currentAccountLabel = '';
@@ -2032,7 +2083,6 @@ export default function PortfolioPage() {
                 const accountId = view.account?.account_id ?? view.holding.account_id;
                 const accountLabel = `${view.institution?.name || '-'} - ${view.account?.name || '-'}`;
                 const amount = parseAmount(snapshotHoldingDrafts[view.holding.holding_id] ?? '');
-                totalSum += amount;
 
                 if (currentAccountId === null) {
                   currentAccountId = accountId;
@@ -2043,6 +2093,9 @@ export default function PortfolioPage() {
                     <tr key={`summary-${currentAccountId}`}>
                       <td colSpan={4}>계좌 합계 ({currentAccountLabel})</td>
                       <td className={styles.amountCell}>{formatAmount(accountSum)}</td>
+                      <td className={styles.amountCell}>
+                        {formatRatio(totalSum > 0 ? (accountSum / totalSum) * 100 : 0)}
+                      </td>
                       <td></td>
                     </tr>
                   );
@@ -2060,13 +2113,18 @@ export default function PortfolioPage() {
                     <td>{view.account?.name || '-'}</td>
                     <td>{view.product?.product_name || '-'}</td>
                     <td>
+                      {(() => {
+                        const draftValue = snapshotHoldingDrafts[view.holding.holding_id] ?? '';
+                        const isDirty = isDraftDifferent(draftValue, view.existing?.valuation_amount);
+                        return (
                       <input
                           type="text"
                           inputMode="decimal"
-                        className={styles.amountInput}
+                          className={`${styles.amountInput}${isDirty ? ` ${styles.amountInputDirty}` : ''}`}
                         data-index={index}
                           data-holding-id={view.holding.holding_id}
-                        value={snapshotHoldingDrafts[view.holding.holding_id] ?? ''}
+                          value={draftValue}
+                          disabled={isSnapshotLocked}
                         onChange={(e) =>
                           setSnapshotHoldingDrafts((prev) => ({
                             ...prev,
@@ -2084,6 +2142,11 @@ export default function PortfolioPage() {
                           }}
                         onKeyDown={handleSnapshotAmountKeyDown}
                       />
+                        );
+                      })()}
+                    </td>
+                    <td className={styles.amountCell}>
+                      {formatRatio(totalSum > 0 ? (amount / totalSum) * 100 : 0)}
                     </td>
                     <td>{getDataSourceLabel(view.existing?.data_source || snapshotHoldingDataSource)}</td>
                   </tr>
@@ -2095,6 +2158,9 @@ export default function PortfolioPage() {
                   <tr key={`summary-${currentAccountId}-final`}>
                     <td colSpan={4}>계좌 합계 ({currentAccountLabel})</td>
                     <td className={styles.amountCell}>{formatAmount(accountSum)}</td>
+                    <td className={styles.amountCell}>
+                      {formatRatio(totalSum > 0 ? (accountSum / totalSum) * 100 : 0)}
+                    </td>
                     <td></td>
                   </tr>
                 );
@@ -2109,6 +2175,7 @@ export default function PortfolioPage() {
                       <th>계좌이름</th>
                       <th>상품이름</th>
                       <th>평가금액</th>
+                      <th>비중</th>
                       <th>데이터소스</th>
                     </tr>
                   </thead>
@@ -2116,12 +2183,14 @@ export default function PortfolioPage() {
                     <tr>
                       <td colSpan={4}>전체 합계</td>
                       <td className={styles.amountCell}>{formatAmount(totalSum)}</td>
+                      <td className={styles.amountCell}>{formatRatio(totalSum > 0 ? 100 : 0)}</td>
                       <td></td>
                     </tr>
                     {rows}
                     <tr>
                       <td colSpan={4}>전체 합계</td>
                       <td className={styles.amountCell}>{formatAmount(totalSum)}</td>
+                      <td className={styles.amountCell}>{formatRatio(totalSum > 0 ? 100 : 0)}</td>
                       <td></td>
                     </tr>
                   </tbody>
