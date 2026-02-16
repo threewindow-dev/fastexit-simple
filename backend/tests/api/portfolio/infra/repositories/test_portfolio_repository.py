@@ -10,8 +10,6 @@ import pytest_asyncio
 import psycopg
 from datetime import date
 from pathlib import Path
-from testcontainers.postgres import PostgresContainer
-from testcontainers.core.waiting_utils import wait_for_logs
 from contextvars import ContextVar
 
 from subdomains.portfolio.domain.models import (
@@ -55,7 +53,7 @@ class MockTransaction:
 
 def _get_schema_files() -> list[Path]:
     """Get all SQL schema files in order (numerically sorted)"""
-    schema_dir = Path(__file__).parent.parent.parent.parent / "sql" / "schema"
+    schema_dir = Path(__file__).resolve().parents[5] / "sql" / "schema"
     if not schema_dir.exists():
         raise FileNotFoundError(f"Schema directory not found: {schema_dir}")
 
@@ -113,16 +111,6 @@ async def _initialize_schema(conn: psycopg.AsyncConnection) -> None:
                     and "relation" not in error_msg
                 ):
                     raise
-
-
-@pytest.fixture(scope="module")
-def postgres_container():
-    """Start PostgreSQL container for integration tests"""
-    container = PostgresContainer("postgres:17-alpine")
-    container.start()
-    wait_for_logs(container, "database system is ready to accept connections")
-    yield container
-    container.stop()
 
 
 @pytest_asyncio.fixture()

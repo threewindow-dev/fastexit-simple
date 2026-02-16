@@ -14,6 +14,7 @@ from subdomains.user.domain.protocols.user_repository_protocol import UserReposi
 from subdomains.user.domain.errors import DuplicateUserError
 from shared.errors import InfraError
 from shared.protocols.transaction import Connection
+from shared.decorators import use_transaction
 
 
 class PsycopgUserRepository(UserRepository):
@@ -24,9 +25,16 @@ class PsycopgUserRepository(UserRepository):
     Connection을 메서드 파라미터로 받아 동작.
     """
 
+    @staticmethod
+    def _require_conn(conn: Connection) -> psycopg.AsyncConnection:
+        if not isinstance(conn, psycopg.AsyncConnection):
+            raise InfraError("Connection is not an AsyncConnection")
+        return conn
+
+    @use_transaction()
     async def add(self, conn: Connection, user: User) -> User:
         """새 사용자 저장"""
-        connection = conn
+        connection = self._require_conn(conn)
         try:
             async with connection.cursor() as cur:
                 await cur.execute(
@@ -65,9 +73,10 @@ class PsycopgUserRepository(UserRepository):
             message="Failed to save user: no row returned",
         )
 
+    @use_transaction()
     async def update(self, conn: Connection, user: User) -> User:
         """사용자 정보 업데이트"""
-        connection = conn
+        connection = self._require_conn(conn)
         try:
             async with connection.cursor() as cur:
                 await cur.execute(
@@ -102,9 +111,10 @@ class PsycopgUserRepository(UserRepository):
             message="Failed to update user: no row returned",
         )
 
+    @use_transaction()
     async def remove(self, conn: Connection, user_id: int) -> None:
         """사용자 삭제"""
-        connection = conn
+        connection = self._require_conn(conn)
         try:
             async with connection.cursor() as cur:
                 await cur.execute(
@@ -118,9 +128,10 @@ class PsycopgUserRepository(UserRepository):
                 origin_exc=exc,
             )
 
+    @use_transaction()
     async def find_by_id(self, conn: Connection, user_id: int) -> User | None:
         """ID로 사용자 검색"""
-        connection = conn
+        connection = self._require_conn(conn)
         try:
             async with connection.cursor() as cur:
                 await cur.execute(
@@ -146,11 +157,12 @@ class PsycopgUserRepository(UserRepository):
 
         return None
 
+    @use_transaction()
     async def find_all(
         self, conn: Connection, skip: int = 0, limit: int = 100
     ) -> tuple[list[User], int]:
         """모든 사용자 조회 (페이징)"""
-        connection = conn
+        connection = self._require_conn(conn)
         try:
             async with connection.cursor() as cur:
                 # 전체 개수 조회
@@ -184,9 +196,10 @@ class PsycopgUserRepository(UserRepository):
 
         return users, total
 
+    @use_transaction()
     async def exists_by_username(self, conn: Connection, username: str) -> bool:
         """사용자명 존재 여부"""
-        connection = conn
+        connection = self._require_conn(conn)
         try:
             async with connection.cursor() as cur:
                 await cur.execute(
@@ -202,9 +215,10 @@ class PsycopgUserRepository(UserRepository):
                 origin_exc=exc,
             )
 
+    @use_transaction()
     async def exists_by_email(self, conn: Connection, email: str) -> bool:
         """이메일 존재 여부"""
-        connection = conn
+        connection = self._require_conn(conn)
         try:
             async with connection.cursor() as cur:
                 await cur.execute(

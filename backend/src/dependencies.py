@@ -134,6 +134,15 @@ async def get_user_app_service() -> AsyncGenerator[UserAppService, None]:
             transaction_manager=tx_manager,
         )
         yield service
+    else:
+        tx_manager = PsycopgTransactionManager(db_pool)
+        repository = PsycopgUserRepository()
+
+        service = UserAppService(
+            user_repository=repository,
+            transaction_manager=tx_manager,
+        )
+        yield service
 
 
 # ============================================================================

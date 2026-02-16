@@ -4,28 +4,60 @@ API integration tests for User router
 Tests full HTTP endpoints with real database using Testcontainers
 """
 
-import os
-import re
-
 import pytest
 import pytest_asyncio
 import psycopg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
 from testcontainers.postgres import PostgresContainer
 
 import core.config
+from core.config import AppConfig, AuthConfig, DatabaseConfig
 from dependencies import set_db_pool
-from main import register_exception_handlers
+
+from core.exception_handlers import register_exception_handlers
 from shared.infra.database import create_sqlalchemy_pool
 from subdomains.user.interface.routers import router as user_router
 
 
-@pytest.fixture(scope="module")
-def test_app():
+def _set_test_config() -> None:
+    core.config._config = AppConfig(
+        repository_type="sqlalchemy",
+        database=DatabaseConfig(
+            host="localhost",
+            port=5432,
+            name="test",
+            user="test",
+            password="test",
+            pool_size=5,
+            max_overflow=10,
+            sql_echo=False,
+            readonly_enabled=False,
+        ),
+        auth=AuthConfig(
+            jwt_secret="test-secret",
+            jwt_algorithm="HS256",
+            jwt_expires_in_minutes=60,
+        ),
+        log_level="INFO",
+        log_json_format=True,
+    )
+
+
+def _get_plain_conn_str(container: PostgresContainer) -> str:
+    conn_str = container.get_connection_url()
+    return conn_str.replace("postgresql+psycopg2", "postgresql").replace(
+        "postgresql+psycopg", "postgresql"
+    )
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_app():
     """Create a test FastAPI app without lifespan"""
     app = FastAPI(title="FastExit API Test")
+
+    _set_test_config()
 
     # 전역 예외 핸들러 등록
     register_exception_handlers(app)
@@ -45,37 +77,10 @@ def test_app():
     return app
 
 
-@pytest.fixture(scope="module")
-def postgres_container():
-    """Start PostgreSQL container for API tests"""
-    container = PostgresContainer("postgres:17-alpine")
-    container.start()
-    container.waiting_for(
-        re.compile(r".*database system is ready to accept connections.*", re.DOTALL)
-    )
-
-    # Set environment variables immediately after container starts
-    os.environ["DB_HOST"] = str(container.get_container_host_ip())
-    os.environ["DB_PORT"] = str(container.get_exposed_port(5432))
-    os.environ["DB_NAME"] = str(container.dbname)
-    os.environ["DB_USER"] = str(container.username)
-    os.environ["DB_PASSWORD"] = str(container.password)
-
-    # Reset config cache to pick up new environment variables
-    core.config._config = None
-
-    yield container
-    container.stop()
-
-
 @pytest_asyncio.fixture()
 async def test_db_pool(postgres_container):
     """Create test database pool with initialized schema"""
-    conn_str = postgres_container.get_connection_url()
-    # Convert SQLAlchemy-style URL to plain psycopg DSN
-    conn_str = conn_str.replace("postgresql+psycopg2", "postgresql").replace(
-        "postgresql+psycopg", "postgresql"
-    )
+    conn_str = _get_plain_conn_str(postgres_container)
 
     # Initialize schema
     async with await psycopg.AsyncConnection.connect(
@@ -94,10 +99,7 @@ async def test_db_pool(postgres_container):
             """
             )
 
-    # Build DSN from container
-    dsn = f"postgresql://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
-
-    pool = create_sqlalchemy_pool(dsn_write=dsn)
+    pool = create_sqlalchemy_pool(dsn_write=conn_str)
     await pool.initialize()
 
     yield pool
@@ -106,10 +108,10 @@ async def test_db_pool(postgres_container):
 
 
 @pytest_asyncio.fixture
-async def clean_db(test_db_pool):
+async def clean_db(test_db_pool, postgres_container):
     """Clean database before each test"""
     # Use psycopg connection directly for table cleanup
-    conn_str = f"postgresql://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
+    conn_str = _get_plain_conn_str(postgres_container)
 
     async with await psycopg.AsyncConnection.connect(
         conn_str, autocommit=False, row_factory=psycopg.rows.dict_row
@@ -137,21 +139,27 @@ async def clean_db(test_db_pool):
         await conn.commit()
 
 
-@pytest.fixture
-def client(test_app, test_db_pool):
+@pytest_asyncio.fixture
+async def client(test_app, test_db_pool):
     """Create FastAPI test client with test database"""
+    _set_test_config()
+
     # Override app's database pool
     set_db_pool(test_db_pool)
 
     # Create TestClient with test app
-    with TestClient(test_app) as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app),
+        base_url="http://testserver",
+        follow_redirects=True,
+    ) as client:
         yield client
 
 
 class TestCreateUser:
     """Test POST /api/users endpoint"""
 
-    def test_create_user_success(self, client, clean_db):
+    async def test_create_user_success(self, client, clean_db):
         """Should create user and return 201"""
         # Arrange
         payload = {
@@ -161,7 +169,7 @@ class TestCreateUser:
         }
 
         # Act
-        response = client.post("/api/users", json=payload)
+        response = await client.post("/api/users", json=payload)
 
         # Assert
         assert response.status_code == 201
@@ -172,7 +180,7 @@ class TestCreateUser:
         assert data["data"]["email"] == "john@example.com"
         assert data["data"]["id"] is not None
 
-    def test_create_user_duplicate_username_returns_400(self, client, clean_db):
+    async def test_create_user_duplicate_username_returns_400(self, client, clean_db):
         """Should return 400 for duplicate username"""
         # Arrange
         payload1 = {
@@ -186,10 +194,10 @@ class TestCreateUser:
             "full_name": "John 2",
         }
 
-        client.post("/api/users", json=payload1)
+        await client.post("/api/users", json=payload1)
 
         # Act
-        response = client.post("/api/users", json=payload2)
+        response = await client.post("/api/users", json=payload2)
 
         # Assert
         assert response.status_code == 400
@@ -200,7 +208,7 @@ class TestCreateUser:
             or "already exists" in data["message"].lower()
         )
 
-    def test_create_user_invalid_username_returns_400(self, client, clean_db):
+    async def test_create_user_invalid_username_returns_400(self, client, clean_db):
         """Should return 400 for invalid username (< 3 chars)"""
         # Arrange
         payload = {
@@ -210,14 +218,14 @@ class TestCreateUser:
         }
 
         # Act
-        response = client.post("/api/users", json=payload)
+        response = await client.post("/api/users", json=payload)
 
         # Assert
         assert response.status_code == 400
         data = response.json()
         assert data["code"] != 0
 
-    def test_create_user_invalid_email_returns_422(self, client, clean_db):
+    async def test_create_user_invalid_email_returns_422(self, client, clean_db):
         """Should return 422 for invalid email format (Pydantic validation)"""
         # Arrange
         payload = {
@@ -227,7 +235,7 @@ class TestCreateUser:
         }
 
         # Act
-        response = client.post("/api/users", json=payload)
+        response = await client.post("/api/users", json=payload)
 
         # Assert
         assert response.status_code == 422  # FastAPI validation error
@@ -236,7 +244,7 @@ class TestCreateUser:
 class TestGetUser:
     """Test GET /api/users/{user_id} endpoint"""
 
-    def test_get_user_success(self, client, clean_db):
+    async def test_get_user_success(self, client, clean_db):
         """Should return user by ID"""
         # Arrange - create user
         create_payload = {
@@ -244,11 +252,11 @@ class TestGetUser:
             "email": "john@example.com",
             "full_name": "John Doe",
         }
-        create_response = client.post("/api/users", json=create_payload)
+        create_response = await client.post("/api/users", json=create_payload)
         user_id = create_response.json()["data"]["id"]
 
         # Act
-        response = client.get(f"/api/users/{user_id}")
+        response = await client.get(f"/api/users/{user_id}")
 
         # Assert
         assert response.status_code == 200
@@ -257,10 +265,10 @@ class TestGetUser:
         assert data["data"]["id"] == user_id
         assert data["data"]["username"] == "john_doe"
 
-    def test_get_user_not_found_returns_404(self, client, clean_db):
+    async def test_get_user_not_found_returns_404(self, client, clean_db):
         """Should return 404 for non-existent user"""
         # Act
-        response = client.get("/api/users/999")
+        response = await client.get("/api/users/999")
 
         # Assert
         assert response.status_code == 404
@@ -271,7 +279,7 @@ class TestGetUser:
 class TestListUsers:
     """Test GET /api/users endpoint"""
 
-    def test_list_users_success(self, client, clean_db):
+    async def test_list_users_success(self, client, clean_db):
         """Should return list of users with pagination"""
         # Arrange - create 3 users
         for i in range(3):
@@ -280,10 +288,10 @@ class TestListUsers:
                 "email": f"user{i}@example.com",
                 "full_name": f"User {i}",
             }
-            client.post("/api/users", json=payload)
+            await client.post("/api/users", json=payload)
 
         # Act
-        response = client.get("/api/users?skip=0&limit=10")
+        response = await client.get("/api/users?skip=0&limit=10")
 
         # Assert
         assert response.status_code == 200
@@ -292,15 +300,15 @@ class TestListUsers:
         assert len(data["data"]["items"]) == 3
         assert data["data"]["total_count"] == 3
 
-    def test_list_users_with_pagination(self, client, clean_db):
+    async def test_list_users_with_pagination(self, client, clean_db):
         """Should return correct page of users"""
         # Arrange - create 5 users
         for i in range(5):
             payload = {"username": f"user_{i}", "email": f"user{i}@example.com"}
-            client.post("/api/users", json=payload)
+            await client.post("/api/users", json=payload)
 
         # Act
-        response = client.get("/api/users?skip=2&limit=2")
+        response = await client.get("/api/users?skip=2&limit=2")
 
         # Assert
         assert response.status_code == 200
@@ -311,10 +319,10 @@ class TestListUsers:
         assert data["data"]["skip"] == 2
         assert data["data"]["limit"] == 2
 
-    def test_list_users_empty_database(self, client, clean_db):
+    async def test_list_users_empty_database(self, client, clean_db):
         """Should return empty list for empty database"""
         # Act
-        response = client.get("/api/users")
+        response = await client.get("/api/users")
 
         # Assert
         assert response.status_code == 200
@@ -327,7 +335,7 @@ class TestListUsers:
 class TestUpdateUser:
     """Test PATCH /api/users/{user_id} endpoint"""
 
-    def test_update_user_success(self, client, clean_db):
+    async def test_update_user_success(self, client, clean_db):
         """Should update user full name"""
         # Arrange - create user
         create_payload = {
@@ -335,13 +343,13 @@ class TestUpdateUser:
             "email": "john@example.com",
             "full_name": "John Doe",
         }
-        create_response = client.post("/api/users", json=create_payload)
+        create_response = await client.post("/api/users", json=create_payload)
         user_id = create_response.json()["data"]["id"]
 
         update_payload = {"full_name": "Jane Doe"}
 
         # Act
-        response = client.patch(f"/api/users/{user_id}", json=update_payload)
+        response = await client.patch(f"/api/users/{user_id}", json=update_payload)
 
         # Assert
         assert response.status_code == 200
@@ -350,20 +358,20 @@ class TestUpdateUser:
         assert data["message"] == "User updated successfully"
         assert data["data"]["full_name"] == "Jane Doe"
 
-    def test_update_user_not_found_returns_404(self, client, clean_db):
+    async def test_update_user_not_found_returns_404(self, client, clean_db):
         """Should return 404 for non-existent user"""
         # Arrange
         update_payload = {"full_name": "New Name"}
 
         # Act
-        response = client.patch("/api/users/999", json=update_payload)
+        response = await client.patch("/api/users/999", json=update_payload)
 
         # Assert
         assert response.status_code == 404
         data = response.json()
         assert data["code"] != 0
 
-    def test_update_user_empty_full_name_returns_400(self, client, clean_db):
+    async def test_update_user_empty_full_name_returns_400(self, client, clean_db):
         """Should return 400 for empty full name"""
         # Arrange - create user
         create_payload = {
@@ -371,13 +379,13 @@ class TestUpdateUser:
             "email": "john@example.com",
             "full_name": "John Doe",
         }
-        create_response = client.post("/api/users", json=create_payload)
+        create_response = await client.post("/api/users", json=create_payload)
         user_id = create_response.json()["data"]["id"]
 
         update_payload = {"full_name": ""}  # Empty
 
         # Act
-        response = client.patch(f"/api/users/{user_id}", json=update_payload)
+        response = await client.patch(f"/api/users/{user_id}", json=update_payload)
 
         # Assert
         assert response.status_code == 400
@@ -388,15 +396,15 @@ class TestUpdateUser:
 class TestDeleteUser:
     """Test DELETE /api/users/{user_id} endpoint"""
 
-    def test_delete_user_success(self, client, clean_db):
+    async def test_delete_user_success(self, client, clean_db):
         """Should delete user and return 200 with response body"""
         # Arrange - create user
         create_payload = {"username": "john_doe", "email": "john@example.com"}
-        create_response = client.post("/api/users", json=create_payload)
+        create_response = await client.post("/api/users", json=create_payload)
         user_id = create_response.json()["data"]["id"]
 
         # Act
-        response = client.delete(f"/api/users/{user_id}")
+        response = await client.delete(f"/api/users/{user_id}")
 
         # Assert
         assert response.status_code == 200
@@ -405,13 +413,13 @@ class TestDeleteUser:
         assert "deleted_at" in response.json()["data"]
 
         # Verify user is deleted
-        get_response = client.get(f"/api/users/{user_id}")
+        get_response = await client.get(f"/api/users/{user_id}")
         assert get_response.status_code == 404
 
-    def test_delete_user_not_found_returns_404(self, client, clean_db):
+    async def test_delete_user_not_found_returns_404(self, client, clean_db):
         """Should return 404 for non-existent user"""
         # Act
-        response = client.delete("/api/users/999")
+        response = await client.delete("/api/users/999")
 
         # Assert
         assert response.status_code == 404

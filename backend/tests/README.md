@@ -4,18 +4,39 @@
 
 ```
 tests/
-├── conftest.py                          # Shared fixtures
 ├── unit/                                # Unit tests (no external dependencies)
-│   └── domains/
-│       └── user/
-│           ├── test_user_model.py       # Domain model tests
-│           └── test_user_app_service.py # Application service tests
+│   ├── user/
+│   │   ├── conftest.py                   # User fixtures
+│   │   ├── domain/
+│   │   │   └── models/
+│   │   │       └── test_user_model.py
+│   │   └── application/
+│   │       └── services/
+│   │           └── test_user_app_service.py
+│   └── portfolio/
+│       ├── conftest.py                   # Portfolio fixtures
+│       ├── domain/
+│       │   └── models/
+│       │       └── test_institution.py
+│       └── application/
+│           └── services/
+│               └── test_portfolio_app_service.py
 └── api/                                 # Integration/API tests
-    ├── infra/
-    │   └── test_user_repository_integration.py
-    └── domains/
-        └── user/
-            └── test_user_router.py      # Full HTTP endpoint tests
+  ├── user/
+  │   ├── interface/
+  │   │   └── routers/
+  │   │       └── test_user_router.py
+  │   └── infra/
+  │       └── repositories/
+  │           └── test_user_repository.py
+  └── portfolio/
+    ├── interface/
+    │   └── routers/
+    │       └── test_portfolio_router.py
+    └── infra/
+      └── repositories/
+        ├── conftest.py
+        └── test_portfolio_repository.py
 ```
 
 ## Running Tests
@@ -42,7 +63,7 @@ pytest tests/api/
 
 ### Run specific test file
 ```bash
-pytest tests/unit/domains/user/test_user_model.py -v
+pytest tests/unit/user/domain/models/test_user_model.py -v
 ```
 
 ### Run with coverage
@@ -66,7 +87,7 @@ pytest --cov=src --cov-report=html --cov-report=term
   - Get user / List users with pagination
 
 ### Integration Tests
-- **Repository** (`test_user_repository_integration.py`): Database operations with Testcontainers
+- **Repository** (`test_user_repository.py`): Database operations with Testcontainers
   - CRUD operations
   - Uniqueness constraints
   - Pagination

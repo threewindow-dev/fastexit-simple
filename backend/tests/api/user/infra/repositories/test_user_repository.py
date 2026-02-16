@@ -9,8 +9,6 @@ import pytest_asyncio
 import psycopg
 from datetime import datetime
 from pathlib import Path
-from testcontainers.postgres import PostgresContainer
-from testcontainers.core.waiting_utils import wait_for_logs
 
 from subdomains.user.domain.models import User
 from subdomains.user.domain.errors import DuplicateUserError
@@ -21,37 +19,27 @@ from shared.errors import InfraError
 
 def _get_schema_files() -> list[Path]:
     """Get all SQL schema files in order (numerically sorted)"""
-    schema_dir = Path(__file__).parent.parent.parent.parent / "sql" / "schema"
+    schema_dir = Path(__file__).resolve().parents[5] / "sql" / "schema"
     if not schema_dir.exists():
         raise FileNotFoundError(f"Schema directory not found: {schema_dir}")
-    
+
     sql_files = sorted(schema_dir.glob("*.sql"))
     if not sql_files:
         raise FileNotFoundError(f"No SQL files found in {schema_dir}")
-    
+
     return sql_files
 
 
 async def _initialize_schema(conn: psycopg.AsyncConnection) -> None:
     """Initialize database schema by executing all SQL files"""
     schema_files = _get_schema_files()
-    
+
     async with conn.cursor() as cur:
         for sql_file in schema_files:
             sql_content = sql_file.read_text()
             await cur.execute(sql_content)
-    
+
     await conn.commit()
-
-
-@pytest.fixture(scope="module")
-def postgres_container():
-    """Start PostgreSQL container for integration tests"""
-    container = PostgresContainer("postgres:17-alpine")
-    container.start()
-    wait_for_logs(container, "database system is ready to accept connections")
-    yield container
-    container.stop()
 
 
 @pytest_asyncio.fixture()
