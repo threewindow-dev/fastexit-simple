@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS weekly_snapshots (
     user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reference_date     DATE    NOT NULL,
     source_snapshot_id INTEGER NOT NULL REFERENCES snapshots(snapshot_id) ON DELETE CASCADE,
-    status             VARCHAR(20) NOT NULL CHECK (status IN ('locked')),
+    status             VARCHAR(20) NOT NULL CHECK (status IN ('in_progress', 'locked')),
     editable_until     TIMESTAMP WITHOUT TIME ZONE NULL,
     created_at         TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     UNIQUE (user_id, reference_date)

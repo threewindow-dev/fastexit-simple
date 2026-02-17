@@ -73,9 +73,11 @@ from subdomains.portfolio.interface.schemas import (
     CreateWeeklySnapshotRequest,
     WeeklySnapshotResponse,
     WeeklySnapshotResponseData,
+    WeeklySnapshotListItem,
     CreateAnnualSnapshotRequest,
     AnnualSnapshotResponse,
     AnnualSnapshotResponseData,
+    AnnualSnapshotListItem,
     WeeklyAccountReportResponse,
     WeeklyAccountReportData,
     WeeklyAccountReportItem,
@@ -727,6 +729,32 @@ async def create_weekly_snapshot(
     return WeeklySnapshotResponse(code=0, message="success", data=data)
 
 
+@router.get(
+    "/weekly-snapshots",
+    response_model=list[WeeklySnapshotListItem],
+    summary="주간 스냅샷 목록 조회",
+    responses={**common_responses},
+)
+async def list_weekly_snapshots(
+    user_id: int = 1,
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> list[WeeklySnapshotListItem]:
+    """사용자의 주간 스냅샷 목록 조회"""
+    results = await service.list_weekly_snapshots(user_id)
+    return [
+        WeeklySnapshotListItem(
+            weekly_snapshot_id=item.weekly_snapshot_id,
+            user_id=item.user_id,
+            reference_date=item.reference_date,
+            source_snapshot_id=item.source_snapshot_id,
+            status=item.status,
+            editable_until=_iso(item.editable_until),
+            created_at=_iso(item.created_at),
+        )
+        for item in results
+    ]
+
+
 @router.post(
     "/annual-snapshots",
     response_model=AnnualSnapshotResponse,
@@ -746,6 +774,32 @@ async def create_annual_snapshot(
     annual_id = await service.create_annual_snapshot(cmd)
     data = AnnualSnapshotResponseData(annual_snapshot_id=annual_id)
     return AnnualSnapshotResponse(code=0, message="success", data=data)
+
+
+@router.get(
+    "/annual-snapshots",
+    response_model=list[AnnualSnapshotListItem],
+    summary="연간 스냅샷 목록 조회",
+    responses={**common_responses},
+)
+async def list_annual_snapshots(
+    user_id: int = 1,
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> list[AnnualSnapshotListItem]:
+    """사용자의 연간 스냅샷 목록 조회"""
+    results = await service.list_annual_snapshots(user_id)
+    return [
+        AnnualSnapshotListItem(
+            annual_snapshot_id=item.annual_snapshot_id,
+            user_id=item.user_id,
+            reference_date=item.reference_date,
+            source_snapshot_id=item.source_snapshot_id,
+            status=item.status,
+            editable_until=_iso(item.editable_until),
+            created_at=_iso(item.created_at),
+        )
+        for item in results
+    ]
 
 
 # ---------------------------------------------------------------------------

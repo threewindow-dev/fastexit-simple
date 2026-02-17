@@ -239,6 +239,7 @@ async def test_db_pool(postgres_container):
                     reference_date DATE NOT NULL,
                     source_snapshot_id INTEGER NOT NULL REFERENCES snapshots(snapshot_id) ON DELETE CASCADE,
                     status VARCHAR(20) NOT NULL DEFAULT 'locked',
+                    editable_until TIMESTAMP NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE (user_id, reference_date)
                 )
@@ -269,6 +270,7 @@ async def test_db_pool(postgres_container):
                     reference_date DATE NOT NULL,
                     source_snapshot_id INTEGER NOT NULL REFERENCES snapshots(snapshot_id) ON DELETE CASCADE,
                     status VARCHAR(20) NOT NULL DEFAULT 'locked',
+                    editable_until TIMESTAMP NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE (user_id, reference_date)
                 )
@@ -821,6 +823,39 @@ class TestWeeklyAnnualSnapshots:
         assert data["code"] == 0
         assert data["data"]["weekly_snapshot_id"] is not None
 
+    async def test_list_weekly_snapshots_success(self, client, clean_db):
+        """Should list weekly snapshots for user"""
+        # Arrange - Create and lock source snapshot
+        source_response = await client.post(
+            "/api/portfolio/snapshots",
+            json={"user_id": 1, "reference_date": "2025-01-10"},
+        )
+        source_id = source_response.json()["data"]["snapshot_id"]
+
+        await client.post(f"/api/portfolio/snapshots/{source_id}/lock")
+
+        payload = {
+            "user_id": 1,
+            "reference_date": "2025-01-17",
+            "source_snapshot_id": source_id,
+        }
+        await client.post("/api/portfolio/weekly-snapshots", json=payload)
+
+        # Act
+        response = await client.get(
+            "/api/portfolio/weekly-snapshots", params={"user_id": 1}
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert any(
+            item["reference_date"] == "2025-01-17"
+            and item["source_snapshot_id"] == source_id
+            for item in data
+        )
+
     async def test_create_annual_snapshot_success(self, client, clean_db):
         """Should create annual snapshot from locked source"""
         # Arrange
@@ -846,6 +881,39 @@ class TestWeeklyAnnualSnapshots:
         data = response.json()
         assert data["code"] == 0
         assert data["data"]["annual_snapshot_id"] is not None
+
+    async def test_list_annual_snapshots_success(self, client, clean_db):
+        """Should list annual snapshots for user"""
+        # Arrange
+        source_response = await client.post(
+            "/api/portfolio/snapshots",
+            json={"user_id": 1, "reference_date": "2024-12-31"},
+        )
+        source_id = source_response.json()["data"]["snapshot_id"]
+
+        await client.post(f"/api/portfolio/snapshots/{source_id}/lock")
+
+        payload = {
+            "user_id": 1,
+            "reference_date": "2025-01-01",
+            "source_snapshot_id": source_id,
+        }
+        await client.post("/api/portfolio/annual-snapshots", json=payload)
+
+        # Act
+        response = await client.get(
+            "/api/portfolio/annual-snapshots", params={"user_id": 1}
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert any(
+            item["reference_date"] == "2025-01-01"
+            and item["source_snapshot_id"] == source_id
+            for item in data
+        )
 
 
 # ===========================================================================

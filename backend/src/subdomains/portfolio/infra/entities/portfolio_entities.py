@@ -237,7 +237,9 @@ class WeeklySnapshotEntity(Base):
         UniqueConstraint(
             "user_id", "reference_date", name="uq_weekly_snapshot_user_reference"
         ),
-        CheckConstraint("status in ('locked')", name="chk_weekly_snapshot_status"),
+        CheckConstraint(
+            "status in ('in_progress','locked')", name="chk_weekly_snapshot_status"
+        ),
         Index("idx_weekly_snapshots_user", "user_id"),
     )
 

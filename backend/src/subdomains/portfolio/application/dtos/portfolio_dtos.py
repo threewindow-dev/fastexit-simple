@@ -12,6 +12,8 @@ from subdomains.portfolio.domain import (
     Holding,
     Snapshot,
     SnapshotHolding,
+    WeeklySnapshot,
+    AnnualSnapshot,
 )
 
 # ============================================================================
@@ -339,6 +341,52 @@ class SnapshotResult:
             editable_until=model.editable_until,
             created_at=model.created_at,
             holdings=[SnapshotHoldingResult.from_domain(h) for h in model.holdings],
+        )
+
+
+@dataclass
+class WeeklySnapshotResult:
+    weekly_snapshot_id: int
+    user_id: int
+    reference_date: date
+    source_snapshot_id: int
+    status: str
+    editable_until: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_domain(cls, model: WeeklySnapshot) -> "WeeklySnapshotResult":
+        return cls(
+            weekly_snapshot_id=model.weekly_snapshot_id,
+            user_id=model.user_id,
+            reference_date=model.reference_date,
+            source_snapshot_id=model.source_snapshot_id,
+            status=model.status,
+            editable_until=model.editable_until,
+            created_at=model.created_at,
+        )
+
+
+@dataclass
+class AnnualSnapshotResult:
+    annual_snapshot_id: int
+    user_id: int
+    reference_date: date
+    source_snapshot_id: int
+    status: str
+    editable_until: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_domain(cls, model: AnnualSnapshot) -> "AnnualSnapshotResult":
+        return cls(
+            annual_snapshot_id=model.annual_snapshot_id,
+            user_id=model.user_id,
+            reference_date=model.reference_date,
+            source_snapshot_id=model.source_snapshot_id,
+            status=model.status,
+            editable_until=model.editable_until,
+            created_at=model.created_at,
         )
 
 

@@ -1,6 +1,6 @@
 """Portfolio application service implementing admin/report use cases."""
 
-from datetime import date
+from datetime import date, datetime, time, timedelta
 
 from subdomains.portfolio.application.dtos import (
     CreateInstitutionCommand,
@@ -31,6 +31,8 @@ from subdomains.portfolio.application.dtos import (
     HoldingResult,
     SnapshotHoldingResult,
     SnapshotResult,
+    WeeklySnapshotResult,
+    AnnualSnapshotResult,
     ReportItem,
     ReportResult,
 )
@@ -351,10 +353,15 @@ class PortfolioAppService:
             raise NotFoundError("snapshot", command.source_snapshot_id)
         if source.status != "locked":
             raise SnapshotLockedError(source.snapshot_id or 0)
+        editable_until = datetime.combine(command.reference_date, time.min) + timedelta(
+            days=7
+        )
         return await self._snapshot_repo.clone_weekly(
             source_snapshot_id=command.source_snapshot_id,
             user_id=command.user_id,
             reference_date=command.reference_date,
+            status="in_progress",
+            editable_until=editable_until,
         )
 
     @transactional(mode="writable")
@@ -488,6 +495,18 @@ class PortfolioAppService:
             )
             for snap in user_snapshots
         ]
+
+    @transactional(mode="readonly")
+    async def list_weekly_snapshots(self, user_id: int) -> list[WeeklySnapshotResult]:
+        """조회: 사용자의 모든 주간 스냅샷"""
+        snapshots = await self._snapshot_repo.get_weekly_by_user(user_id)
+        return [WeeklySnapshotResult.from_domain(snap) for snap in snapshots]
+
+    @transactional(mode="readonly")
+    async def list_annual_snapshots(self, user_id: int) -> list[AnnualSnapshotResult]:
+        """조회: 사용자의 모든 연간 스냅샷"""
+        snapshots = await self._snapshot_repo.get_annual_by_user(user_id)
+        return [AnnualSnapshotResult.from_domain(snap) for snap in snapshots]
 
     @transactional(mode="readonly")
     async def list_holdings(self) -> list[HoldingResult]:

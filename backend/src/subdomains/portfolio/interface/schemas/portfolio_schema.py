@@ -293,6 +293,16 @@ class WeeklySnapshotResponse(ApiResponse[WeeklySnapshotResponseData]):
     pass
 
 
+class WeeklySnapshotListItem(BaseModel):
+    weekly_snapshot_id: int = Field(..., description="주간 스냅샷 ID")
+    user_id: int = Field(..., description="사용자 ID")
+    reference_date: date = Field(..., description="주간 기준일")
+    source_snapshot_id: int = Field(..., description="소스 스냅샷 ID")
+    status: str = Field(..., description="상태", examples=["in_progress", "locked"])
+    editable_until: str | None = Field(None, description="편집 가능 시각")
+    created_at: str = Field(..., description="생성 시각")
+
+
 class CreateAnnualSnapshotRequest(BaseModel):
     user_id: int = Field(..., description="사용자 ID", examples=[1])
     reference_date: date = Field(
@@ -307,6 +317,16 @@ class AnnualSnapshotResponseData(BaseModel):
 
 class AnnualSnapshotResponse(ApiResponse[AnnualSnapshotResponseData]):
     pass
+
+
+class AnnualSnapshotListItem(BaseModel):
+    annual_snapshot_id: int = Field(..., description="연간 스냅샷 ID")
+    user_id: int = Field(..., description="사용자 ID")
+    reference_date: date = Field(..., description="연간 기준일")
+    source_snapshot_id: int = Field(..., description="소스 스냅샷 ID")
+    status: str = Field(..., description="상태", examples=["locked"])
+    editable_until: str | None = Field(None, description="편집 가능 시각")
+    created_at: str = Field(..., description="생성 시각")
 
 
 # ---------------------------------------------------------------------------

@@ -19,6 +19,8 @@ from subdomains.portfolio.domain import (
     Holding,
     Snapshot,
     SnapshotHolding,
+    WeeklySnapshot,
+    AnnualSnapshot,
 )
 from subdomains.portfolio.domain.protocols import (
     InstitutionRepository,
@@ -718,12 +720,21 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
         source_snapshot_id: int,
         user_id: int,
         reference_date: date,
+        status: str,
+        editable_until: datetime | None,
     ) -> int:
         session = self._require_session(conn)
         insert_snap = text(
             """
-            INSERT INTO weekly_snapshots (user_id, reference_date, source_snapshot_id, status, created_at)
-            VALUES (:user_id, :reference_date, :source_snapshot_id, 'locked', :created_at)
+            INSERT INTO weekly_snapshots (
+                user_id,
+                reference_date,
+                source_snapshot_id,
+                status,
+                editable_until,
+                created_at
+            )
+            VALUES (:user_id, :reference_date, :source_snapshot_id, :status, :editable_until, :created_at)
             RETURNING weekly_snapshot_id
             """
         )
@@ -733,6 +744,8 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
                 "user_id": user_id,
                 "reference_date": reference_date,
                 "source_snapshot_id": source_snapshot_id,
+                "status": status,
+                "editable_until": editable_until,
                 "created_at": _utc_now_naive(),
             },
         )
@@ -811,6 +824,60 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
             if loaded:
                 snapshots.append(loaded)
         return snapshots
+
+    @use_transaction()
+    async def get_weekly_by_user(
+        self, conn: Connection, user_id: int
+    ) -> list[WeeklySnapshot]:
+        session = self._require_session(conn)
+        result = await session.execute(
+            select(WeeklySnapshotEntity)
+            .where(WeeklySnapshotEntity.user_id == user_id)
+            .order_by(
+                WeeklySnapshotEntity.reference_date.desc(),
+                WeeklySnapshotEntity.weekly_snapshot_id.desc(),
+            )
+        )
+        entities = result.scalars().all()
+        return [
+            WeeklySnapshot(
+                weekly_snapshot_id=entity.weekly_snapshot_id,
+                user_id=entity.user_id,
+                reference_date=entity.reference_date,
+                source_snapshot_id=entity.source_snapshot_id,
+                status=entity.status,
+                editable_until=entity.editable_until,
+                created_at=entity.created_at,
+            )
+            for entity in entities
+        ]
+
+    @use_transaction()
+    async def get_annual_by_user(
+        self, conn: Connection, user_id: int
+    ) -> list[AnnualSnapshot]:
+        session = self._require_session(conn)
+        result = await session.execute(
+            select(AnnualSnapshotEntity)
+            .where(AnnualSnapshotEntity.user_id == user_id)
+            .order_by(
+                AnnualSnapshotEntity.reference_date.desc(),
+                AnnualSnapshotEntity.annual_snapshot_id.desc(),
+            )
+        )
+        entities = result.scalars().all()
+        return [
+            AnnualSnapshot(
+                annual_snapshot_id=entity.annual_snapshot_id,
+                user_id=entity.user_id,
+                reference_date=entity.reference_date,
+                source_snapshot_id=entity.source_snapshot_id,
+                status=entity.status,
+                editable_until=entity.editable_until,
+                created_at=entity.created_at,
+            )
+            for entity in entities
+        ]
 
 
 # ---------------------------------------------------------------------------

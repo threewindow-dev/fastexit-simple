@@ -30,6 +30,8 @@ from .portfolio_dtos import (
     HoldingResult,
     SnapshotHoldingResult,
     SnapshotResult,
+    WeeklySnapshotResult,
+    AnnualSnapshotResult,
     ReportItem,
     ReportResult,
 )
@@ -66,6 +68,8 @@ __all__ = [
     "HoldingResult",
     "SnapshotHoldingResult",
     "SnapshotResult",
+    "WeeklySnapshotResult",
+    "AnnualSnapshotResult",
     "ReportItem",
     "ReportResult",
 ]

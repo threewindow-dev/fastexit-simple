@@ -18,6 +18,8 @@ from subdomains.portfolio.domain import (
     Holding,
     Snapshot,
     SnapshotHolding,
+    WeeklySnapshot,
+    AnnualSnapshot,
 )
 from subdomains.portfolio.domain.protocols import (
     InstitutionRepository,
@@ -305,11 +307,13 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
     async def get_all(self, conn: Connection) -> list[Product]:
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
-            await cur.execute("""
+            await cur.execute(
+                """
                 SELECT product_id, product_name, asset_class, region, currency,
                        investment_type, characteristics, risk_level, display_order, created_at
                 FROM products ORDER BY display_order, product_id
-                """)
+                """
+            )
             rows = await cur.fetchall()
         return [
             Product(
@@ -648,10 +652,12 @@ class PsycopgHoldingRepository(_BaseRepo, HoldingRepository):
     async def get_all(self, conn: Connection) -> list[Holding]:
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
-            await cur.execute("""
+            await cur.execute(
+                """
                 SELECT holding_id, account_id, product_id, is_visible, deletion_reason, deleted_at, created_at
                 FROM holdings ORDER BY holding_id
-                """)
+                """
+            )
             rows = await cur.fetchall()
         return [
             Holding(
@@ -813,16 +819,32 @@ class PsycopgSnapshotRepository(_BaseRepo, SnapshotRepository):
         source_snapshot_id: int,
         user_id: int,
         reference_date: date,
+        status: str,
+        editable_until: datetime | None,
     ) -> int:
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO weekly_snapshots (user_id, reference_date, source_snapshot_id, status, created_at)
-                VALUES (%s, %s, %s, 'locked', %s)
+                INSERT INTO weekly_snapshots (
+                    user_id,
+                    reference_date,
+                    source_snapshot_id,
+                    status,
+                    editable_until,
+                    created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING weekly_snapshot_id
                 """,
-                (user_id, reference_date, source_snapshot_id, _utc_now_naive()),
+                (
+                    user_id,
+                    reference_date,
+                    source_snapshot_id,
+                    status,
+                    editable_until,
+                    _utc_now_naive(),
+                ),
             )
             weekly_id_row = await cur.fetchone()
             weekly_id = weekly_id_row["weekly_snapshot_id"]
@@ -873,10 +895,12 @@ class PsycopgSnapshotRepository(_BaseRepo, SnapshotRepository):
     async def get_all(self, conn: Connection) -> list[Snapshot]:
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
-            await cur.execute("""
+            await cur.execute(
+                """
                 SELECT snapshot_id, user_id, reference_date, status, locked_at, editable_until, created_at
                 FROM snapshots ORDER BY snapshot_id
-                """)
+                """
+            )
             rows = await cur.fetchall()
         snapshots = []
         for row in rows:
@@ -884,6 +908,65 @@ class PsycopgSnapshotRepository(_BaseRepo, SnapshotRepository):
             if loaded:
                 snapshots.append(loaded)
         return snapshots
+
+    @use_transaction()
+    async def get_weekly_by_user(
+        self, conn: Connection, user_id: int
+    ) -> list[WeeklySnapshot]:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT weekly_snapshot_id, user_id, reference_date, source_snapshot_id, status, editable_until, created_at
+                FROM weekly_snapshots
+                WHERE user_id = %s
+                ORDER BY reference_date DESC, weekly_snapshot_id DESC
+                """,
+                (user_id,),
+            )
+            rows = await cur.fetchall()
+        return [
+            WeeklySnapshot(
+                weekly_snapshot_id=row["weekly_snapshot_id"],
+                user_id=row["user_id"],
+                reference_date=row["reference_date"],
+                source_snapshot_id=row["source_snapshot_id"],
+                status=row["status"],
+                editable_until=row["editable_until"],
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+
+    @use_transaction()
+    async def get_annual_by_user(
+        self, conn: Connection, user_id: int
+    ) -> list[AnnualSnapshot]:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT annual_snapshot_id, user_id, reference_date, source_snapshot_id,
+                       status, editable_until, created_at
+                FROM annual_snapshots
+                WHERE user_id = %s
+                ORDER BY reference_date DESC, annual_snapshot_id DESC
+                """,
+                (user_id,),
+            )
+            rows = await cur.fetchall()
+        return [
+            AnnualSnapshot(
+                annual_snapshot_id=row["annual_snapshot_id"],
+                user_id=row["user_id"],
+                reference_date=row["reference_date"],
+                source_snapshot_id=row["source_snapshot_id"],
+                status=row["status"],
+                editable_until=row["editable_until"],
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
 
 
 # ---------------------------------------------------------------------------

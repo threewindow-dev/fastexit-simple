@@ -43,6 +43,24 @@ interface Snapshot {
   created_at: string;
 }
 
+interface WeeklySnapshot {
+  weekly_snapshot_id: number;
+  user_id: number;
+  reference_date: string;
+  source_snapshot_id: number;
+  status: string;
+  created_at: string;
+}
+
+interface AnnualSnapshot {
+  annual_snapshot_id: number;
+  user_id: number;
+  reference_date: string;
+  source_snapshot_id: number;
+  status: string;
+  created_at: string;
+}
+
 interface Holding {
   holding_id: number;
   account_id: number;
@@ -97,11 +115,13 @@ const getDataSourceLabel = (dataSource: string): string => {
 };
 
 export default function PortfolioPage() {
-  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'snapshots' | 'holdings' | 'snapshotHoldings' | 'clone' | 'reports'>('institutions');
+  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'holdings' | 'snapshotHoldings' | 'reports'>('institutions');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [weeklySnapshots, setWeeklySnapshots] = useState<WeeklySnapshot[]>([]);
+  const [annualSnapshots, setAnnualSnapshots] = useState<AnnualSnapshot[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [snapshotHoldings, setSnapshotHoldings] = useState<SnapshotHolding[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
@@ -403,6 +423,7 @@ export default function PortfolioPage() {
   const [cloneForm, setCloneForm] = useState({
     source_snapshot_id: '',
     period_type: 'weekly',
+    reference_date: new Date().toISOString().split('T')[0],
   });
   const [showCloneForm, setShowCloneForm] = useState(false);
 
@@ -424,8 +445,31 @@ export default function PortfolioPage() {
     return b.snapshot_id - a.snapshot_id;
   });
 
+  const sortedWeeklySnapshots = [...weeklySnapshots].sort((a, b) => {
+    const dateDiff =
+      new Date(b.reference_date).getTime() -
+      new Date(a.reference_date).getTime();
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+    return b.weekly_snapshot_id - a.weekly_snapshot_id;
+  });
+
+  const sortedAnnualSnapshots = [...annualSnapshots].sort((a, b) => {
+    const dateDiff =
+      new Date(b.reference_date).getTime() -
+      new Date(a.reference_date).getTime();
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+    return b.annual_snapshot_id - a.annual_snapshot_id;
+  });
+
   const selectedSnapshot = selectedSnapshotId
     ? snapshots.find((snap) => snap.snapshot_id === Number(selectedSnapshotId)) || null
+    : null;
+  const cloneSourceSnapshot = cloneForm.source_snapshot_id
+    ? snapshots.find((snap) => snap.snapshot_id === Number(cloneForm.source_snapshot_id)) || null
     : null;
   const isSelectedSnapshotLocked = selectedSnapshot?.status === 'locked';
 
@@ -440,6 +484,10 @@ export default function PortfolioPage() {
       fetchInstitutions(); // For dropdown
     } else if (activeTab === 'snapshots') {
       fetchSnapshots();
+    } else if (activeTab === 'weeklySnapshots') {
+      fetchWeeklySnapshots();
+    } else if (activeTab === 'annualSnapshots') {
+      fetchAnnualSnapshots();
     } else if (activeTab === 'holdings') {
       fetchHoldings();
       fetchAccounts(); // For dropdown
@@ -540,6 +588,36 @@ export default function PortfolioPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching snapshots');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchWeeklySnapshots = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/portfolio/weekly-snapshots?user_id=1`);
+      if (!response.ok) throw new Error('Failed to fetch weekly snapshots');
+      const result = await response.json();
+      setWeeklySnapshots(Array.isArray(result) ? result : result.data?.items || []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching weekly snapshots');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAnnualSnapshots = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/portfolio/annual-snapshots?user_id=1`);
+      if (!response.ok) throw new Error('Failed to fetch annual snapshots');
+      const result = await response.json();
+      setAnnualSnapshots(Array.isArray(result) ? result : result.data?.items || []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching annual snapshots');
     } finally {
       setLoading(false);
     }
@@ -1038,14 +1116,48 @@ export default function PortfolioPage() {
   const handleCloneSnapshot = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (!cloneForm.source_snapshot_id) {
+        alert('원본 스냅샷을 선택해주세요.');
+        return;
+      }
+      if (!cloneForm.reference_date) {
+        alert('기준일을 입력해주세요.');
+        return;
+      }
+      const sourceSnapshotId = Number(cloneForm.source_snapshot_id);
+      if (!Number.isFinite(sourceSnapshotId) || sourceSnapshotId <= 0) {
+        alert('유효한 스냅샷을 선택해주세요.');
+        return;
+      }
       const endpoint = cloneForm.period_type === 'weekly' ? 'weekly-snapshots' : 'annual-snapshots';
+      const payload = {
+        user_id: 1,
+        reference_date: cloneForm.reference_date,
+        source_snapshot_id: sourceSnapshotId,
+      };
       const response = await fetch(
-        `${API_BASE_URL}/portfolio/${endpoint}?source_snapshot_id=${cloneForm.source_snapshot_id}`,
-        { method: 'POST' }
+        `${API_BASE_URL}/portfolio/${endpoint}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
       );
-      if (!response.ok) throw new Error('Failed to clone snapshot');
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Failed to clone snapshot');
+      }
+      if (cloneForm.period_type === 'weekly') {
+        await fetchWeeklySnapshots();
+      } else {
+        await fetchAnnualSnapshots();
+      }
       alert(`${cloneForm.period_type === 'weekly' ? '주간' : '연간'} 스냅샷이 생성되었습니다.`);
-      setCloneForm({ source_snapshot_id: '', period_type: 'weekly' });
+      setCloneForm({
+        source_snapshot_id: '',
+        period_type: 'weekly',
+        reference_date: new Date().toISOString().split('T')[0],
+      });
       setShowCloneForm(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to clone snapshot');
@@ -1120,6 +1232,16 @@ export default function PortfolioPage() {
     setActiveTab('snapshotHoldings');
   };
 
+  const openClonePanel = (snapshot: Snapshot) => {
+    setCloneForm({
+      source_snapshot_id: String(snapshot.snapshot_id),
+      period_type: 'weekly',
+      reference_date: snapshot.reference_date,
+    });
+    setShowSnapshotForm(false);
+    setShowCloneForm(true);
+  };
+
   const clearHoldingsFilter = () => {
     setHoldingsAccountFilter(null);
     setHoldingsProductFilter(null);
@@ -1167,16 +1289,22 @@ export default function PortfolioPage() {
           일일 스냅샷
         </button>
         <button
+          className={activeTab === 'weeklySnapshots' ? styles.activeTab : ''}
+          onClick={() => setActiveTab('weeklySnapshots')}
+        >
+          주간 스냅샷
+        </button>
+        <button
+          className={activeTab === 'annualSnapshots' ? styles.activeTab : ''}
+          onClick={() => setActiveTab('annualSnapshots')}
+        >
+          연간 스냅샷
+        </button>
+        <button
           className={activeTab === 'snapshotHoldings' ? styles.activeTab : ''}
           onClick={() => setActiveTab('snapshotHoldings')}
         >
           일일 스냅샷 보유자산
-        </button>
-        <button
-          className={activeTab === 'clone' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('clone')}
-        >
-          스냅샷 복제
         </button>
         <button
           className={activeTab === 'reports' ? styles.activeTab : ''}
@@ -1721,6 +1849,36 @@ export default function PortfolioPage() {
             </form>
           )}
 
+          {showCloneForm && (
+            <form onSubmit={handleCloneSnapshot} className={styles.form}>
+              <input
+                type="text"
+                value={cloneSourceSnapshot
+                  ? `${cloneSourceSnapshot.reference_date} (ID: ${cloneSourceSnapshot.snapshot_id})`
+                  : '원본 스냅샷 미선택'
+                }
+                readOnly
+              />
+              <input
+                type="date"
+                value={cloneForm.reference_date}
+                onChange={(e) => setCloneForm({ ...cloneForm, reference_date: e.target.value })}
+                required
+              />
+              <select
+                value={cloneForm.period_type}
+                onChange={(e) => setCloneForm({ ...cloneForm, period_type: e.target.value })}
+              >
+                <option value="weekly">주간 스냅샷</option>
+                <option value="annual">연간 스냅샷</option>
+              </select>
+              <div className={styles.actionButtons}>
+                <button type="submit">복제</button>
+                <button type="button" onClick={() => setShowCloneForm(false)}>취소</button>
+              </div>
+            </form>
+          )}
+
           {loading ? (
             <div className={styles.loading}>로딩 중...</div>
           ) : (
@@ -1746,6 +1904,9 @@ export default function PortfolioPage() {
                         <button onClick={() => openSnapshotHoldings(snap.snapshot_id)}>
                           보유자산 보기
                         </button>
+                        {snap.status === 'locked' && (
+                          <button onClick={() => openClonePanel(snap)}>복제</button>
+                        )}
                         {snap.status !== 'locked' && (
                           <button onClick={() => handleLockSnapshot(snap.snapshot_id)}>
                             잠금
@@ -1753,6 +1914,78 @@ export default function PortfolioPage() {
                         )}
                       </div>
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Weekly Snapshots Tab */}
+      {activeTab === 'weeklySnapshots' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>주간 스냅샷 목록</h2>
+          </div>
+
+          {loading ? (
+            <div className={styles.loading}>로딩 중...</div>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>번호</th>
+                  <th>기준일</th>
+                  <th>상태</th>
+                  <th>생성일</th>
+                  <th>원본 스냅샷</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedWeeklySnapshots.map((snap, index) => (
+                  <tr key={snap.weekly_snapshot_id}>
+                    <td>{index + 1}</td>
+                    <td>{snap.reference_date}</td>
+                    <td>{snap.status === 'locked' ? '🔒 잠금' : '✏️ 편집 가능'}</td>
+                    <td>{new Date(snap.created_at).toLocaleString()}</td>
+                    <td>{snap.source_snapshot_id}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Annual Snapshots Tab */}
+      {activeTab === 'annualSnapshots' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>연간 스냅샷 목록</h2>
+          </div>
+
+          {loading ? (
+            <div className={styles.loading}>로딩 중...</div>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>번호</th>
+                  <th>기준일</th>
+                  <th>상태</th>
+                  <th>생성일</th>
+                  <th>원본 스냅샷</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedAnnualSnapshots.map((snap, index) => (
+                  <tr key={snap.annual_snapshot_id}>
+                    <td>{index + 1}</td>
+                    <td>{snap.reference_date}</td>
+                    <td>{snap.status === 'locked' ? '🔒 잠금' : '✏️ 편집 가능'}</td>
+                    <td>{new Date(snap.created_at).toLocaleString()}</td>
+                    <td>{snap.source_snapshot_id}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2198,49 +2431,6 @@ export default function PortfolioPage() {
               );
             })()
           )}
-        </div>
-      )}
-
-      {/* Clone Tab */}
-      {activeTab === 'clone' && (
-        <div className={styles.tabContent}>
-          <div className={styles.sectionHeader}>
-            <h2>스냅샷 복제</h2>
-            <button onClick={() => setShowCloneForm(!showCloneForm)}>
-              {showCloneForm ? '취소' : '복제 시작'}
-            </button>
-          </div>
-
-          {showCloneForm && (
-            <form onSubmit={handleCloneSnapshot} className={styles.form}>
-              <select
-                value={cloneForm.source_snapshot_id}
-                onChange={(e) => setCloneForm({ ...cloneForm, source_snapshot_id: e.target.value })}
-                required
-              >
-                <option value="">원본 스냅샷 선택</option>
-                {snapshots.filter(s => s.status === 'locked').map((snap) => (
-                  <option key={snap.snapshot_id} value={snap.snapshot_id}>
-                    {snap.reference_date} (ID: {snap.snapshot_id}) - 잠금됨
-                  </option>
-                ))}
-              </select>
-              <select
-                value={cloneForm.period_type}
-                onChange={(e) => setCloneForm({ ...cloneForm, period_type: e.target.value })}
-              >
-                <option value="weekly">주간 스냅샷</option>
-                <option value="annual">연간 스냅샷</option>
-              </select>
-              <button type="submit">복제</button>
-            </form>
-          )}
-
-          <div className={styles.infoBox}>
-            <p>✏️ 잠금된 스냅샷만 복제할 수 있습니다.</p>
-            <p>📅 주간 스냅샷: 주간 보고서용 데이터</p>
-            <p>📊 연간 스냅샷: 연간 보고서용 데이터</p>
-          </div>
         </div>
       )}
 

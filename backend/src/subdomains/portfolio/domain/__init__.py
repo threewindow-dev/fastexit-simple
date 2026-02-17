@@ -6,6 +6,8 @@ from .models import (
     Holding,
     Snapshot,
     SnapshotHolding,
+    WeeklySnapshot,
+    AnnualSnapshot,
 )
 from .errors import (
     DuplicateEntityError,
@@ -23,6 +25,8 @@ __all__ = [
     "Holding",
     "Snapshot",
     "SnapshotHolding",
+    "WeeklySnapshot",
+    "AnnualSnapshot",
     "DuplicateEntityError",
     "NotFoundError",
     "InvalidStateError",

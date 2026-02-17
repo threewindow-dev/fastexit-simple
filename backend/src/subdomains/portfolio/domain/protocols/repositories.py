@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import date
+from datetime import date, datetime
 from typing import Iterable
 
 from shared.protocols.transaction import Connection
@@ -13,6 +13,8 @@ from subdomains.portfolio.domain.models import (
     Holding,
     Snapshot,
     SnapshotHolding,
+    WeeklySnapshot,
+    AnnualSnapshot,
 )
 
 
@@ -167,6 +169,8 @@ class SnapshotRepository(ABC):
         source_snapshot_id: int,
         user_id: int,
         reference_date: date,
+        status: str,
+        editable_until: datetime | None,
     ) -> int: ...
 
     @abstractmethod
@@ -181,6 +185,16 @@ class SnapshotRepository(ABC):
 
     @abstractmethod
     async def get_all(self, conn: Connection) -> list[Snapshot]: ...
+
+    @abstractmethod
+    async def get_weekly_by_user(
+        self, conn: Connection, user_id: int
+    ) -> list[WeeklySnapshot]: ...
+
+    @abstractmethod
+    async def get_annual_by_user(
+        self, conn: Connection, user_id: int
+    ) -> list[AnnualSnapshot]: ...
 
 
 class ReportQueryRepository(ABC):
