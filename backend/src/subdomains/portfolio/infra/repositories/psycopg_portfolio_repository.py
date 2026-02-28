@@ -464,7 +464,17 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "SELECT account_id, institution_id, name, type, display_order, created_at FROM accounts ORDER BY account_id"
+                """
+                SELECT a.account_id,
+                       a.institution_id,
+                       a.name,
+                       a.type,
+                       a.display_order,
+                       a.created_at
+                FROM accounts a
+                JOIN institutions i ON a.institution_id = i.institution_id
+                ORDER BY i.display_order, a.display_order
+                """
             )
             rows = await cur.fetchall()
         return [
@@ -1095,6 +1105,38 @@ class PsycopgReportQueryRepository(_BaseRepo, ReportQueryRepository):
                 ORDER BY p.asset_class, p.product_name
                 """,
                 (user_id, snapshot_date),
+            )
+            rows = await cur.fetchall()
+        return [dict(row) for row in rows]
+
+    @use_transaction()
+    async def get_weekly_snapshot_holdings(
+        self, conn: Connection, weekly_snapshot_ids: list[int]
+    ) -> list[dict]:
+        """주간 스냅샷들의 보유자산 데이터 조회"""
+        if not weekly_snapshot_ids:
+            return []
+        
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT wsh.weekly_snapshot_id,
+                       wsh.holding_id,
+                       wsh.valuation_amount,
+                       h.account_id,
+                       a.institution_id,
+                       a.name AS account_name,
+                       a.display_order,
+                       i.name AS institution_name
+                FROM weekly_snapshot_holdings wsh
+                JOIN holdings h ON wsh.holding_id = h.holding_id
+                JOIN accounts a ON h.account_id = a.account_id
+                JOIN institutions i ON a.institution_id = i.institution_id
+                WHERE wsh.weekly_snapshot_id = ANY(%s)
+                ORDER BY i.display_order, a.display_order
+                """,
+                (weekly_snapshot_ids,),
             )
             rows = await cur.fetchall()
         return [dict(row) for row in rows]

@@ -401,3 +401,32 @@ class AssetClassReportData(BaseModel):
 
 class AssetClassReportResponse(ApiResponse[AssetClassReportData]):
     pass
+
+
+# Weekly Pivot Report
+class WeeklyPivotWeekInfo(BaseModel):
+    weekly_snapshot_id: int
+    reference_date: date
+    week_number: int
+
+
+class WeeklyPivotAccountValuation(BaseModel):
+    weekly_snapshot_id: int
+    amount: float
+
+
+class WeeklyPivotAccountRow(BaseModel):
+    account_id: int
+    account_name: str
+    institution_name: str
+    valuations: list[WeeklyPivotAccountValuation]
+
+
+class WeeklyPivotReportData(BaseModel):
+    year: int
+    weeks: list[WeeklyPivotWeekInfo]
+    accounts: list[WeeklyPivotAccountRow]
+
+
+class WeeklyPivotReportResponse(ApiResponse[WeeklyPivotReportData]):
+    pass

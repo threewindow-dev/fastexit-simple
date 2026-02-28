@@ -23,6 +23,7 @@ from .portfolio_dtos import (
     AnnualAccountReportQuery,
     WeeklyAccountGroupReportQuery,
     AssetClassReportQuery,
+    WeeklyPivotReportQuery,
     InstitutionResult,
     ProductResult,
     AccountResult,
@@ -34,6 +35,10 @@ from .portfolio_dtos import (
     AnnualSnapshotResult,
     ReportItem,
     ReportResult,
+    WeeklyPivotWeekInfo,
+    WeeklyPivotAccountValuation,
+    WeeklyPivotAccountRow,
+    WeeklyPivotReportResult,
 )
 
 __all__ = [
@@ -61,6 +66,7 @@ __all__ = [
     "AnnualAccountReportQuery",
     "WeeklyAccountGroupReportQuery",
     "AssetClassReportQuery",
+    "WeeklyPivotReportQuery",
     "InstitutionResult",
     "ProductResult",
     "AccountResult",
@@ -72,4 +78,8 @@ __all__ = [
     "AnnualSnapshotResult",
     "ReportItem",
     "ReportResult",
+    "WeeklyPivotWeekInfo",
+    "WeeklyPivotAccountValuation",
+    "WeeklyPivotAccountRow",
+    "WeeklyPivotReportResult",
 ]

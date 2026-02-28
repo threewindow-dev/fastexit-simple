@@ -33,6 +33,7 @@ from subdomains.portfolio.application.dtos import (
     AnnualAccountReportQuery,
     WeeklyAccountGroupReportQuery,
     AssetClassReportQuery,
+    WeeklyPivotReportQuery,
 )
 from subdomains.portfolio.application.services import PortfolioAppService
 from subdomains.portfolio.interface.schemas import (
@@ -90,6 +91,11 @@ from subdomains.portfolio.interface.schemas import (
     AssetClassReportResponse,
     AssetClassReportData,
     AssetClassReportItem,
+    WeeklyPivotReportResponse,
+    WeeklyPivotReportData,
+    WeeklyPivotWeekInfo,
+    WeeklyPivotAccountValuation,
+    WeeklyPivotAccountRow,
 )
 
 router = APIRouter(
@@ -924,6 +930,50 @@ async def asset_class_report(
     ]
     data = AssetClassReportData(items=items, total_amount=result.total_amount)
     return AssetClassReportResponse(code=0, message="success", data=data)
+
+
+@router.get(
+    "/reports/weekly/pivot",
+    response_model=WeeklyPivotReportResponse,
+    summary="주간 Pivot 보고서 (연도별 계좌 평가액 비교)",
+    responses={**common_responses},
+)
+async def weekly_pivot_report(
+    user_id: int = Query(..., description="사용자 ID"),
+    year: int = Query(..., description="연도"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> WeeklyPivotReportResponse:
+    """연도별 주간 스냅샷을 열로, 계좌를 행으로 하는 Pivot 보고서"""
+    query = WeeklyPivotReportQuery(user_id=user_id, year=year)
+    result = await service.weekly_pivot_report(query)
+    
+    weeks = [
+        WeeklyPivotWeekInfo(
+            weekly_snapshot_id=w.weekly_snapshot_id,
+            reference_date=w.reference_date,
+            week_number=w.week_number
+        )
+        for w in result.weeks
+    ]
+    
+    accounts = [
+        WeeklyPivotAccountRow(
+            account_id=acc.account_id,
+            account_name=acc.account_name,
+            institution_name=acc.institution_name,
+            valuations=[
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=val.weekly_snapshot_id,
+                    amount=val.amount
+                )
+                for val in acc.valuations
+            ]
+        )
+        for acc in result.accounts
+    ]
+    
+    data = WeeklyPivotReportData(year=result.year, weeks=weeks, accounts=accounts)
+    return WeeklyPivotReportResponse(code=0, message="success", data=data)
 
 
 # ---------------------------------------------------------------------------

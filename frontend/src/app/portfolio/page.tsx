@@ -61,6 +61,30 @@ interface AnnualSnapshot {
   created_at: string;
 }
 
+interface WeeklyPivotWeekInfo {
+  weekly_snapshot_id: number;
+  reference_date: string;
+  week_number: number;
+}
+
+interface WeeklyPivotAccountValuation {
+  weekly_snapshot_id: number;
+  amount: number;
+}
+
+interface WeeklyPivotAccountRow {
+  account_id: number;
+  account_name: string;
+  institution_name: string;
+  valuations: WeeklyPivotAccountValuation[];
+}
+
+interface WeeklyPivotReportData {
+  year: number;
+  weeks: WeeklyPivotWeekInfo[];
+  accounts: WeeklyPivotAccountRow[];
+}
+
 interface Holding {
   holding_id: number;
   account_id: number;
@@ -115,7 +139,7 @@ const getDataSourceLabel = (dataSource: string): string => {
 };
 
 export default function PortfolioPage() {
-  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'holdings' | 'snapshotHoldings' | 'reports'>('institutions');
+  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport'>('institutions');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -125,6 +149,8 @@ export default function PortfolioPage() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [snapshotHoldings, setSnapshotHoldings] = useState<SnapshotHolding[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [weeklyReportData, setWeeklyReportData] = useState<WeeklyPivotReportData | null>(null);
+  const [weeklyReportYear, setWeeklyReportYear] = useState<number>(new Date().getFullYear());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -500,6 +526,8 @@ export default function PortfolioPage() {
       fetchAccounts();
       fetchProducts();
       fetchInstitutions();
+    } else if (activeTab === 'weeklyReport') {
+      fetchWeeklyReport();
     }
   }, [activeTab]);
 
@@ -652,6 +680,35 @@ export default function PortfolioPage() {
       setLoading(false);
     }
   };
+
+  const fetchWeeklyReport = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/reports/weekly/pivot?user_id=1&year=${weeklyReportYear}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch weekly report');
+      const result = await response.json();
+      if (result.code === 0 && result.data) {
+        setWeeklyReportData(result.data);
+      } else {
+        setWeeklyReportData(null);
+      }
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching weekly report');
+      setWeeklyReportData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 연도 변경 시 주간 보고서 다시 로드
+  useEffect(() => {
+    if (activeTab === 'weeklyReport') {
+      fetchWeeklyReport();
+    }
+  }, [weeklyReportYear]);
 
   const openInstitutionEdit = (institution: Institution) => {
     setEditingInstitution({
@@ -1311,6 +1368,12 @@ export default function PortfolioPage() {
           onClick={() => setActiveTab('reports')}
         >
           보고서
+        </button>
+        <button
+          className={activeTab === 'weeklyReport' ? styles.activeTab : ''}
+          onClick={() => setActiveTab('weeklyReport')}
+        >
+          주간 보고서
         </button>
       </div>
 
@@ -2501,6 +2564,112 @@ export default function PortfolioPage() {
           ) : (
             <div className={styles.infoBox}>
               <p>보고서 타입을 선택하고 조회 버튼을 클릭하세요.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Weekly Pivot Report Tab */}
+      {activeTab === 'weeklyReport' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>주간 보고서 (Pivot)</h2>
+            <div>
+              <label style={{ marginRight: '10px' }}>연도:</label>
+              <select
+                value={weeklyReportYear}
+                onChange={(e) => setWeeklyReportYear(Number(e.target.value))}
+                style={{ padding: '5px 10px', fontSize: '14px' }}
+              >
+                {[2024, 2025, 2026, 2027, 2028].map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className={styles.loading}>로딩 중...</div>
+          ) : weeklyReportData && weeklyReportData.weeks.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table className={styles.table} style={{ minWidth: '800px' }}>
+                <thead>
+                  <tr>
+                    <th rowSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 2 }}>
+                      금융기관
+                    </th>
+                    <th rowSpan={2} style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 2 }}>
+                      계좌
+                    </th>
+                    <th colSpan={weeklyReportData.weeks.length} style={{ textAlign: 'center' }}>
+                      {weeklyReportData.year}년 주차별 평가액
+                    </th>
+                  </tr>
+                  <tr>
+                    {weeklyReportData.weeks.map((week) => (
+                      <th key={week.weekly_snapshot_id} style={{ minWidth: '100px', fontSize: '12px' }}>
+                        {week.reference_date}
+                        <br />
+                        <span style={{ fontSize: '10px', color: '#666' }}>
+                          (W{week.week_number})
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {weeklyReportData.accounts.map((account) => (
+                    <tr key={account.account_id}>
+                      <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1 }}>
+                        {account.institution_name}
+                      </td>
+                      <td style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 1 }}>
+                        {account.account_name}
+                      </td>
+                      {account.valuations.map((val, idx) => (
+                        <td key={idx} style={{ textAlign: 'right' }}>
+                          {val.amount > 0
+                            ? val.amount.toLocaleString('ko-KR', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0,
+                              })
+                            : '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  {/* 합계 행 */}
+                  {weeklyReportData.accounts.length > 0 && (
+                    <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
+                      <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1 }}>
+                        총합
+                      </td>
+                      {weeklyReportData.weeks.map((week, weekIdx) => {
+                        const total = weeklyReportData.accounts.reduce((sum, account) => {
+                          const val = account.valuations[weekIdx];
+                          return sum + (val ? val.amount : 0);
+                        }, 0);
+                        return (
+                          <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                            {total > 0
+                              ? total.toLocaleString('ko-KR', {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 0,
+                                })
+                              : '-'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className={styles.infoBox}>
+              <p>{weeklyReportYear}년의 주간 스냅샷이 없습니다.</p>
             </div>
           )}
         </div>

@@ -412,18 +412,31 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
     @use_transaction()
     async def get_all(self, conn: Connection) -> list[Account]:
         session = self._require_session(conn)
-        result = await session.execute(select(AccountEntity))
-        entities = result.scalars().all()
+        stmt = text(
+            """
+            SELECT a.account_id,
+                   a.institution_id,
+                   a.name,
+                   a.type,
+                   a.display_order,
+                   a.created_at
+            FROM accounts a
+            JOIN institutions i ON a.institution_id = i.institution_id
+            ORDER BY i.display_order, a.display_order
+            """
+        )
+        result = await session.execute(stmt)
+        rows = result.mappings().all()
         return [
             Account(
-                account_id=e.account_id,
-                institution_id=e.institution_id,
-                name=e.name,
-                type=e.type,
-                display_order=e.display_order,
-                created_at=e.created_at,
+                account_id=row["account_id"],
+                institution_id=row["institution_id"],
+                name=row["name"],
+                type=row["type"],
+                display_order=row["display_order"],
+                created_at=row["created_at"],
             )
-            for e in entities
+            for row in rows
         ]
 
     @use_transaction()
@@ -1022,6 +1035,37 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         result = await session.execute(
             stmt, {"user_id": user_id, "snapshot_date": snapshot_date}
         )
+        rows = result.mappings().all()
+        return [dict(row) for row in rows]
+
+    @use_transaction()
+    async def get_weekly_snapshot_holdings(
+        self, conn: Connection, weekly_snapshot_ids: list[int]
+    ) -> list[dict]:
+        """주간 스냅샷들의 보유자산 데이터 조회"""
+        if not weekly_snapshot_ids:
+            return []
+
+        session = self._require_session(conn)
+        stmt = text(
+            """
+            SELECT wsh.weekly_snapshot_id,
+                   wsh.holding_id,
+                   wsh.valuation_amount,
+                   h.account_id,
+                   a.institution_id,
+                   a.name AS account_name,
+                   a.display_order,
+                   i.name AS institution_name
+            FROM weekly_snapshot_holdings wsh
+            JOIN holdings h ON wsh.holding_id = h.holding_id
+            JOIN accounts a ON h.account_id = a.account_id
+            JOIN institutions i ON a.institution_id = i.institution_id
+            WHERE wsh.weekly_snapshot_id = ANY(:snapshot_ids)
+            ORDER BY i.display_order, a.display_order
+            """
+        )
+        result = await session.execute(stmt, {"snapshot_ids": weekly_snapshot_ids})
         rows = result.mappings().all()
         return [dict(row) for row in rows]
 

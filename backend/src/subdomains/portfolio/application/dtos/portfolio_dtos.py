@@ -187,6 +187,12 @@ class AssetClassReportQuery:
     snapshot_date: date
 
 
+@dataclass
+class WeeklyPivotReportQuery:
+    user_id: int
+    year: int
+
+
 # ============================================================================
 # Results
 # ============================================================================
@@ -408,3 +414,35 @@ class ReportResult:
             "items": [item.to_dict() for item in self.items],
             "total_amount": self.total_amount,
         }
+
+
+@dataclass
+class WeeklyPivotWeekInfo:
+    """주간 스냅샷 정보"""
+    weekly_snapshot_id: int
+    reference_date: date
+    week_number: int  # ISO week number
+
+
+@dataclass
+class WeeklyPivotAccountValuation:
+    """특정 주의 계좌 평가액"""
+    weekly_snapshot_id: int
+    amount: float
+
+
+@dataclass
+class WeeklyPivotAccountRow:
+    """계좌별 행 데이터"""
+    account_id: int
+    account_name: str
+    institution_name: str
+    valuations: list[WeeklyPivotAccountValuation]  # 주차별 평가액
+
+
+@dataclass
+class WeeklyPivotReportResult:
+    """주간 Pivot 보고서 결과"""
+    year: int
+    weeks: list[WeeklyPivotWeekInfo]
+    accounts: list[WeeklyPivotAccountRow]

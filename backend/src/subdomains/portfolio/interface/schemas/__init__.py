@@ -54,6 +54,11 @@ from .portfolio_schema import (
     AssetClassReportResponse,
     AssetClassReportData,
     AssetClassReportItem,
+    WeeklyPivotReportResponse,
+    WeeklyPivotReportData,
+    WeeklyPivotWeekInfo,
+    WeeklyPivotAccountValuation,
+    WeeklyPivotAccountRow,
 )
 
 __all__ = [
@@ -112,4 +117,9 @@ __all__ = [
     "AssetClassReportResponse",
     "AssetClassReportData",
     "AssetClassReportItem",
+    "WeeklyPivotReportResponse",
+    "WeeklyPivotReportData",
+    "WeeklyPivotWeekInfo",
+    "WeeklyPivotAccountValuation",
+    "WeeklyPivotAccountRow",
 ]

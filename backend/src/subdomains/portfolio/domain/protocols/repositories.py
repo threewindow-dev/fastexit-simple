@@ -225,3 +225,8 @@ class ReportQueryRepository(ABC):
     async def asset_class_report(
         self, conn: Connection, user_id: int, snapshot_date: date
     ) -> list[dict]: ...
+
+    @abstractmethod
+    async def get_weekly_snapshot_holdings(
+        self, weekly_snapshot_ids: list[int]
+    ) -> list[dict]: ...

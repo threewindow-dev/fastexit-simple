@@ -24,6 +24,7 @@ from subdomains.portfolio.application.dtos import (
     AnnualAccountReportQuery,
     WeeklyAccountGroupReportQuery,
     AssetClassReportQuery,
+    WeeklyPivotReportQuery,
     InstitutionResult,
     ProductResult,
     AccountResult,
@@ -35,6 +36,10 @@ from subdomains.portfolio.application.dtos import (
     AnnualSnapshotResult,
     ReportItem,
     ReportResult,
+    WeeklyPivotWeekInfo,
+    WeeklyPivotAccountValuation,
+    WeeklyPivotAccountRow,
+    WeeklyPivotReportResult,
 )
 from subdomains.portfolio.domain import (
     Institution,
@@ -420,6 +425,92 @@ class PortfolioAppService:
         items = [ReportItem(row) for row in rows]
         total = sum(r.get("subtotal", 0) or 0 for r in rows)
         return ReportResult(items=items, total_amount=total)
+
+    @transactional(mode="readonly")
+    async def weekly_pivot_report(
+        self, query: WeeklyPivotReportQuery
+    ) -> WeeklyPivotReportResult:
+        """주간 Pivot 보고서: 연도별 모든 주간 스냅샷을 열로 표시"""
+        # 1. 주간 스냅샷 목록 조회
+        weekly_snapshots = await self._snapshot_repo.get_weekly_by_user(query.user_id)
+
+        # 2. 해당 연도 필터링
+        year_snapshots = [
+            snap for snap in weekly_snapshots if snap.reference_date.year == query.year
+        ]
+        year_snapshots.sort(key=lambda x: x.reference_date)
+
+        if not year_snapshots:
+            return WeeklyPivotReportResult(year=query.year, weeks=[], accounts=[])
+
+        # 3. 주차 정보 생성
+        weeks = [
+            WeeklyPivotWeekInfo(
+                weekly_snapshot_id=snap.weekly_snapshot_id,
+                reference_date=snap.reference_date,
+                week_number=snap.reference_date.isocalendar()[1],  # ISO week number
+            )
+            for snap in year_snapshots
+        ]
+
+        # 4. 각 주간 스냅샷의 보유자산 데이터 조회
+        # @use_transaction() 데코레이터가 context_var에서 conn을 자동으로 가져와 주입
+        weekly_holdings_data = await self._report_repo.get_weekly_snapshot_holdings(
+            [snap.weekly_snapshot_id for snap in year_snapshots]
+        )
+
+        # 4-1. Institution의 display_order 정보 조회 (정렬용)
+        institutions = await self._institution_repo.get_all()
+        inst_display_orders = {inst.institution_id: inst.display_order for inst in institutions}
+
+        # 5. 계좌별로 그룹화
+        account_map = {}
+        for row in weekly_holdings_data:
+            account_id = row.get("account_id")
+            if account_id not in account_map:
+                account_map[account_id] = {
+                    "account_id": account_id,
+                    "institution_id": row.get("institution_id"),
+                    "account_name": row.get("account_name"),
+                    "institution_name": row.get("institution_name"),
+                    "display_order": row.get("display_order"),
+                    "valuations": {},
+                }
+
+            weekly_snapshot_id = row.get("weekly_snapshot_id")
+            amount = float(row.get("valuation_amount", 0) or 0)
+
+            if weekly_snapshot_id not in account_map[account_id]["valuations"]:
+                account_map[account_id]["valuations"][weekly_snapshot_id] = 0
+            account_map[account_id]["valuations"][weekly_snapshot_id] += amount
+
+        # 6. 계좌별 행 데이터 생성 및 정렬 (institution의 display_order, account의 display_order 순서로)
+        accounts = []
+        for account_data in sorted(
+            account_map.values(),
+            key=lambda x: (
+                inst_display_orders.get(x["institution_id"], 999),
+                x["display_order"],
+            ),
+        ):
+            valuations = [
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=snap.weekly_snapshot_id,
+                    amount=account_data["valuations"].get(snap.weekly_snapshot_id, 0.0),
+                )
+                for snap in year_snapshots
+            ]
+
+            accounts.append(
+                WeeklyPivotAccountRow(
+                    account_id=account_data["account_id"],
+                    account_name=account_data["account_name"],
+                    institution_name=account_data["institution_name"],
+                    valuations=valuations,
+                )
+            )
+
+        return WeeklyPivotReportResult(year=query.year, weeks=weeks, accounts=accounts)
 
     # ------------------------------------------------------------------
     # List/Read Operations
