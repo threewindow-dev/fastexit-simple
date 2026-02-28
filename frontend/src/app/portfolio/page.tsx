@@ -2727,24 +2727,15 @@ export default function PortfolioPage() {
               <table className={styles.table} style={{ minWidth: '800px' }}>
                 <thead>
                   <tr>
-                    <th rowSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 2 }}>
+                    <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 2 }}>
                       금융기관
                     </th>
-                    <th rowSpan={2} style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 2 }}>
+                    <th style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 2 }}>
                       계좌
                     </th>
-                    <th colSpan={weeklyReportData.weeks.length} style={{ textAlign: 'center' }}>
-                      {weeklyReportData.year}년 주차별 평가액
-                    </th>
-                  </tr>
-                  <tr>
                     {weeklyReportData.weeks.map((week) => (
-                      <th key={week.weekly_snapshot_id} style={{ minWidth: '100px', fontSize: '12px' }}>
-                        {week.reference_date}
-                        <br />
-                        <span style={{ fontSize: '10px', color: '#666' }}>
-                          (W{week.week_number})
-                        </span>
+                      <th key={week.weekly_snapshot_id} style={{ minWidth: '100px', fontSize: '12px', padding: '8px 4px' }}>
+                        {week.reference_date} (W{week.week_number})
                       </th>
                     ))}
                   </tr>
@@ -2772,27 +2763,75 @@ export default function PortfolioPage() {
                   ))}
                   {/* 합계 행 */}
                   {weeklyReportData.accounts.length > 0 && (
-                    <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
-                      <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1 }}>
-                        총합
-                      </td>
-                      {weeklyReportData.weeks.map((week, weekIdx) => {
-                        const total = weeklyReportData.accounts.reduce((sum, account) => {
-                          const val = account.valuations[weekIdx];
-                          return sum + (val ? val.amount : 0);
-                        }, 0);
-                        return (
-                          <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
-                            {total > 0
-                              ? total.toLocaleString('ko-KR', {
-                                  minimumFractionDigits: 0,
-                                  maximumFractionDigits: 0,
-                                })
-                              : '-'}
-                          </td>
-                        );
-                      })}
-                    </tr>
+                    <>
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1 }}>
+                          총합
+                        </td>
+                        {weeklyReportData.weeks.map((week, weekIdx) => {
+                          const total = weeklyReportData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[weekIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
+                          return (
+                            <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                              {total > 0
+                                ? total.toLocaleString('ko-KR', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0,
+                                  })
+                                : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      {/* 전주 대비 변화 행 */}
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#fff5f5' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1 }}>
+                          전주 대비 변화
+                        </td>
+                        {weeklyReportData.weeks.map((week, weekIdx) => {
+                          const currentTotal = weeklyReportData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[weekIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
+
+                          let changePercent = 0;
+                          let changeColor = 'black';
+
+                          if (weekIdx > 0) {
+                            const prevTotal = weeklyReportData.accounts.reduce((sum, account) => {
+                              const val = account.valuations[weekIdx - 1];
+                              return sum + (val ? val.amount : 0);
+                            }, 0);
+
+                            if (prevTotal > 0) {
+                              changePercent = ((currentTotal - prevTotal) / prevTotal) * 100;
+
+                              if (changePercent >= 1) {
+                                changeColor = '#d32f2f'; // Red
+                              } else if (changePercent <= -1) {
+                                changeColor = '#1976d2'; // Blue
+                              }
+                            }
+                          }
+
+                          return (
+                            <td
+                              key={week.weekly_snapshot_id}
+                              style={{
+                                textAlign: 'right',
+                                color: changeColor,
+                              }}
+                            >
+                              {weekIdx > 0
+                                ? changePercent.toFixed(2) + '%'
+                                : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </>
                   )}
                 </tbody>
               </table>
