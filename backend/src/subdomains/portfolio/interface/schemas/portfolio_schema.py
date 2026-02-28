@@ -168,6 +168,17 @@ class UpdateAccountDisplayOrderRequest(BaseModel):
     items: list[AccountDisplayOrderItem] = Field(..., description="표시 순서 변경 항목")
 
 
+class AccountGroupDisplayOrderItem(BaseModel):
+    account_group_id: int = Field(..., description="계좌 그룹 ID")
+    display_order: int = Field(..., description="표시 순서")
+
+
+class UpdateAccountGroupDisplayOrderRequest(BaseModel):
+    items: list[AccountGroupDisplayOrderItem] = Field(
+        ..., description="표시 순서 변경 항목"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Account Groups
 # ---------------------------------------------------------------------------
@@ -178,16 +189,35 @@ class CreateAccountGroupRequest(BaseModel):
     account_ids: list[int] = Field(
         ..., description="그룹에 포함할 계좌 ID 목록", examples=[[1, 2, 3]]
     )
+    include_in_weekly_report: bool = Field(
+        False, description="주간 보고서에 포함", examples=[True]
+    )
+
+
+class UpdateAccountGroupRequest(BaseModel):
+    name: str = Field(..., description="계좌 그룹명", examples=["미국 투자 계좌"])
+    account_ids: list[int] = Field(
+        ..., description="그룹에 포함할 계좌 ID 목록", examples=[[1, 4, 7]]
+    )
+    include_in_weekly_report: bool = Field(
+        False, description="주간 보고서에 포함", examples=[False]
+    )
 
 
 class AccountGroupResponseData(BaseModel):
     account_group_id: int | None = Field(None, description="계좌 그룹 ID", examples=[5])
     name: str = Field(..., description="그룹명")
     account_ids: list[int] = Field(..., description="포함된 계좌 ID 목록")
+    include_in_weekly_report: bool = Field(..., description="주간 보고서에 포함")
+    display_order: int = Field(..., description="표시 순서")
     created_at: str = Field(..., description="생성 시각")
 
 
 class AccountGroupResponse(ApiResponse[AccountGroupResponseData]):
+    pass
+
+
+class DeleteAccountGroupResponse(ApiResponse[dict[str, Any] | None]):
     pass
 
 
@@ -391,6 +421,25 @@ class WeeklyAccountGroupReportResponse(ApiResponse[WeeklyAccountGroupReportData]
     pass
 
 
+class AnnualAccountGroupReportItem(BaseModel):
+    year: int
+    reference_date: date
+    account_group_name: str
+    account_id: int
+    account_name: str
+    valuation: float
+    group_total: float
+
+
+class AnnualAccountGroupReportData(BaseModel):
+    items: list[AnnualAccountGroupReportItem]
+    total_amount: float | None = None
+
+
+class AnnualAccountGroupReportResponse(ApiResponse[AnnualAccountGroupReportData]):
+    pass
+
+
 class AssetClassReportItem(BaseModel):
     asset_class: str
     product_name: str
@@ -426,9 +475,17 @@ class WeeklyPivotAccountRow(BaseModel):
     valuations: list[WeeklyPivotAccountValuation]
 
 
+class WeeklyPivotAccountGroupRow(BaseModel):
+    account_group_id: int
+    account_group_name: str
+    display_order: int
+    valuations: list[WeeklyPivotAccountValuation]
+
+
 class WeeklyPivotReportData(BaseModel):
     year: int
     weeks: list[WeeklyPivotWeekInfo]
+    account_groups: list[WeeklyPivotAccountGroupRow]
     accounts: list[WeeklyPivotAccountRow]
 
 

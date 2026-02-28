@@ -520,11 +520,16 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
         async with connection.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO account_groups (name, created_at)
-                VALUES (%s, %s)
-                RETURNING account_group_id, name, created_at
+                INSERT INTO account_groups (name, include_in_weekly_report, display_order, created_at)
+                VALUES (%s, %s, %s, %s)
+                RETURNING account_group_id, name, include_in_weekly_report, display_order, created_at
                 """,
-                (group.name, _utc_now_naive()),
+                (
+                    group.name,
+                    group.include_in_weekly_report,
+                    group.display_order,
+                    _utc_now_naive(),
+                ),
             )
             row = await cur.fetchone()
             group_id = row["account_group_id"]
@@ -543,6 +548,8 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             account_group_id=group_id,
             name=row["name"],
             account_ids=list(group.account_ids),
+            include_in_weekly_report=row["include_in_weekly_report"],
+            display_order=row["display_order"],
             created_at=row["created_at"],
         )
 
@@ -555,6 +562,130 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             )
             row = await cur.fetchone()
             return row is not None
+
+    @use_transaction()
+    async def find_by_id(
+        self, conn: Connection, account_group_id: int
+    ) -> AccountGroup | None:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT g.account_group_id, g.name, g.include_in_weekly_report, g.display_order, g.created_at, m.account_id
+                FROM account_groups g
+                LEFT JOIN account_group_accounts m
+                  ON g.account_group_id = m.account_group_id
+                WHERE g.account_group_id = %s
+                ORDER BY m.account_id ASC
+                """,
+                (account_group_id,),
+            )
+            rows = await cur.fetchall()
+
+        if not rows:
+            return None
+
+        account_ids = [
+            row["account_id"] for row in rows if row["account_id"] is not None
+        ]
+        first = rows[0]
+        return AccountGroup(
+            account_group_id=first["account_group_id"],
+            name=first["name"],
+            account_ids=account_ids,
+            include_in_weekly_report=first["include_in_weekly_report"],
+            display_order=first["display_order"],
+            created_at=first["created_at"],
+        )
+
+    @use_transaction()
+    async def update(self, conn: Connection, group: AccountGroup) -> AccountGroup:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "UPDATE account_groups SET name = %s, include_in_weekly_report = %s, display_order = %s WHERE account_group_id = %s",
+                (
+                    group.name,
+                    group.include_in_weekly_report,
+                    group.display_order,
+                    group.account_group_id,
+                ),
+            )
+            await cur.execute(
+                "DELETE FROM account_group_accounts WHERE account_group_id = %s",
+                (group.account_group_id,),
+            )
+            if group.account_ids:
+                await cur.executemany(
+                    """
+                    INSERT INTO account_group_accounts (account_group_id, account_id, created_at)
+                    VALUES (%s, %s, %s)
+                    """,
+                    [
+                        (group.account_group_id, account_id, _utc_now_naive())
+                        for account_id in group.account_ids
+                    ],
+                )
+        return group
+
+    @use_transaction()
+    async def delete(self, conn: Connection, account_group_id: int) -> None:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM account_groups WHERE account_group_id = %s",
+                (account_group_id,),
+            )
+
+    @use_transaction()
+    async def get_all(self, conn: Connection) -> list[AccountGroup]:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT g.account_group_id, g.name, g.include_in_weekly_report, g.display_order, g.created_at, m.account_id
+                FROM account_groups g
+                LEFT JOIN account_group_accounts m
+                  ON g.account_group_id = m.account_group_id
+                ORDER BY g.account_group_id DESC, m.account_id ASC
+                """
+            )
+            rows = await cur.fetchall()
+
+        if not rows:
+            return []
+
+        grouped: dict[int, AccountGroup] = {}
+        for row in rows:
+            group_id = row["account_group_id"]
+            if group_id not in grouped:
+                grouped[group_id] = AccountGroup(
+                    account_group_id=group_id,
+                    name=row["name"],
+                    account_ids=[],
+                    include_in_weekly_report=row["include_in_weekly_report"],
+                    display_order=row["display_order"],
+                    created_at=row["created_at"],
+                )
+            if row["account_id"] is not None:
+                grouped[group_id].account_ids.append(row["account_id"])
+
+        return list(grouped.values())
+
+    @use_transaction()
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            updated = 0
+            for account_group_id, display_order in orders:
+                await cur.execute(
+                    "UPDATE account_groups SET display_order = %s WHERE account_group_id = %s",
+                    (display_order, account_group_id),
+                )
+                updated += 1
+            return updated
 
 
 # ---------------------------------------------------------------------------
@@ -1105,6 +1236,37 @@ class PsycopgReportQueryRepository(_BaseRepo, ReportQueryRepository):
                 ORDER BY ws.reference_date DESC, ag.name, a.account_id
                 """,
                 (user_id, start_date, start_date, end_date, end_date),
+            )
+            rows = await cur.fetchall()
+        return [dict(row) for row in rows]
+
+    @use_transaction()
+    async def annual_account_group_report(
+        self, conn: Connection, user_id: int, year: int | None
+    ) -> list[dict]:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT EXTRACT(YEAR FROM asnap.reference_date) AS year,
+                       asnap.reference_date,
+                       ag.name AS account_group_name,
+                       a.account_id,
+                       a.name AS account_name,
+                       SUM(ash.valuation_amount) AS valuation,
+                       SUM(SUM(ash.valuation_amount)) OVER (PARTITION BY ag.account_group_id, asnap.reference_date) AS group_total
+                FROM annual_snapshots asnap
+                JOIN annual_snapshot_holdings ash ON asnap.annual_snapshot_id = ash.annual_snapshot_id
+                JOIN holdings h ON ash.holding_id = h.holding_id
+                JOIN accounts a ON h.account_id = a.account_id
+                JOIN account_group_accounts aga ON a.account_id = aga.account_id
+                JOIN account_groups ag ON aga.account_group_id = ag.account_group_id
+                WHERE asnap.user_id = %s
+                  AND (%s IS NULL OR EXTRACT(YEAR FROM asnap.reference_date) = %s)
+                GROUP BY year, asnap.reference_date, ag.account_group_id, ag.name, a.account_id, a.name
+                ORDER BY year DESC, ag.name, a.account_id
+                """,
+                (user_id, year, year),
             )
             rows = await cur.fetchall()
         return [dict(row) for row in rows]

@@ -112,6 +112,8 @@ class AccountGroupEntity(Base):
 
     account_group_id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, unique=True)
+    include_in_weekly_report = Column(Boolean, nullable=False, default=False)
+    display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
 
     def __repr__(self) -> str:  # pragma: no cover

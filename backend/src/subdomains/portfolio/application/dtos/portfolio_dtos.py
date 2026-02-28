@@ -87,6 +87,12 @@ class AccountDisplayOrderItem:
 
 
 @dataclass
+class AccountGroupDisplayOrderItem:
+    account_group_id: int
+    display_order: int
+
+
+@dataclass
 class UpdateAccountCommand:
     account_id: int
     name: str
@@ -102,6 +108,11 @@ class UpdateInstitutionDisplayOrdersCommand:
 @dataclass
 class UpdateAccountDisplayOrdersCommand:
     items: list[AccountDisplayOrderItem]
+
+
+@dataclass
+class UpdateAccountGroupDisplayOrdersCommand:
+    items: list[AccountGroupDisplayOrderItem]
 
 
 @dataclass
@@ -164,6 +175,20 @@ class CreateAnnualSnapshotCommand:
 class CreateAccountGroupCommand:
     name: str
     account_ids: list[int]
+    include_in_weekly_report: bool = False
+
+
+@dataclass
+class UpdateAccountGroupCommand:
+    account_group_id: int
+    name: str
+    account_ids: list[int]
+    include_in_weekly_report: bool = False
+
+
+@dataclass
+class DeleteAccountGroupCommand:
+    account_group_id: int
 
 
 @dataclass
@@ -184,6 +209,12 @@ class WeeklyAccountGroupReportQuery:
     user_id: int
     start_date: date | None = None
     end_date: date | None = None
+
+
+@dataclass
+class AnnualAccountGroupReportQuery:
+    user_id: int
+    year: int | None = None
 
 
 @dataclass
@@ -277,6 +308,8 @@ class AccountGroupResult:
     account_group_id: int | None
     name: str
     account_ids: list[int]
+    include_in_weekly_report: bool
+    display_order: int
     created_at: datetime
 
     @classmethod
@@ -285,6 +318,8 @@ class AccountGroupResult:
             account_group_id=model.account_group_id,
             name=model.name,
             account_ids=model.account_ids,
+            include_in_weekly_report=model.include_in_weekly_report,
+            display_order=model.display_order,
             created_at=model.created_at,
         )
 
@@ -449,9 +484,20 @@ class WeeklyPivotAccountRow:
 
 
 @dataclass
+class WeeklyPivotAccountGroupRow:
+    """계좌그룹별 행 데이터"""
+
+    account_group_id: int
+    account_group_name: str
+    display_order: int
+    valuations: list[WeeklyPivotAccountValuation]  # 주차별 평가액
+
+
+@dataclass
 class WeeklyPivotReportResult:
     """주간 Pivot 보고서 결과"""
 
     year: int
     weeks: list[WeeklyPivotWeekInfo]
+    account_groups: list[WeeklyPivotAccountGroupRow]  # 계좌그룹 행
     accounts: list[WeeklyPivotAccountRow]

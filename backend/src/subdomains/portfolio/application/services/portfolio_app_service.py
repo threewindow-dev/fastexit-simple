@@ -21,9 +21,13 @@ from subdomains.portfolio.application.dtos import (
     CreateWeeklySnapshotCommand,
     CreateAnnualSnapshotCommand,
     CreateAccountGroupCommand,
+    UpdateAccountGroupCommand,
+    DeleteAccountGroupCommand,
+    UpdateAccountGroupDisplayOrdersCommand,
     WeeklyAccountReportQuery,
     AnnualAccountReportQuery,
     WeeklyAccountGroupReportQuery,
+    AnnualAccountGroupReportQuery,
     AssetClassReportQuery,
     WeeklyPivotReportQuery,
     InstitutionResult,
@@ -40,6 +44,7 @@ from subdomains.portfolio.application.dtos import (
     WeeklyPivotWeekInfo,
     WeeklyPivotAccountValuation,
     WeeklyPivotAccountRow,
+    WeeklyPivotAccountGroupRow,
     WeeklyPivotReportResult,
 )
 from subdomains.portfolio.domain import (
@@ -262,9 +267,56 @@ class PortfolioAppService:
         accounts = await self._account_repo.find_many(command.account_ids)
         if len(accounts) != len(command.account_ids):
             raise NotFoundError("account", "one or more missing")
-        model = AccountGroup.create(name=command.name, account_ids=command.account_ids)
+        model = AccountGroup.create(
+            name=command.name,
+            account_ids=command.account_ids,
+            include_in_weekly_report=command.include_in_weekly_report,
+        )
         saved = await self._account_group_repo.add(model)
         return AccountGroupResult.from_domain(saved)
+
+    @transactional(mode="writable")
+    async def update_account_group(
+        self, command: UpdateAccountGroupCommand
+    ) -> AccountGroupResult:
+        existing = await self._account_group_repo.find_by_id(command.account_group_id)
+        if existing is None:
+            raise NotFoundError("account_group", command.account_group_id)
+
+        if (
+            existing.name != command.name
+            and await self._account_group_repo.exists_by_name(command.name)
+        ):
+            raise DuplicateEntityError("account_group", command.name)
+
+        accounts = await self._account_repo.find_many(command.account_ids)
+        if len(accounts) != len(command.account_ids):
+            raise NotFoundError("account", "one or more missing")
+
+        updated = AccountGroup(
+            account_group_id=existing.account_group_id,
+            name=command.name,
+            account_ids=command.account_ids,
+            include_in_weekly_report=command.include_in_weekly_report,
+            display_order=existing.display_order,
+            created_at=existing.created_at,
+        )
+        saved = await self._account_group_repo.update(updated)
+        return AccountGroupResult.from_domain(saved)
+
+    @transactional(mode="writable")
+    async def delete_account_group(self, command: DeleteAccountGroupCommand) -> None:
+        existing = await self._account_group_repo.find_by_id(command.account_group_id)
+        if existing is None:
+            raise NotFoundError("account_group", command.account_group_id)
+        await self._account_group_repo.delete(command.account_group_id)
+
+    @transactional(mode="writable")
+    async def update_account_group_display_orders(
+        self, command: UpdateAccountGroupDisplayOrdersCommand
+    ) -> int:
+        orders = [(item.account_group_id, item.display_order) for item in command.items]
+        return await self._account_group_repo.update_display_orders(orders)
 
     # ------------------------------------------------------------------
     # Holdings
@@ -441,6 +493,17 @@ class PortfolioAppService:
         return ReportResult(items=items, total_amount=total)
 
     @transactional(mode="readonly")
+    async def annual_account_group_report(
+        self, query: AnnualAccountGroupReportQuery
+    ) -> ReportResult:
+        rows = await self._report_repo.annual_account_group_report(
+            query.user_id, query.year
+        )
+        items = [ReportItem(row) for row in rows]
+        total = sum(r.get("group_total", 0) or 0 for r in rows)
+        return ReportResult(items=items, total_amount=total)
+
+    @transactional(mode="readonly")
     async def asset_class_report(self, query: AssetClassReportQuery) -> ReportResult:
         rows = await self._report_repo.asset_class_report(
             query.user_id, query.snapshot_date
@@ -464,7 +527,9 @@ class PortfolioAppService:
         year_snapshots.sort(key=lambda x: x.reference_date)
 
         if not year_snapshots:
-            return WeeklyPivotReportResult(year=query.year, weeks=[], accounts=[])
+            return WeeklyPivotReportResult(
+                year=query.year, weeks=[], account_groups=[], accounts=[]
+            )
 
         # 3. 주차 정보 생성
         weeks = [
@@ -535,7 +600,47 @@ class PortfolioAppService:
                 )
             )
 
-        return WeeklyPivotReportResult(year=query.year, weeks=weeks, accounts=accounts)
+        # 7. 계좌그룹 행 데이터 생성 (include_in_weekly_report=True인 그룹들)
+        account_group_rows = []
+        account_groups = await self._account_group_repo.get_all()
+        for group in account_groups:
+            if not group.include_in_weekly_report:
+                continue
+
+            # 해당 그룹에 속한 계좌들의 평가액을 주차별로 합산
+            group_valuations_by_week = {}
+            for account_id in group.account_ids:
+                if account_id in account_map:
+                    for week_id, amount in account_map[account_id][
+                        "valuations"
+                    ].items():
+                        if week_id not in group_valuations_by_week:
+                            group_valuations_by_week[week_id] = 0
+                        group_valuations_by_week[week_id] += amount
+
+            valuations = [
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=snap.weekly_snapshot_id,
+                    amount=group_valuations_by_week.get(snap.weekly_snapshot_id, 0.0),
+                )
+                for snap in year_snapshots
+            ]
+
+            account_group_rows.append(
+                WeeklyPivotAccountGroupRow(
+                    account_group_id=group.account_group_id,
+                    account_group_name=group.name,
+                    display_order=group.display_order,
+                    valuations=valuations,
+                )
+            )
+
+        return WeeklyPivotReportResult(
+            year=query.year,
+            weeks=weeks,
+            account_groups=account_group_rows,
+            accounts=accounts,
+        )
 
     # ------------------------------------------------------------------
     # List/Read Operations
@@ -591,6 +696,12 @@ class PortfolioAppService:
             )
             for acc in accounts
         ]
+
+    @transactional(mode="readonly")
+    async def list_account_groups(self) -> list[AccountGroupResult]:
+        """조회: 모든 계좌 그룹 목록"""
+        groups = await self._account_group_repo.get_all()
+        return [AccountGroupResult.from_domain(group) for group in groups]
 
     @transactional(mode="readonly")
     async def list_snapshots(self, user_id: int) -> list[SnapshotResult]:

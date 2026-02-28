@@ -33,6 +33,15 @@ interface Account {
   created_at: string;
 }
 
+interface AccountGroup {
+  account_group_id: number;
+  name: string;
+  account_ids: number[];
+  include_in_weekly_report: boolean;
+  display_order: number;
+  created_at: string;
+}
+
 interface Snapshot {
   snapshot_id: number;
   user_id: number;
@@ -79,9 +88,17 @@ interface WeeklyPivotAccountRow {
   valuations: WeeklyPivotAccountValuation[];
 }
 
+interface WeeklyPivotAccountGroupRow {
+  account_group_id: number;
+  account_group_name: string;
+  display_order: number;
+  valuations: WeeklyPivotAccountValuation[];
+}
+
 interface WeeklyPivotReportData {
   year: number;
   weeks: WeeklyPivotWeekInfo[];
+  account_groups: WeeklyPivotAccountGroupRow[];
   accounts: WeeklyPivotAccountRow[];
 }
 
@@ -139,10 +156,11 @@ const getDataSourceLabel = (dataSource: string): string => {
 };
 
 export default function PortfolioPage() {
-  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport'>('institutions');
+  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport'>('institutions');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountGroups, setAccountGroups] = useState<AccountGroup[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [weeklySnapshots, setWeeklySnapshots] = useState<WeeklySnapshot[]>([]);
   const [annualSnapshots, setAnnualSnapshots] = useState<AnnualSnapshot[]>([]);
@@ -210,6 +228,25 @@ export default function PortfolioPage() {
   } | null>(null);
   const [showAccountEditForm, setShowAccountEditForm] = useState(false);
 
+  // Account Group Form
+  const [newAccountGroup, setNewAccountGroup] = useState<{
+    name: string;
+    account_ids: number[];
+    include_in_weekly_report: boolean;
+  }>({
+    name: '',
+    account_ids: [],
+    include_in_weekly_report: false,
+  });
+  const [showAccountGroupForm, setShowAccountGroupForm] = useState(false);
+  const [editingAccountGroup, setEditingAccountGroup] = useState<{
+    account_group_id: number;
+    name: string;
+    account_ids: number[];
+    include_in_weekly_report: boolean;
+  } | null>(null);
+  const [showAccountGroupEditForm, setShowAccountGroupEditForm] = useState(false);
+
   // Snapshot Form
   const [newSnapshot, setNewSnapshot] = useState({
     user_id: 1,
@@ -235,9 +272,11 @@ export default function PortfolioPage() {
   const snapshotHoldingsTableRef = useRef<HTMLTableElement | null>(null);
   const [draggingInstitutionId, setDraggingInstitutionId] = useState<number | null>(null);
   const [draggingAccountId, setDraggingAccountId] = useState<number | null>(null);
+  const [draggingAccountGroupId, setDraggingAccountGroupId] = useState<number | null>(null);
   const [draggingProductId, setDraggingProductId] = useState<number | null>(null);
   const [savingInstitutionOrder, setSavingInstitutionOrder] = useState(false);
   const [savingAccountOrder, setSavingAccountOrder] = useState(false);
+  const [savingAccountGroupOrder, setSavingAccountGroupOrder] = useState(false);
   const [savingProductOrder, setSavingProductOrder] = useState(false);
 
   const snapshotDraftStorageKey = (snapshotId: number) => `snapshot-holdings-draft:${snapshotId}`;
@@ -361,6 +400,42 @@ export default function PortfolioPage() {
       });
     });
     setDraggingAccountId(null);
+  };
+
+  const handleAccountGroupDragStart = (accountGroupId: number) => {
+    setDraggingAccountGroupId(accountGroupId);
+  };
+
+  const handleAccountGroupDrop = (targetAccountGroupId: number) => {
+    if (draggingAccountGroupId === null || draggingAccountGroupId === targetAccountGroupId) {
+      return;
+    }
+
+    setAccountGroups((prev) => {
+      const ordered = [...prev].sort((a, b) => {
+        const diff = (a.display_order ?? 0) - (b.display_order ?? 0);
+        if (diff !== 0) {
+          return diff;
+        }
+        return a.account_group_id - b.account_group_id;
+      });
+
+      const fromIndex = ordered.findIndex((item) => item.account_group_id === draggingAccountGroupId);
+      const toIndex = ordered.findIndex((item) => item.account_group_id === targetAccountGroupId);
+      if (fromIndex < 0 || toIndex < 0) {
+        return prev;
+      }
+      const [moved] = ordered.splice(fromIndex, 1);
+      ordered.splice(toIndex, 0, moved);
+      const orderMap = new Map(
+        ordered.map((item, index) => [item.account_group_id, index + 1])
+      );
+      return prev.map((item) => ({
+        ...item,
+        display_order: orderMap.get(item.account_group_id) ?? item.display_order,
+      }));
+    });
+    setDraggingAccountGroupId(null);
   };
 
   const handleProductDragStart = (productId: number) => {
@@ -508,6 +583,10 @@ export default function PortfolioPage() {
     } else if (activeTab === 'accounts') {
       fetchAccounts();
       fetchInstitutions(); // For dropdown
+    } else if (activeTab === 'accountGroups') {
+      fetchAccountGroups();
+      fetchAccounts();
+      fetchInstitutions();
     } else if (activeTab === 'snapshots') {
       fetchSnapshots();
     } else if (activeTab === 'weeklySnapshots') {
@@ -528,6 +607,9 @@ export default function PortfolioPage() {
       fetchInstitutions();
     } else if (activeTab === 'weeklyReport') {
       fetchWeeklyReport();
+    } else if (activeTab === 'reports') {
+      fetchAccounts();
+      fetchAccountGroups();
     }
   }, [activeTab]);
 
@@ -601,6 +683,21 @@ export default function PortfolioPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching accounts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAccountGroups = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/portfolio/account-groups`);
+      if (!response.ok) throw new Error('Failed to fetch account groups');
+      const result = await response.json();
+      setAccountGroups(Array.isArray(result) ? result : result.data?.items || []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching account groups');
     } finally {
       setLoading(false);
     }
@@ -1045,6 +1142,176 @@ export default function PortfolioPage() {
     }
   };
 
+  const handleToggleAccountInGroup = (accountId: number) => {
+    setNewAccountGroup((prev) => {
+      const exists = prev.account_ids.includes(accountId);
+      return {
+        ...prev,
+        account_ids: exists
+          ? prev.account_ids.filter((id) => id !== accountId)
+          : [...prev.account_ids, accountId],
+      };
+    });
+  };
+
+  const handleToggleAccountInEditingGroup = (accountId: number) => {
+    setEditingAccountGroup((prev) => {
+      if (!prev) return prev;
+      const exists = prev.account_ids.includes(accountId);
+      return {
+        ...prev,
+        account_ids: exists
+          ? prev.account_ids.filter((id) => id !== accountId)
+          : [...prev.account_ids, accountId],
+      };
+    });
+  };
+
+  const handleCreateAccountGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAccountGroup.name.trim()) {
+      alert('그룹명을 입력해주세요.');
+      return;
+    }
+    if (newAccountGroup.account_ids.length === 0) {
+      alert('포함할 계좌를 1개 이상 선택해주세요.');
+      return;
+    }
+
+    try {
+      const payload = {
+        name: newAccountGroup.name.trim(),
+        account_ids: newAccountGroup.account_ids,
+        include_in_weekly_report: newAccountGroup.include_in_weekly_report,
+      };
+      const response = await fetch(`${API_BASE_URL}/portfolio/account-groups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to create account group');
+
+      setNewAccountGroup({ name: '', account_ids: [], include_in_weekly_report: false });
+      setShowAccountGroupForm(false);
+      await fetchAccountGroups();
+      alert('계좌그룹이 생성되었습니다.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to create account group');
+    }
+  };
+
+  const openAccountGroupEdit = (group: AccountGroup) => {
+    setEditingAccountGroup({
+      account_group_id: group.account_group_id,
+      name: group.name,
+      account_ids: [...group.account_ids],
+      include_in_weekly_report: group.include_in_weekly_report,
+    });
+    setShowAccountGroupEditForm(true);
+    setShowAccountGroupForm(false);
+  };
+
+  const cancelAccountGroupEdit = () => {
+    setEditingAccountGroup(null);
+    setShowAccountGroupEditForm(false);
+  };
+
+  const handleUpdateAccountGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccountGroup) return;
+    if (!editingAccountGroup.name.trim()) {
+      alert('그룹명을 입력해주세요.');
+      return;
+    }
+    if (editingAccountGroup.account_ids.length === 0) {
+      alert('포함할 계좌를 1개 이상 선택해주세요.');
+      return;
+    }
+
+    try {
+      const payload = {
+        name: editingAccountGroup.name.trim(),
+        account_ids: editingAccountGroup.account_ids,
+        include_in_weekly_report: editingAccountGroup.include_in_weekly_report,
+      };
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/account-groups/${editingAccountGroup.account_group_id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update account group');
+
+      cancelAccountGroupEdit();
+      await fetchAccountGroups();
+      alert('계좌그룹이 수정되었습니다.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update account group');
+    }
+  };
+
+  const handleSaveAccountGroupOrder = async () => {
+    const sortedGroups = [...accountGroups].sort((a, b) => {
+      const diff = (a.display_order ?? 0) - (b.display_order ?? 0);
+      if (diff !== 0) {
+        return diff;
+      }
+      return a.account_group_id - b.account_group_id;
+    });
+
+    const updatedGroups = sortedGroups.map((group, index) => ({
+      ...group,
+      display_order: index + 1,
+    }));
+
+    try {
+      setSavingAccountGroupOrder(true);
+      const payload = {
+        items: updatedGroups.map((item) => ({
+          account_group_id: item.account_group_id,
+          display_order: item.display_order,
+        })),
+      };
+      const response = await fetch(`${API_BASE_URL}/portfolio/account-groups:reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update display order');
+      setAccountGroups(updatedGroups);
+      alert('계좌그룹 표시순서가 저장되었습니다.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update display order');
+    } finally {
+      setSavingAccountGroupOrder(false);
+    }
+  };
+
+  const handleDeleteAccountGroup = async (accountGroupId: number) => {
+    if (!window.confirm('계좌그룹을 삭제하시겠습니까?')) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/portfolio/account-groups/${accountGroupId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to delete account group');
+
+      if (editingAccountGroup?.account_group_id === accountGroupId) {
+        cancelAccountGroupEdit();
+      }
+      await fetchAccountGroups();
+      alert('계좌그룹이 삭제되었습니다.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete account group');
+    }
+  };
+
   const handleCreateSnapshot = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -1228,13 +1495,15 @@ export default function PortfolioPage() {
       const { report_type, reference_date, account_id, account_group_id } = reportFilter;
       
       if (report_type === 'weekly_account' && account_id) {
-        url = `${API_BASE_URL}/portfolio/reports/weekly-account/${account_id}?reference_date=${reference_date}`;
+        url = `${API_BASE_URL}/portfolio/reports/weekly/accounts?user_id=1&start_date=${reference_date}&end_date=${reference_date}`;
       } else if (report_type === 'annual_account' && account_id) {
-        url = `${API_BASE_URL}/portfolio/reports/annual-account/${account_id}?reference_date=${reference_date}`;
+        url = `${API_BASE_URL}/portfolio/reports/annual/accounts?user_id=1`;
       } else if (report_type === 'weekly_account_group' && account_group_id) {
-        url = `${API_BASE_URL}/portfolio/reports/weekly-account-group/${account_group_id}?reference_date=${reference_date}`;
+        url = `${API_BASE_URL}/portfolio/reports/weekly/account-groups?user_id=1&start_date=${reference_date}&end_date=${reference_date}`;
+      } else if (report_type === 'annual_account_group' && account_group_id) {
+        url = `${API_BASE_URL}/portfolio/reports/annual/account-groups?user_id=1`;
       } else if (report_type === 'asset_class') {
-        url = `${API_BASE_URL}/portfolio/reports/asset-class?reference_date=${reference_date}`;
+        url = `${API_BASE_URL}/portfolio/reports/asset-class?user_id=1&snapshot_date=${reference_date}`;
       } else {
         alert('필수 파라미터를 입력해주세요.');
         return;
@@ -1388,6 +1657,12 @@ export default function PortfolioPage() {
           onClick={() => setActiveTab('accounts')}
         >
           계좌
+        </button>
+        <button
+          className={activeTab === 'accountGroups' ? styles.activeTab : ''}
+          onClick={() => setActiveTab('accountGroups')}
+        >
+          계좌그룹
         </button>
         <button
           className={activeTab === 'holdings' ? styles.activeTab : ''}
@@ -1946,6 +2221,228 @@ export default function PortfolioPage() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Account Groups Tab */}
+      {activeTab === 'accountGroups' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>계좌그룹 목록</h2>
+            <div>
+              {accountGroups.length > 0 && (
+                <button
+                  onClick={handleSaveAccountGroupOrder}
+                  disabled={savingAccountGroupOrder}
+                  style={{ marginRight: '10px' }}
+                >
+                  {savingAccountGroupOrder ? '저장 중...' : '표시순서 저장'}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setShowAccountGroupForm((prev) => !prev);
+                  setShowAccountGroupEditForm(false);
+                  setEditingAccountGroup(null);
+                  if (showAccountGroupForm) {
+                    setNewAccountGroup({ name: '', account_ids: [], include_in_weekly_report: false });
+                  }
+                }}
+              >
+                {showAccountGroupForm ? '취소' : '+ 추가'}
+              </button>
+            </div>
+          </div>
+
+          {showAccountGroupForm && (
+            <form onSubmit={handleCreateAccountGroup} className={styles.form}>
+              <input
+                type="text"
+                placeholder="그룹명 (예: 미국 투자 계좌)"
+                value={newAccountGroup.name}
+                onChange={(e) =>
+                  setNewAccountGroup((prev) => ({
+                    ...prev,
+                    name: e.target.value,
+                  }))
+                }
+                required
+              />
+              <div style={{ border: '1px solid #ddd', borderRadius: '6px', padding: '10px', maxHeight: '220px', overflowY: 'auto' }}>
+                {getSortedAccounts().map((account) => {
+                  const institution = institutions.find((item) => item.institution_id === account.institution_id);
+                  return (
+                    <label key={account.account_id} style={{ display: 'block', marginBottom: '6px' }}>
+                      <input
+                        type="checkbox"
+                        checked={newAccountGroup.account_ids.includes(account.account_id)}
+                        onChange={() => handleToggleAccountInGroup(account.account_id)}
+                        style={{ marginRight: '8px' }}
+                      />
+                      {institution?.name ?? '-'} / {account.name} ({account.type})
+                    </label>
+                  );
+                })}
+              </div>
+              <label style={{ display: 'block', margin: '10px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={newAccountGroup.include_in_weekly_report}
+                  onChange={(e) =>
+                    setNewAccountGroup((prev) => ({
+                      ...prev,
+                      include_in_weekly_report: e.target.checked,
+                    }))
+                  }
+                  style={{ marginRight: '8px' }}
+                />
+                주간 보고서에 포함
+              </label>
+              <button type="submit">생성</button>
+            </form>
+          )}
+
+          {showAccountGroupEditForm && editingAccountGroup && (
+            <form onSubmit={handleUpdateAccountGroup} className={styles.form}>
+              <input
+                type="text"
+                placeholder="그룹명"
+                value={editingAccountGroup.name}
+                onChange={(e) =>
+                  setEditingAccountGroup((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          name: e.target.value,
+                        }
+                      : prev
+                  )
+                }
+                required
+              />
+              <div style={{ border: '1px solid #ddd', borderRadius: '6px', padding: '10px', maxHeight: '220px', overflowY: 'auto' }}>
+                {getSortedAccounts().map((account) => {
+                  const institution = institutions.find((item) => item.institution_id === account.institution_id);
+                  return (
+                    <label key={`edit-${account.account_id}`} style={{ display: 'block', marginBottom: '6px' }}>
+                      <input
+                        type="checkbox"
+                        checked={editingAccountGroup.account_ids.includes(account.account_id)}
+                        onChange={() => handleToggleAccountInEditingGroup(account.account_id)}
+                        style={{ marginRight: '8px' }}
+                      />
+                      {institution?.name ?? '-'} / {account.name} ({account.type})
+                    </label>
+                  );
+                })}
+              </div>
+              <label style={{ display: 'block', margin: '10px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={editingAccountGroup.include_in_weekly_report}
+                  onChange={(e) =>
+                    setEditingAccountGroup((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            include_in_weekly_report: e.target.checked,
+                          }
+                        : prev
+                    )
+                  }
+                  style={{ marginRight: '8px' }}
+                />
+                주간 보고서에 포함
+              </label>
+              <div className={styles.actionButtons}>
+                <button type="submit">저장</button>
+                <button type="button" onClick={cancelAccountGroupEdit}>취소</button>
+              </div>
+            </form>
+          )}
+
+          {loading ? (
+            <div className={styles.loading}>로딩 중...</div>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th style={{ width: '40px' }}></th>
+                  <th>번호</th>
+                  <th>그룹명</th>
+                  <th>포함 계좌</th>
+                  <th>주간 보고서 포함</th>
+                  <th>생성일</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accountGroups.length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>생성된 계좌그룹이 없습니다.</td>
+                  </tr>
+                ) : (
+                  accountGroups
+                    .sort((a, b) => {
+                      const diff = (a.display_order ?? 0) - (b.display_order ?? 0);
+                      if (diff !== 0) {
+                        return diff;
+                      }
+                      return a.account_group_id - b.account_group_id;
+                    })
+                    .map((group, index) => (
+                    <tr
+                      key={group.account_group_id}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => handleAccountGroupDrop(group.account_group_id)}
+                    >
+                      <td
+                        className={styles.dragHandle}
+                        draggable
+                        onDragStart={() => handleAccountGroupDragStart(group.account_group_id)}
+                        onDragEnd={() => setDraggingAccountGroupId(null)}
+                        title="드래그하여 순서 변경"
+                      >
+                        ::
+                      </td>
+                      <td>{index + 1}</td>
+                      <td>{group.name}</td>
+                      <td>
+                        {group.account_ids.length === 0
+                          ? '-'
+                          : group.account_ids.map((accountId) => {
+                              const account = accounts.find((item) => item.account_id === accountId);
+                              const institution = institutions.find(
+                                (item) => item.institution_id === account?.institution_id
+                              );
+                              return (
+                                <div key={`${group.account_group_id}-${accountId}`}>
+                                  {institution?.name ?? '-'} / {account?.name ?? `계좌ID ${accountId}`}
+                                </div>
+                              );
+                            })}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={group.include_in_weekly_report}
+                          readOnly
+                          style={{ cursor: 'default' }}
+                        />
+                      </td>
+                      <td>{new Date(group.created_at).toLocaleDateString()}</td>
+                      <td>
+                        <div className={styles.actionButtons}>
+                          <button onClick={() => openAccountGroupEdit(group)}>수정</button>
+                          <button onClick={() => handleDeleteAccountGroup(group.account_group_id)}>삭제</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           )}
@@ -2643,6 +3140,7 @@ export default function PortfolioPage() {
               <option value="weekly_account">주간 계좌 보고서</option>
               <option value="annual_account">연간 계좌 보고서</option>
               <option value="weekly_account_group">주간 계좌그룹 보고서</option>
+              <option value="annual_account_group">연간 계좌그룹 보고서</option>
               <option value="asset_class">자산클래스 보고서</option>
             </select>
             <input
@@ -2658,13 +3156,18 @@ export default function PortfolioPage() {
                 onChange={(e) => setReportFilter({ ...reportFilter, account_id: e.target.value })}
               />
             )}
-            {reportFilter.report_type === 'weekly_account_group' && (
-              <input
-                type="number"
-                placeholder="계좌그룹 ID"
+            {(reportFilter.report_type === 'weekly_account_group' || reportFilter.report_type === 'annual_account_group') && (
+              <select
                 value={reportFilter.account_group_id}
                 onChange={(e) => setReportFilter({ ...reportFilter, account_group_id: e.target.value })}
-              />
+              >
+                <option value="">계좌그룹 선택</option>
+                {accountGroups.map((group) => (
+                  <option key={group.account_group_id} value={group.account_group_id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
             )}
           </div>
 
@@ -2741,6 +3244,66 @@ export default function PortfolioPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {/* 계좌그룹 섹션 (상단) */}
+                  {weeklyReportData.account_groups && weeklyReportData.account_groups.length > 0 && (
+                    <>
+                      <tr style={{ borderBottom: '2px solid #ccc' }}>
+                        <td colSpan={weeklyReportData.weeks.length + 2} style={{ padding: '12px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                          계좌 그룹
+                        </td>
+                      </tr>
+                      {[...weeklyReportData.account_groups].sort((a, b) => a.display_order - b.display_order).map((group) => (
+                        <tr key={group.account_group_id} style={{ backgroundColor: '#fffacd' }}>
+                          <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold' }}>
+                            {group.account_group_name}
+                          </td>
+                          <td style={{ position: 'sticky', left: '120px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '12px', color: '#666' }}>
+                            (합계)
+                          </td>
+                          {group.valuations.map((val, idx) => (
+                            <td key={idx} style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                              {val.amount > 0
+                                ? val.amount.toLocaleString('ko-KR', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0,
+                                  })
+                                : '-'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                      {/* 계좌 그룹 총합 행 */}
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#ffeb99' }}>
+                        <td style={{ position: 'sticky', left: 0, backgroundColor: '#ffeb99', zIndex: 1 }}>
+                          총합
+                        </td>
+                        <td style={{ position: 'sticky', left: '120px', backgroundColor: '#ffeb99', zIndex: 1 }}>
+                        </td>
+                        {weeklyReportData.weeks.map((week, weekIdx) => {
+                          const total = weeklyReportData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[weekIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
+                          return (
+                            <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                              {total > 0
+                                ? total.toLocaleString('ko-KR', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0,
+                                  })
+                                : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr style={{ borderTop: '2px solid #ccc', borderBottom: '2px solid #ccc' }}>
+                        <td colSpan={weeklyReportData.weeks.length + 2} style={{ padding: '12px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                          전체 계좌
+                        </td>
+                      </tr>
+                    </>
+                  )}
+
                   {weeklyReportData.accounts.map((account) => (
                     <tr key={account.account_id}>
                       <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1 }}>

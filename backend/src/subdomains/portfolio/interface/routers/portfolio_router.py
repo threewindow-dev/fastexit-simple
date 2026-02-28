@@ -22,6 +22,10 @@ from subdomains.portfolio.application.dtos import (
     UpdateAccountDisplayOrdersCommand,
     AccountDisplayOrderItem,
     CreateAccountGroupCommand,
+    UpdateAccountGroupCommand,
+    DeleteAccountGroupCommand,
+    UpdateAccountGroupDisplayOrdersCommand,
+    AccountGroupDisplayOrderItem,
     CreateHoldingCommand,
     DeleteHoldingCommand,
     CreateSnapshotCommand,
@@ -33,6 +37,7 @@ from subdomains.portfolio.application.dtos import (
     WeeklyAccountReportQuery,
     AnnualAccountReportQuery,
     WeeklyAccountGroupReportQuery,
+    AnnualAccountGroupReportQuery,
     AssetClassReportQuery,
     WeeklyPivotReportQuery,
 )
@@ -58,8 +63,11 @@ from subdomains.portfolio.interface.schemas import (
     UpdateAccountRequest,
     UpdateAccountDisplayOrderRequest,
     CreateAccountGroupRequest,
+    UpdateAccountGroupRequest,
+    UpdateAccountGroupDisplayOrderRequest,
     AccountGroupResponse,
     AccountGroupResponseData,
+    DeleteAccountGroupResponse,
     CreateHoldingRequest,
     HoldingResponse,
     HoldingResponseData,
@@ -90,6 +98,9 @@ from subdomains.portfolio.interface.schemas import (
     WeeklyAccountGroupReportResponse,
     WeeklyAccountGroupReportData,
     WeeklyAccountGroupReportItem,
+    AnnualAccountGroupReportResponse,
+    AnnualAccountGroupReportData,
+    AnnualAccountGroupReportItem,
     AssetClassReportResponse,
     AssetClassReportData,
     AssetClassReportItem,
@@ -98,6 +109,7 @@ from subdomains.portfolio.interface.schemas import (
     WeeklyPivotWeekInfo,
     WeeklyPivotAccountValuation,
     WeeklyPivotAccountRow,
+    WeeklyPivotAccountGroupRow,
 )
 
 router = APIRouter(
@@ -491,6 +503,29 @@ async def update_account_display_order(
 # ---------------------------------------------------------------------------
 
 
+@router.get(
+    "/account-groups",
+    response_model=list[AccountGroupResponseData],
+    summary="계좌 그룹 목록 조회",
+    responses={**common_responses},
+)
+async def list_account_groups(
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> list[AccountGroupResponseData]:
+    results = await service.list_account_groups()
+    return [
+        AccountGroupResponseData(
+            account_group_id=result.account_group_id,
+            name=result.name,
+            account_ids=result.account_ids,
+            include_in_weekly_report=result.include_in_weekly_report,
+            display_order=result.display_order,
+            created_at=_iso(result.created_at),
+        )
+        for result in results
+    ]
+
+
 @router.post(
     "/account-groups",
     response_model=AccountGroupResponse,
@@ -502,15 +537,90 @@ async def create_account_group(
     request: CreateAccountGroupRequest,
     service: PortfolioAppService = Depends(get_portfolio_app_service),
 ) -> AccountGroupResponse:
-    cmd = CreateAccountGroupCommand(name=request.name, account_ids=request.account_ids)
+    cmd = CreateAccountGroupCommand(
+        name=request.name,
+        account_ids=request.account_ids,
+        include_in_weekly_report=request.include_in_weekly_report,
+    )
     result = await service.create_account_group(cmd)
     data = AccountGroupResponseData(
         account_group_id=result.account_group_id,
         name=result.name,
         account_ids=result.account_ids,
+        include_in_weekly_report=result.include_in_weekly_report,
+        display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
     return AccountGroupResponse(code=0, message="success", data=data)
+
+
+@router.put(
+    "/account-groups/{account_group_id}",
+    response_model=AccountGroupResponse,
+    summary="계좌 그룹 수정",
+    responses={**common_responses},
+)
+async def update_account_group(
+    request: UpdateAccountGroupRequest,
+    account_group_id: int = Path(..., description="계좌 그룹 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> AccountGroupResponse:
+    cmd = UpdateAccountGroupCommand(
+        account_group_id=account_group_id,
+        name=request.name,
+        account_ids=request.account_ids,
+        include_in_weekly_report=request.include_in_weekly_report,
+    )
+    result = await service.update_account_group(cmd)
+    data = AccountGroupResponseData(
+        account_group_id=result.account_group_id,
+        name=result.name,
+        account_ids=result.account_ids,
+        include_in_weekly_report=result.include_in_weekly_report,
+        display_order=result.display_order,
+        created_at=_iso(result.created_at),
+    )
+    return AccountGroupResponse(code=0, message="success", data=data)
+
+
+@router.delete(
+    "/account-groups/{account_group_id}",
+    response_model=DeleteAccountGroupResponse,
+    summary="계좌 그룹 삭제",
+    responses={**common_responses},
+)
+async def delete_account_group(
+    account_group_id: int = Path(..., description="계좌 그룹 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DeleteAccountGroupResponse:
+    cmd = DeleteAccountGroupCommand(account_group_id=account_group_id)
+    await service.delete_account_group(cmd)
+    return DeleteAccountGroupResponse(code=0, message="success", data=None)
+
+
+@router.put(
+    "/account-groups:reorder",
+    response_model=DisplayOrderUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="계좌 그룹 표시순서 일괄 변경",
+    responses={**common_responses},
+)
+async def update_account_group_display_order(
+    request: UpdateAccountGroupDisplayOrderRequest,
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DisplayOrderUpdateResponse:
+    cmd = UpdateAccountGroupDisplayOrdersCommand(
+        items=[
+            AccountGroupDisplayOrderItem(
+                account_group_id=item.account_group_id,
+                display_order=item.display_order,
+            )
+            for item in request.items
+        ]
+    )
+    updated_count = await service.update_account_group_display_orders(cmd)
+    data = DisplayOrderUpdateResponseData(updated_count=updated_count)
+    return DisplayOrderUpdateResponse(code=0, message="success", data=data)
 
 
 # ---------------------------------------------------------------------------
@@ -925,6 +1035,39 @@ async def weekly_account_group_report(
 
 
 @router.get(
+    "/reports/annual/account-groups",
+    response_model=AnnualAccountGroupReportResponse,
+    summary="연간 계좌그룹 리포트",
+    responses={**common_responses},
+)
+async def annual_account_group_report(
+    user_id: int = Query(..., description="사용자 ID"),
+    year: int | None = Query(None, description="연도 (옵션)"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> AnnualAccountGroupReportResponse:
+    query = AnnualAccountGroupReportQuery(user_id=user_id, year=year)
+    result = await service.annual_account_group_report(query)
+    items = [
+        AnnualAccountGroupReportItem(
+            year=(
+                int(item.data.get("year"))
+                if item.data.get("year") is not None
+                else year or 0
+            ),
+            reference_date=item.data.get("reference_date"),
+            account_group_name=item.data.get("account_group_name"),
+            account_id=item.data.get("account_id"),
+            account_name=item.data.get("account_name"),
+            valuation=float(item.data.get("valuation", 0) or 0),
+            group_total=float(item.data.get("group_total", 0) or 0),
+        )
+        for item in result.items
+    ]
+    data = AnnualAccountGroupReportData(items=items, total_amount=result.total_amount)
+    return AnnualAccountGroupReportResponse(code=0, message="success", data=data)
+
+
+@router.get(
     "/reports/asset-class",
     response_model=AssetClassReportResponse,
     summary="자산군 리포트",
@@ -974,6 +1117,21 @@ async def weekly_pivot_report(
         for w in result.weeks
     ]
 
+    account_groups = [
+        WeeklyPivotAccountGroupRow(
+            account_group_id=grp.account_group_id,
+            account_group_name=grp.account_group_name,
+            display_order=grp.display_order,
+            valuations=[
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=val.weekly_snapshot_id, amount=val.amount
+                )
+                for val in grp.valuations
+            ],
+        )
+        for grp in result.account_groups
+    ]
+
     accounts = [
         WeeklyPivotAccountRow(
             account_id=acc.account_id,
@@ -989,7 +1147,9 @@ async def weekly_pivot_report(
         for acc in result.accounts
     ]
 
-    data = WeeklyPivotReportData(year=result.year, weeks=weeks, accounts=accounts)
+    data = WeeklyPivotReportData(
+        year=result.year, weeks=weeks, account_groups=account_groups, accounts=accounts
+    )
     return WeeklyPivotReportResponse(code=0, message="success", data=data)
 
 

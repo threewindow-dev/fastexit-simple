@@ -111,6 +111,20 @@ class AccountGroupRepository(ABC):
     @abstractmethod
     async def exists_by_name(self, conn: Connection, name: str) -> bool: ...
 
+    @abstractmethod
+    async def find_by_id(
+        self, conn: Connection, account_group_id: int
+    ) -> AccountGroup | None: ...
+
+    @abstractmethod
+    async def update(self, conn: Connection, group: AccountGroup) -> AccountGroup: ...
+
+    @abstractmethod
+    async def delete(self, conn: Connection, account_group_id: int) -> None: ...
+
+    @abstractmethod
+    async def get_all(self, conn: Connection) -> list[AccountGroup]: ...
+
 
 class HoldingRepository(ABC):
     @abstractmethod
@@ -227,6 +241,11 @@ class ReportQueryRepository(ABC):
         user_id: int,
         start_date: date | None,
         end_date: date | None,
+    ) -> list[dict]: ...
+
+    @abstractmethod
+    async def annual_account_group_report(
+        self, conn: Connection, user_id: int, year: int | None
     ) -> list[dict]: ...
 
     @abstractmethod

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Iterable
 
-from sqlalchemy import select, insert, update, text, bindparam, Date, Integer
+from sqlalchemy import select, insert, update, delete, text, bindparam, Date, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.decorators import use_transaction
@@ -464,7 +464,11 @@ class SQLAlchemyAccountGroupRepository(_BaseRepo, AccountGroupRepository):
     @use_transaction()
     async def add(self, conn: Connection, group: AccountGroup) -> AccountGroup:
         session = self._require_session(conn)
-        entity = AccountGroupEntity(name=group.name)
+        entity = AccountGroupEntity(
+            name=group.name,
+            include_in_weekly_report=group.include_in_weekly_report,
+            display_order=group.display_order,
+        )
         session.add(entity)
         await session.flush()
         # insert mappings
@@ -484,6 +488,8 @@ class SQLAlchemyAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             account_group_id=entity.account_group_id,
             name=entity.name,
             account_ids=list(group.account_ids),
+            include_in_weekly_report=entity.include_in_weekly_report,
+            display_order=entity.display_order,
             created_at=entity.created_at,
         )
 
@@ -496,6 +502,134 @@ class SQLAlchemyAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             )
         )
         return result.scalar_one_or_none() is not None
+
+    @use_transaction()
+    async def find_by_id(
+        self, conn: Connection, account_group_id: int
+    ) -> AccountGroup | None:
+        session = self._require_session(conn)
+        group_result = await session.execute(
+            select(AccountGroupEntity).where(
+                AccountGroupEntity.account_group_id == account_group_id
+            )
+        )
+        group_entity = group_result.scalar_one_or_none()
+        if group_entity is None:
+            return None
+
+        mapping_result = await session.execute(
+            select(AccountGroupAccountEntity.account_id)
+            .where(AccountGroupAccountEntity.account_group_id == account_group_id)
+            .order_by(AccountGroupAccountEntity.account_id.asc())
+        )
+        account_ids = [row[0] for row in mapping_result.all()]
+
+        return AccountGroup(
+            account_group_id=group_entity.account_group_id,
+            name=group_entity.name,
+            account_ids=account_ids,
+            include_in_weekly_report=group_entity.include_in_weekly_report,
+            display_order=group_entity.display_order,
+            created_at=group_entity.created_at,
+        )
+
+    @use_transaction()
+    async def update(self, conn: Connection, group: AccountGroup) -> AccountGroup:
+        session = self._require_session(conn)
+        await session.execute(
+            update(AccountGroupEntity)
+            .where(AccountGroupEntity.account_group_id == group.account_group_id)
+            .values(
+                name=group.name,
+                include_in_weekly_report=group.include_in_weekly_report,
+                display_order=group.display_order,
+            )
+        )
+        await session.execute(
+            delete(AccountGroupAccountEntity).where(
+                AccountGroupAccountEntity.account_group_id == group.account_group_id
+            )
+        )
+        if group.account_ids:
+            await session.execute(
+                insert(AccountGroupAccountEntity),
+                [
+                    {
+                        "account_group_id": group.account_group_id,
+                        "account_id": aid,
+                        "created_at": _utc_now_naive(),
+                    }
+                    for aid in group.account_ids
+                ],
+            )
+        return group
+
+    @use_transaction()
+    async def delete(self, conn: Connection, account_group_id: int) -> None:
+        session = self._require_session(conn)
+        await session.execute(
+            delete(AccountGroupEntity).where(
+                AccountGroupEntity.account_group_id == account_group_id
+            )
+        )
+
+    @use_transaction()
+    async def get_all(self, conn: Connection) -> list[AccountGroup]:
+        session = self._require_session(conn)
+        groups_result = await session.execute(
+            select(AccountGroupEntity).order_by(
+                AccountGroupEntity.account_group_id.desc()
+            )
+        )
+        group_entities = list(groups_result.scalars().all())
+        if not group_entities:
+            return []
+
+        group_ids = [group.account_group_id for group in group_entities]
+        mappings_result = await session.execute(
+            select(
+                AccountGroupAccountEntity.account_group_id,
+                AccountGroupAccountEntity.account_id,
+            )
+            .where(AccountGroupAccountEntity.account_group_id.in_(group_ids))
+            .order_by(
+                AccountGroupAccountEntity.account_group_id.asc(),
+                AccountGroupAccountEntity.account_id.asc(),
+            )
+        )
+
+        account_ids_by_group: dict[int, list[int]] = {
+            group_id: [] for group_id in group_ids
+        }
+        for group_id, account_id in mappings_result.all():
+            account_ids_by_group[group_id].append(account_id)
+
+        return [
+            AccountGroup(
+                account_group_id=entity.account_group_id,
+                name=entity.name,
+                account_ids=account_ids_by_group.get(entity.account_group_id, []),
+                include_in_weekly_report=entity.include_in_weekly_report,
+                display_order=entity.display_order,
+                created_at=entity.created_at,
+            )
+            for entity in group_entities
+        ]
+
+    @use_transaction()
+    async def update_display_orders(
+        self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int:
+        session = self._require_session(conn)
+        updated = 0
+        for account_group_id, display_order in orders:
+            await session.execute(
+                update(AccountGroupEntity)
+                .where(AccountGroupEntity.account_group_id == account_group_id)
+                .values(display_order=display_order)
+            )
+            updated += 1
+        return updated
 
 
 # ---------------------------------------------------------------------------
@@ -1032,6 +1166,39 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
             stmt,
             {"user_id": user_id, "start_date": start_date, "end_date": end_date},
         )
+        rows = result.mappings().all()
+        return [dict(row) for row in rows]
+
+    @use_transaction()
+    async def annual_account_group_report(
+        self, conn: Connection, user_id: int, year: int | None
+    ) -> list[dict]:
+        session = self._require_session(conn)
+        stmt = text(
+            """
+            SELECT EXTRACT(YEAR FROM asnap.reference_date) AS year,
+                   asnap.reference_date,
+                   ag.name AS account_group_name,
+                   a.account_id,
+                   a.name AS account_name,
+                   SUM(ash.valuation_amount) AS valuation,
+                   SUM(SUM(ash.valuation_amount)) OVER (PARTITION BY ag.account_group_id, asnap.reference_date) AS group_total
+            FROM annual_snapshots asnap
+            JOIN annual_snapshot_holdings ash ON asnap.annual_snapshot_id = ash.annual_snapshot_id
+            JOIN holdings h ON ash.holding_id = h.holding_id
+            JOIN accounts a ON h.account_id = a.account_id
+            JOIN account_group_accounts aga ON a.account_id = aga.account_id
+            JOIN account_groups ag ON aga.account_group_id = ag.account_group_id
+            WHERE asnap.user_id = :user_id
+              AND (:year IS NULL OR EXTRACT(YEAR FROM asnap.reference_date) = :year)
+            GROUP BY year, asnap.reference_date, ag.account_group_id, ag.name, a.account_id, a.name
+            ORDER BY year DESC, ag.name, a.account_id
+            """
+        ).bindparams(
+            bindparam("user_id", type_=Integer),
+            bindparam("year", type_=Integer),
+        )
+        result = await session.execute(stmt, {"user_id": user_id, "year": year})
         rows = result.mappings().all()
         return [dict(row) for row in rows]
 
