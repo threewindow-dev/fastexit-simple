@@ -162,6 +162,14 @@ class SnapshotRepository(ABC):
     async def lock(self, conn: Connection, snapshot_id: int) -> None: ...
 
     @abstractmethod
+    async def unlock(self, conn: Connection, snapshot_id: int) -> None: ...
+
+    @abstractmethod
+    async def has_later_locked_snapshots(
+        self, conn: Connection, user_id: int, reference_date: date
+    ) -> bool: ...
+
+    @abstractmethod
     async def clone_weekly(
         self,
         conn: Connection,

@@ -726,6 +726,31 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
         )
 
     @use_transaction()
+    async def unlock(self, conn: Connection, snapshot_id: int) -> None:
+        session = self._require_session(conn)
+        await session.execute(
+            update(SnapshotEntity)
+            .where(SnapshotEntity.snapshot_id == snapshot_id)
+            .values(status="in_progress", locked_at=None)
+        )
+
+    @use_transaction()
+    async def has_later_locked_snapshots(
+        self, conn: Connection, user_id: int, reference_date: date
+    ) -> bool:
+        session = self._require_session(conn)
+        result = await session.execute(
+            select(SnapshotEntity)
+            .where(
+                SnapshotEntity.user_id == user_id,
+                SnapshotEntity.reference_date > reference_date,
+                SnapshotEntity.status == "locked",
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
+    @use_transaction()
     async def clone_weekly(
         self,
         conn: Connection,

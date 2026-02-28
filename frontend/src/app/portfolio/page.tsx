@@ -1288,6 +1288,52 @@ export default function PortfolioPage() {
     }
   };
 
+  const handleUnlockSnapshot = async (snapshotId: number) => {
+    if (!window.confirm('스냅샷 잠금을 해제하시겠습니까?')) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/portfolio/snapshots/${snapshotId}/unlock`, {
+        method: 'POST',
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        const errorMsg = result?.message || 'Failed to unlock snapshot';
+        alert(`잠금 해제 실패:\n${errorMsg}`);
+        return;
+      }
+      
+      setSnapshots((prev) => prev.map((snap) => (
+        snap.snapshot_id === snapshotId
+          ? { ...snap, status: 'in_progress', locked_at: null }
+          : snap
+      )));
+      alert('스냅샷 잠금이 해제되었습니다.');
+      await fetchSnapshots();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to unlock snapshot');
+    }
+  };
+
+  const canUnlockSnapshot = (snapshot: Snapshot): boolean => {
+    // 잠금 상태가 아니면 해제 불가
+    if (snapshot.status !== 'locked') return false;
+    
+    // 기준일로부터 7일이 지났는지 확인
+    const referenceDate = new Date(snapshot.reference_date);
+    const today = new Date();
+    const daysDiff = Math.floor((today.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysDiff >= 7) return false;
+    
+    // 기준일이 더 늦은 잠금된 스냅샷이 있는지 확인
+    const hasLaterLockedSnapshot = snapshots.some(
+      (s) => s.status === 'locked' && s.reference_date > snapshot.reference_date
+    );
+    if (hasLaterLockedSnapshot) return false;
+    
+    return true;
+  };
+
   const openHoldingsForAccount = (accountId: number) => {
     setHoldingsAccountFilter(accountId);
     setHoldingsProductFilter(null);
@@ -1984,7 +2030,14 @@ export default function PortfolioPage() {
                           보유자산 보기
                         </button>
                         {snap.status === 'locked' && (
-                          <button onClick={() => openClonePanel(snap)}>복제</button>
+                          <>
+                            <button onClick={() => openClonePanel(snap)}>복제</button>
+                            {canUnlockSnapshot(snap) && (
+                              <button onClick={() => handleUnlockSnapshot(snap.snapshot_id)}>
+                                잠금 해제
+                              </button>
+                            )}
+                          </>
                         )}
                         {snap.status !== 'locked' && (
                           <button onClick={() => handleLockSnapshot(snap.snapshot_id)}>

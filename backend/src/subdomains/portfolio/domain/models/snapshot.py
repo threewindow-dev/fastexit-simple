@@ -53,6 +53,31 @@ class Snapshot:
         self.status = "locked"
         self.locked_at = datetime.utcnow()
 
+    def unlock(self) -> None:
+        """스냅샷 잠금 해제.
+
+        비즈니스 규칙:
+        - 현재 상태가 locked여야 함
+        - 기준일로부터 7일 이내여야 함
+        """
+        from subdomains.portfolio.domain.errors import SnapshotUnlockNotAllowedError
+
+        if self.status != "locked":
+            raise SnapshotUnlockNotAllowedError(
+                self.snapshot_id or 0, "Snapshot is not locked"
+            )
+
+        # 기준일로부터 7일이 지났는지 확인
+        days_since_reference = (datetime.utcnow().date() - self.reference_date).days
+        if days_since_reference >= 7:
+            raise SnapshotUnlockNotAllowedError(
+                self.snapshot_id or 0,
+                f"More than 7 days have passed since reference date ({self.reference_date})",
+            )
+
+        self.status = "in_progress"
+        self.locked_at = None
+
     def upsert_holding(
         self, holding_id: int, valuation_amount: float, data_source: str
     ) -> None:

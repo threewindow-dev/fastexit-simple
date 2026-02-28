@@ -27,6 +27,7 @@ from subdomains.portfolio.application.dtos import (
     CreateSnapshotCommand,
     UpsertSnapshotHoldingCommand,
     LockSnapshotCommand,
+    UnlockSnapshotCommand,
     CreateWeeklySnapshotCommand,
     CreateAnnualSnapshotCommand,
     WeeklyAccountReportQuery,
@@ -71,6 +72,7 @@ from subdomains.portfolio.interface.schemas import (
     SnapshotHoldingResponseData,
     UpsertSnapshotHoldingRequest,
     LockSnapshotResponse,
+    UnlockSnapshotResponse,
     CreateWeeklySnapshotRequest,
     WeeklySnapshotResponse,
     WeeklySnapshotResponseData,
@@ -709,6 +711,22 @@ async def lock_snapshot(
     return LockSnapshotResponse(code=0, message="locked", data=None)
 
 
+@router.post(
+    "/snapshots/{snapshot_id}/unlock",
+    response_model=UnlockSnapshotResponse,
+    status_code=status.HTTP_200_OK,
+    summary="스냅샷 잠금 해제",
+    responses={**common_responses},
+)
+async def unlock_snapshot(
+    snapshot_id: int = Path(..., description="스냅샷 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> UnlockSnapshotResponse:
+    cmd = UnlockSnapshotCommand(snapshot_id=snapshot_id)
+    await service.unlock_snapshot(cmd)
+    return UnlockSnapshotResponse(code=0, message="unlocked", data=None)
+
+
 # ---------------------------------------------------------------------------
 # Weekly / Annual Snapshots
 # ---------------------------------------------------------------------------
@@ -946,16 +964,16 @@ async def weekly_pivot_report(
     """연도별 주간 스냅샷을 열로, 계좌를 행으로 하는 Pivot 보고서"""
     query = WeeklyPivotReportQuery(user_id=user_id, year=year)
     result = await service.weekly_pivot_report(query)
-    
+
     weeks = [
         WeeklyPivotWeekInfo(
             weekly_snapshot_id=w.weekly_snapshot_id,
             reference_date=w.reference_date,
-            week_number=w.week_number
+            week_number=w.week_number,
         )
         for w in result.weeks
     ]
-    
+
     accounts = [
         WeeklyPivotAccountRow(
             account_id=acc.account_id,
@@ -963,15 +981,14 @@ async def weekly_pivot_report(
             institution_name=acc.institution_name,
             valuations=[
                 WeeklyPivotAccountValuation(
-                    weekly_snapshot_id=val.weekly_snapshot_id,
-                    amount=val.amount
+                    weekly_snapshot_id=val.weekly_snapshot_id, amount=val.amount
                 )
                 for val in acc.valuations
-            ]
+            ],
         )
         for acc in result.accounts
     ]
-    
+
     data = WeeklyPivotReportData(year=result.year, weeks=weeks, accounts=accounts)
     return WeeklyPivotReportResponse(code=0, message="success", data=data)
 

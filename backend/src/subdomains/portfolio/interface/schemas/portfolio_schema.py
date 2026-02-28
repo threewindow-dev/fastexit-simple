@@ -277,6 +277,10 @@ class LockSnapshotResponse(ApiResponse[dict[str, Any] | None]):
     pass
 
 
+class UnlockSnapshotResponse(ApiResponse[dict[str, Any] | None]):
+    pass
+
+
 class CreateWeeklySnapshotRequest(BaseModel):
     user_id: int = Field(..., description="사용자 ID", examples=[1])
     reference_date: date = Field(

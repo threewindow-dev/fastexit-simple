@@ -32,6 +32,14 @@ class SnapshotLockedError(DomainError):
         )
 
 
+class SnapshotUnlockNotAllowedError(DomainError):
+    def __init__(self, snapshot_id: int, reason: str):
+        super().__init__(
+            code="SNAPSHOT_UNLOCK_NOT_ALLOWED",
+            message=f"Snapshot {snapshot_id} cannot be unlocked: {reason}",
+        )
+
+
 class DeletionConflictError(DomainError):
     def __init__(self, entity: str, reason: str):
         super().__init__(code=f"{entity.upper()}_DELETE_CONFLICT", message=reason)

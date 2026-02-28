@@ -822,6 +822,33 @@ class PsycopgSnapshotRepository(_BaseRepo, SnapshotRepository):
             )
 
     @use_transaction()
+    async def unlock(self, conn: Connection, snapshot_id: int) -> None:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "UPDATE snapshots SET status = 'in_progress', locked_at = NULL WHERE snapshot_id = %s",
+                (snapshot_id,),
+            )
+
+    @use_transaction()
+    async def has_later_locked_snapshots(
+        self, conn: Connection, user_id: int, reference_date: date
+    ) -> bool:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT 1 FROM snapshots
+                WHERE user_id = %s
+                  AND reference_date > %s
+                  AND status = 'locked'
+                LIMIT 1
+                """,
+                (user_id, reference_date),
+            )
+            return await cur.fetchone() is not None
+
+    @use_transaction()
     async def clone_weekly(
         self,
         conn: Connection,
@@ -1116,7 +1143,7 @@ class PsycopgReportQueryRepository(_BaseRepo, ReportQueryRepository):
         """주간 스냅샷들의 보유자산 데이터 조회"""
         if not weekly_snapshot_ids:
             return []
-        
+
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(

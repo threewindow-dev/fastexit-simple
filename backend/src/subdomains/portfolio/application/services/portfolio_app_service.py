@@ -17,6 +17,7 @@ from subdomains.portfolio.application.dtos import (
     CreateSnapshotCommand,
     UpsertSnapshotHoldingCommand,
     LockSnapshotCommand,
+    UnlockSnapshotCommand,
     CreateWeeklySnapshotCommand,
     CreateAnnualSnapshotCommand,
     CreateAccountGroupCommand,
@@ -352,6 +353,28 @@ class PortfolioAppService:
         await self._snapshot_repo.lock(command.snapshot_id)
 
     @transactional(mode="writable")
+    async def unlock_snapshot(self, command: UnlockSnapshotCommand) -> None:
+        from subdomains.portfolio.domain.errors import SnapshotUnlockNotAllowedError
+
+        snapshot = await self._snapshot_repo.find_by_id(command.snapshot_id)
+        if snapshot is None:
+            raise NotFoundError("snapshot", command.snapshot_id)
+
+        # 기준일보다 늦은 잠금된 스냅샷이 있는지 확인
+        has_later_locked = await self._snapshot_repo.has_later_locked_snapshots(
+            snapshot.user_id, snapshot.reference_date
+        )
+        if has_later_locked:
+            raise SnapshotUnlockNotAllowedError(
+                command.snapshot_id,
+                "There are locked snapshots with later reference dates",
+            )
+
+        # 도메인 규칙 검증 (상태 및 7일 제한)
+        snapshot.unlock()
+        await self._snapshot_repo.unlock(command.snapshot_id)
+
+    @transactional(mode="writable")
     async def create_weekly_snapshot(self, command: CreateWeeklySnapshotCommand) -> int:
         source = await self._snapshot_repo.find_by_id(command.source_snapshot_id)
         if source is None:
@@ -461,7 +484,9 @@ class PortfolioAppService:
 
         # 4-1. Institution의 display_order 정보 조회 (정렬용)
         institutions = await self._institution_repo.get_all()
-        inst_display_orders = {inst.institution_id: inst.display_order for inst in institutions}
+        inst_display_orders = {
+            inst.institution_id: inst.display_order for inst in institutions
+        }
 
         # 5. 계좌별로 그룹화
         account_map = {}
