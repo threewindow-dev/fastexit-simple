@@ -379,6 +379,24 @@ class AnnualSnapshotListItem(BaseModel):
     created_at: str = Field(..., description="생성 시각")
 
 
+class AnnualSnapshotHoldingListItem(BaseModel):
+    annual_snapshot_holding_id: int = Field(..., description="연간 스냅샷 보유자산 ID")
+    annual_snapshot_id: int = Field(..., description="연간 스냅샷 ID")
+    holding_id: int = Field(..., description="보유자산 ID")
+    valuation_amount: float = Field(..., description="평가 금액")
+    data_source: str = Field(..., description="데이터 출처", examples=["manual"])
+    created_at: str | None = Field(None, description="생성 시각")
+    institution_id: int = Field(..., description="기관 ID")
+    institution_name: str = Field(..., description="기관명")
+    institution_display_order: int = Field(..., description="기관 표시순서")
+    account_id: int = Field(..., description="계좌 ID")
+    account_name: str = Field(..., description="계좌명")
+    account_display_order: int = Field(..., description="계좌 표시순서")
+    product_id: int = Field(..., description="상품 ID")
+    product_name: str = Field(..., description="상품명")
+    product_display_order: int = Field(..., description="상품 표시순서")
+
+
 # ---------------------------------------------------------------------------
 # Reports
 # ---------------------------------------------------------------------------

@@ -513,6 +513,15 @@ class PortfolioAppService:
         return ReportResult(items=items, total_amount=total)
 
     @transactional(mode="readonly")
+    async def annual_snapshot_holdings_report(
+        self, annual_snapshot_id: int
+    ) -> ReportResult:
+        rows = await self._report_repo.get_annual_snapshot_holdings(annual_snapshot_id)
+        items = [ReportItem(row) for row in rows]
+        total = sum(r.get("valuation_amount", 0) or 0 for r in rows)
+        return ReportResult(items=items, total_amount=total)
+
+    @transactional(mode="readonly")
     async def weekly_pivot_report(
         self, query: WeeklyPivotReportQuery
     ) -> WeeklyPivotReportResult:

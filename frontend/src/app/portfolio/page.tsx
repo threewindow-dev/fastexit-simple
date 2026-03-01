@@ -70,6 +70,24 @@ interface AnnualSnapshot {
   created_at: string;
 }
 
+interface AnnualSnapshotHolding {
+  annual_snapshot_holding_id: number;
+  annual_snapshot_id: number;
+  holding_id: number;
+  valuation_amount: number;
+  data_source: string;
+  created_at: string;
+  institution_id: number;
+  institution_name: string;
+  institution_display_order: number;
+  account_id: number;
+  account_name: string;
+  account_display_order: number;
+  product_id: number;
+  product_name: string;
+  product_display_order: number;
+}
+
 interface WeeklyPivotWeekInfo {
   weekly_snapshot_id: number;
   reference_date: string;
@@ -157,7 +175,7 @@ const getDataSourceLabel = (dataSource: string): string => {
 };
 
 export default function PortfolioPage() {
-  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport' | 'annualReport'>('institutions');
+  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport' | 'annualReport'>('institutions');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -165,6 +183,7 @@ export default function PortfolioPage() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [weeklySnapshots, setWeeklySnapshots] = useState<WeeklySnapshot[]>([]);
   const [annualSnapshots, setAnnualSnapshots] = useState<AnnualSnapshot[]>([]);
+  const [annualSnapshotHoldings, setAnnualSnapshotHoldings] = useState<AnnualSnapshotHolding[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [snapshotHoldings, setSnapshotHoldings] = useState<SnapshotHolding[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
@@ -268,6 +287,7 @@ export default function PortfolioPage() {
 
   // Snapshot Holding Form
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
+  const [selectedAnnualSnapshotId, setSelectedAnnualSnapshotId] = useState('');
   const [snapshotHoldingDrafts, setSnapshotHoldingDrafts] = useState<Record<number, string>>({});
   const [snapshotHoldingDataSource, setSnapshotHoldingDataSource] = useState('manual');
   const [savingSnapshotHoldings, setSavingSnapshotHoldings] = useState(false);
@@ -595,6 +615,9 @@ export default function PortfolioPage() {
       fetchWeeklySnapshots();
     } else if (activeTab === 'annualSnapshots') {
       fetchAnnualSnapshots();
+    } else if (activeTab === 'annualSnapshotHoldings') {
+      fetchAnnualSnapshots();
+      fetchAnnualSnapshotHoldings();
     } else if (activeTab === 'holdings') {
       fetchHoldings();
       fetchAccounts(); // For dropdown
@@ -747,6 +770,30 @@ export default function PortfolioPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching annual snapshots');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAnnualSnapshotHoldings = async (annualSnapshotId?: number) => {
+    const targetId = annualSnapshotId ?? (selectedAnnualSnapshotId ? parseInt(selectedAnnualSnapshotId, 10) : null);
+    if (!targetId || Number.isNaN(targetId)) {
+      setAnnualSnapshotHoldings([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/annual-snapshot-holdings?annual_snapshot_id=${targetId}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch annual snapshot holdings');
+      const result = await response.json();
+      setAnnualSnapshotHoldings(Array.isArray(result) ? result : result.data?.items || []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching annual snapshot holdings');
+      setAnnualSnapshotHoldings([]);
     } finally {
       setLoading(false);
     }
@@ -1646,6 +1693,12 @@ export default function PortfolioPage() {
     setActiveTab('snapshotHoldings');
   };
 
+  const openAnnualSnapshotHoldings = (annualSnapshotId: number) => {
+    setSelectedAnnualSnapshotId(String(annualSnapshotId));
+    setActiveTab('annualSnapshotHoldings');
+    fetchAnnualSnapshotHoldings(annualSnapshotId);
+  };
+
   const openClonePanel = (snapshot: Snapshot) => {
     setCloneForm({
       source_snapshot_id: String(snapshot.snapshot_id),
@@ -1719,6 +1772,12 @@ export default function PortfolioPage() {
           onClick={() => setActiveTab('annualSnapshots')}
         >
           연간 스냅샷
+        </button>
+        <button
+          className={activeTab === 'annualSnapshotHoldings' ? styles.activeTab : ''}
+          onClick={() => setActiveTab('annualSnapshotHoldings')}
+        >
+          연간 스냅샷 보유자산
         </button>
         <button
           className={activeTab === 'snapshotHoldings' ? styles.activeTab : ''}
@@ -2639,6 +2698,7 @@ export default function PortfolioPage() {
                   <th>상태</th>
                   <th>생성일</th>
                   <th>원본 스냅샷</th>
+                  <th>작업</th>
                 </tr>
               </thead>
               <tbody>
@@ -2649,8 +2709,91 @@ export default function PortfolioPage() {
                     <td>{snap.status === 'locked' ? '🔒 잠금' : '✏️ 편집 가능'}</td>
                     <td>{new Date(snap.created_at).toLocaleString()}</td>
                     <td>{snap.source_snapshot_id}</td>
+                    <td>
+                      <div className={styles.actionButtons}>
+                        <button onClick={() => openAnnualSnapshotHoldings(snap.annual_snapshot_id)}>
+                          보유자산 보기
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Annual Snapshot Holdings Tab */}
+      {activeTab === 'annualSnapshotHoldings' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>연간 스냅샷 보유자산 목록</h2>
+          </div>
+
+          <div className={styles.form}>
+            <select
+              value={selectedAnnualSnapshotId}
+              onChange={(e) => {
+                const snapshotId = e.target.value;
+                setSelectedAnnualSnapshotId(snapshotId);
+                if (!snapshotId) {
+                  setAnnualSnapshotHoldings([]);
+                  return;
+                }
+                fetchAnnualSnapshotHoldings(parseInt(snapshotId, 10));
+              }}
+              required
+            >
+              <option value="">연간 스냅샷 선택</option>
+              {sortedAnnualSnapshots.map((snap) => (
+                <option key={snap.annual_snapshot_id} value={snap.annual_snapshot_id}>
+                  {snap.reference_date}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {!selectedAnnualSnapshotId ? (
+            <div className={styles.loading}>연간 스냅샷을 선택해주세요.</div>
+          ) : loading ? (
+            <div className={styles.loading}>로딩 중...</div>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>번호</th>
+                  <th>금융기관</th>
+                  <th>계좌</th>
+                  <th>상품</th>
+                  <th>평가금액</th>
+                  <th>데이터출처</th>
+                  <th>생성일</th>
+                </tr>
+              </thead>
+              <tbody>
+                {annualSnapshotHoldings.length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>보유자산 데이터가 없습니다.</td>
+                  </tr>
+                ) : (
+                  annualSnapshotHoldings.map((item, index) => (
+                    <tr key={item.annual_snapshot_holding_id}>
+                      <td>{index + 1}</td>
+                      <td>{item.institution_name}</td>
+                      <td>{item.account_name}</td>
+                      <td>{item.product_name}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {Number(item.valuation_amount || 0).toLocaleString('ko-KR', {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
+                      </td>
+                      <td>{getDataSourceLabel(item.data_source)}</td>
+                      <td>{item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           )}

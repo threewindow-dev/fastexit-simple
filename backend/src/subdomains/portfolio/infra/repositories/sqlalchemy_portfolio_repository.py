@@ -1263,6 +1263,41 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         rows = result.mappings().all()
         return [dict(row) for row in rows]
 
+    @use_transaction()
+    async def get_annual_snapshot_holdings(
+        self, conn: Connection, annual_snapshot_id: int
+    ) -> list[dict]:
+        session = self._require_session(conn)
+        stmt = text(
+            """
+            SELECT ash.annual_snapshot_holding_id,
+                   ash.annual_snapshot_id,
+                   ash.holding_id,
+                   ash.valuation_amount,
+                   ash.data_source,
+                   ash.created_at,
+                   h.account_id,
+                   a.name AS account_name,
+                   a.display_order AS account_display_order,
+                   i.institution_id,
+                   i.name AS institution_name,
+                   i.display_order AS institution_display_order,
+                   p.product_id,
+                   p.product_name,
+                   p.display_order AS product_display_order
+            FROM annual_snapshot_holdings ash
+            JOIN holdings h ON ash.holding_id = h.holding_id
+            JOIN accounts a ON h.account_id = a.account_id
+            JOIN institutions i ON a.institution_id = i.institution_id
+            JOIN products p ON h.product_id = p.product_id
+            WHERE ash.annual_snapshot_id = :annual_snapshot_id
+            ORDER BY i.display_order, a.display_order, p.display_order, p.product_id
+            """
+        ).bindparams(bindparam("annual_snapshot_id", type_=Integer))
+        result = await session.execute(stmt, {"annual_snapshot_id": annual_snapshot_id})
+        rows = result.mappings().all()
+        return [dict(row) for row in rows]
+
 
 __all__ = [
     "SQLAlchemyInstitutionRepository",

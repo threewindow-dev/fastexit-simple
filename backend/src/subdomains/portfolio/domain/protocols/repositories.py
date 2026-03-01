@@ -257,3 +257,8 @@ class ReportQueryRepository(ABC):
     async def get_weekly_snapshot_holdings(
         self, weekly_snapshot_ids: list[int]
     ) -> list[dict]: ...
+
+    @abstractmethod
+    async def get_annual_snapshot_holdings(
+        self, conn: Connection, annual_snapshot_id: int
+    ) -> list[dict]: ...

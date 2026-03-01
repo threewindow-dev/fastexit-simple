@@ -89,6 +89,7 @@ from subdomains.portfolio.interface.schemas import (
     AnnualSnapshotResponse,
     AnnualSnapshotResponseData,
     AnnualSnapshotListItem,
+    AnnualSnapshotHoldingListItem,
     WeeklyAccountReportResponse,
     WeeklyAccountReportData,
     WeeklyAccountReportItem,
@@ -933,6 +934,40 @@ async def list_annual_snapshots(
             created_at=_iso(item.created_at),
         )
         for item in results
+    ]
+
+
+@router.get(
+    "/annual-snapshot-holdings",
+    response_model=list[AnnualSnapshotHoldingListItem],
+    summary="연간 스냅샷 보유자산 목록 조회",
+    responses={**common_responses},
+)
+async def list_annual_snapshot_holdings(
+    annual_snapshot_id: int = Query(..., description="연간 스냅샷 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> list[AnnualSnapshotHoldingListItem]:
+    """특정 연간 스냅샷의 보유자산 목록 조회"""
+    result = await service.annual_snapshot_holdings_report(annual_snapshot_id)
+    return [
+        AnnualSnapshotHoldingListItem(
+            annual_snapshot_holding_id=item.data.get("annual_snapshot_holding_id"),
+            annual_snapshot_id=item.data.get("annual_snapshot_id"),
+            holding_id=item.data.get("holding_id"),
+            valuation_amount=float(item.data.get("valuation_amount", 0) or 0),
+            data_source=item.data.get("data_source"),
+            created_at=_iso(item.data.get("created_at")),
+            institution_id=item.data.get("institution_id"),
+            institution_name=item.data.get("institution_name"),
+            institution_display_order=item.data.get("institution_display_order"),
+            account_id=item.data.get("account_id"),
+            account_name=item.data.get("account_name"),
+            account_display_order=item.data.get("account_display_order"),
+            product_id=item.data.get("product_id"),
+            product_name=item.data.get("product_name"),
+            product_display_order=item.data.get("product_display_order"),
+        )
+        for item in result.items
     ]
 
 
