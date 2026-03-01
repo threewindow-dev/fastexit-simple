@@ -17,7 +17,7 @@ class Institution:
     def __post_init__(self) -> None:
         if not self.name:
             raise InvalidStateError("institution", "name is required")
-        if self.type not in {"증권사", "은행"}:
+        if self.type not in {"증권사", "은행", "기타"}:
             raise InvalidStateError("institution", "invalid type")
         if self.display_order < 0:
             raise InvalidStateError("institution", "display_order must be >= 0")

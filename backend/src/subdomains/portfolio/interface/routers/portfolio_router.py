@@ -993,8 +993,10 @@ async def annual_account_report(
             ),
             reference_date=item.data.get("reference_date"),
             institution_name=item.data.get("institution_name"),
+            institution_display_order=item.data.get("institution_display_order", 0),
             account_id=item.data.get("account_id"),
             account_name=item.data.get("account_name"),
+            account_display_order=item.data.get("account_display_order", 0),
             total_valuation=float(item.data.get("total_valuation", 0) or 0),
         )
         for item in result.items

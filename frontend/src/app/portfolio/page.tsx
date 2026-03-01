@@ -156,7 +156,7 @@ const getDataSourceLabel = (dataSource: string): string => {
 };
 
 export default function PortfolioPage() {
-  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport'>('institutions');
+  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport' | 'annualReport'>('institutions');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -169,6 +169,7 @@ export default function PortfolioPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [weeklyReportData, setWeeklyReportData] = useState<WeeklyPivotReportData | null>(null);
   const [weeklyReportYear, setWeeklyReportYear] = useState<number>(new Date().getFullYear());
+  const [annualReportData, setAnnualReportData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -607,6 +608,8 @@ export default function PortfolioPage() {
       fetchInstitutions();
     } else if (activeTab === 'weeklyReport') {
       fetchWeeklyReport();
+    } else if (activeTab === 'annualReport') {
+      fetchAnnualReport();
     } else if (activeTab === 'reports') {
       fetchAccounts();
       fetchAccountGroups();
@@ -795,6 +798,28 @@ export default function PortfolioPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching weekly report');
       setWeeklyReportData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAnnualReport = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/reports/annual/accounts?user_id=1`
+      );
+      if (!response.ok) throw new Error('Failed to fetch annual report');
+      const result = await response.json();
+      if (result.code === 0 && result.data) {
+        setAnnualReportData(result.data);
+      } else {
+        setAnnualReportData(null);
+      }
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching annual report');
+      setAnnualReportData(null);
     } finally {
       setLoading(false);
     }
@@ -1711,6 +1736,12 @@ export default function PortfolioPage() {
           onClick={() => setActiveTab('weeklyReport')}
         >
           주간 보고서
+        </button>
+        <button
+          className={activeTab === 'annualReport' ? styles.activeTab : ''}
+          onClick={() => setActiveTab('annualReport')}
+        >
+          연간 보고서
         </button>
       </div>
 
@@ -3402,6 +3433,180 @@ export default function PortfolioPage() {
           ) : (
             <div className={styles.infoBox}>
               <p>{weeklyReportYear}년의 주간 스냅샷이 없습니다.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Annual Report Tab */}
+      {activeTab === 'annualReport' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>연간 보고서</h2>
+          </div>
+
+          {loading ? (
+            <div className={styles.loading}>로딩 중...</div>
+          ) : annualReportData && annualReportData.items && annualReportData.items.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              {(() => {
+                // 연도별 데이터 구조화
+                const yearMap = new Map<number, Map<string, Map<string, number>>>();
+                const years = new Set<number>();
+                const institutions = new Map<string, number>();
+                const accountsByInstitution = new Map<string, Map<string, number>>();
+
+                annualReportData.items.forEach((item: any) => {
+                  years.add(item.year);
+                  institutions.set(item.institution_name, item.institution_display_order);
+                  
+                  if (!accountsByInstitution.has(item.institution_name)) {
+                    accountsByInstitution.set(item.institution_name, new Map());
+                  }
+                  accountsByInstitution.get(item.institution_name)!.set(item.account_name, item.account_display_order);
+
+                  if (!yearMap.has(item.year)) {
+                    yearMap.set(item.year, new Map());
+                  }
+                  const instMap = yearMap.get(item.year)!;
+                  if (!instMap.has(item.institution_name)) {
+                    instMap.set(item.institution_name, new Map());
+                  }
+                  instMap.get(item.institution_name)!.set(item.account_name, item.total_valuation);
+                });
+
+                const sortedYears = Array.from(years).sort((a, b) => a - b);
+                const sortedInstitutions = Array.from(institutions.entries()).sort((a, b) => a[1] - b[1]).map(([name]) => name);
+
+                return (
+                  <table className={styles.table} style={{ minWidth: '800px' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 2 }}>
+                          금융기관
+                        </th>
+                        <th style={{ position: 'sticky', left: '150px', backgroundColor: '#fff', zIndex: 2 }}>
+                          계좌
+                        </th>
+                        {sortedYears.map((year) => (
+                          <th key={year} style={{ minWidth: '120px' }}>
+                            {year}년
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedInstitutions.map((institution) => {
+                        const accountsMap = accountsByInstitution.get(institution) || new Map();
+                        const accounts = Array.from(accountsMap.entries()).sort((a, b) => a[1] - b[1]).map(([name]) => name);
+                        return accounts.map((account, accountIdx) => (
+                          <tr key={`${institution}-${account}`}>
+                            {accountIdx === 0 && (
+                              <td 
+                                rowSpan={accounts.length}
+                                style={{ 
+                                  position: 'sticky', 
+                                  left: 0, 
+                                  backgroundColor: '#fff', 
+                                  zIndex: 1, 
+                                  fontWeight: 'bold',
+                                  verticalAlign: 'middle'
+                                }}
+                              >
+                                {institution}
+                              </td>
+                            )}
+                            <td style={{ position: 'sticky', left: '150px', backgroundColor: '#fff', zIndex: 1 }}>
+                              {account}
+                            </td>
+                            {sortedYears.map((year) => {
+                              const value = yearMap.get(year)?.get(institution)?.get(account) || 0;
+                              return (
+                                <td key={year} style={{ textAlign: 'right' }}>
+                                  {value > 0
+                                    ? value.toLocaleString('ko-KR', {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 0,
+                                      })
+                                    : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ));
+                      })}
+                      {/* 총합 행 */}
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0', borderTop: '2px solid #333' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1 }}>
+                          총합
+                        </td>
+                        {sortedYears.map((year) => {
+                          const total = annualReportData.items
+                            .filter((item: any) => item.year === year)
+                            .reduce((sum: number, item: any) => sum + item.total_valuation, 0);
+                          return (
+                            <td key={year} style={{ textAlign: 'right' }}>
+                              {total > 0
+                                ? total.toLocaleString('ko-KR', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0,
+                                  })
+                                : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      {/* 전년 대비 변화 행 */}
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#fff5f5' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1 }}>
+                          전년 대비 변화
+                        </td>
+                        {sortedYears.map((year, yearIdx) => {
+                          const currentTotal = annualReportData.items
+                            .filter((item: any) => item.year === year)
+                            .reduce((sum: number, item: any) => sum + item.total_valuation, 0);
+
+                          let changePercent = 0;
+                          let changeColor = 'black';
+
+                          if (yearIdx > 0) {
+                            const prevYear = sortedYears[yearIdx - 1];
+                            const prevTotal = annualReportData.items
+                              .filter((item: any) => item.year === prevYear)
+                              .reduce((sum: number, item: any) => sum + item.total_valuation, 0);
+
+                            if (prevTotal > 0) {
+                              changePercent = ((currentTotal - prevTotal) / prevTotal) * 100;
+
+                              if (changePercent >= 1) {
+                                changeColor = '#d32f2f'; // Red
+                              } else if (changePercent <= -1) {
+                                changeColor = '#1976d2'; // Blue
+                              }
+                            }
+                          }
+
+                          return (
+                            <td
+                              key={year}
+                              style={{
+                                textAlign: 'right',
+                                color: changeColor,
+                              }}
+                            >
+                              {yearIdx > 0 ? changePercent.toFixed(2) + '%' : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          ) : (
+            <div className={styles.infoBox}>
+              <p>연간 스냅샷 데이터가 없습니다.</p>
             </div>
           )}
         </div>

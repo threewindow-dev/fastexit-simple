@@ -389,8 +389,10 @@ class AnnualAccountReportItem(BaseModel):
     year: int
     reference_date: date
     institution_name: str
+    institution_display_order: int
     account_id: int
     account_name: str
+    account_display_order: int
     total_valuation: float
 
 

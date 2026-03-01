@@ -1168,8 +1168,8 @@ class PsycopgReportQueryRepository(_BaseRepo, ReportQueryRepository):
                 WHERE ws.user_id = %s
                   AND (%s IS NULL OR ws.reference_date >= %s)
                   AND (%s IS NULL OR ws.reference_date <= %s)
-                GROUP BY ws.reference_date, i.name, a.account_id, a.name
-                ORDER BY ws.reference_date DESC, i.name, a.account_id
+                GROUP BY ws.reference_date, i.name, a.account_id, a.name, i.display_order, a.display_order
+                ORDER BY ws.reference_date DESC, i.display_order, a.display_order
                 """,
                 (user_id, start_date, start_date, end_date, end_date),
             )
@@ -1187,8 +1187,10 @@ class PsycopgReportQueryRepository(_BaseRepo, ReportQueryRepository):
                 SELECT EXTRACT(YEAR FROM asnap.reference_date) AS year,
                        asnap.reference_date,
                        i.name AS institution_name,
+                       i.display_order AS institution_display_order,
                        a.account_id,
                        a.name AS account_name,
+                       a.display_order AS account_display_order,
                        SUM(ash.valuation_amount) AS total_valuation
                 FROM annual_snapshots asnap
                 JOIN annual_snapshot_holdings ash ON asnap.annual_snapshot_id = ash.annual_snapshot_id
@@ -1197,8 +1199,8 @@ class PsycopgReportQueryRepository(_BaseRepo, ReportQueryRepository):
                 JOIN institutions i ON a.institution_id = i.institution_id
                 WHERE asnap.user_id = %s
                   AND (%s IS NULL OR EXTRACT(YEAR FROM asnap.reference_date) = %s)
-                GROUP BY year, asnap.reference_date, i.name, a.account_id, a.name
-                ORDER BY year DESC, i.name, a.account_id
+                GROUP BY year, asnap.reference_date, i.name, i.display_order, a.account_id, a.name, a.display_order
+                ORDER BY year DESC, i.display_order, a.display_order
                 """,
                 (user_id, year, year),
             )
