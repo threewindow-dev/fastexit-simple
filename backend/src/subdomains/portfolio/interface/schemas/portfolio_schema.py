@@ -16,20 +16,20 @@ from shared.schemas import ApiResponse
 
 class CreateInstitutionRequest(BaseModel):
     name: str = Field(..., description="기관명", examples=["KB증권", "국민은행"])
-    type: str = Field(..., description="유형", examples=["증권사", "은행"])
+    type: str = Field(..., description="유형", examples=["증권사", "은행", "기타기관"])
     display_order: int = Field(0, description="표시 순서", examples=[0])
 
 
 class UpdateInstitutionRequest(BaseModel):
     name: str = Field(..., description="기관명", examples=["KB증권", "국민은행"])
-    type: str = Field(..., description="유형", examples=["증권사", "은행"])
+    type: str = Field(..., description="유형", examples=["증권사", "은행", "기타기관"])
     display_order: int = Field(0, description="표시 순서", examples=[0])
 
 
 class InstitutionResponseData(BaseModel):
     institution_id: int | None = Field(None, description="기관 ID", examples=[1])
     name: str = Field(..., description="기관명", examples=["KB증권"])
-    type: str = Field(..., description="유형", examples=["증권사"])
+    type: str = Field(..., description="유형", examples=["증권사", "은행", "기타기관"])
     display_order: int = Field(0, description="표시 순서", examples=[0])
     created_at: str = Field(
         ..., description="생성 시각", examples=["2025-01-01T00:00:00"]
@@ -131,7 +131,15 @@ class CreateAccountRequest(BaseModel):
     type: str = Field(
         ...,
         description="계좌유형",
-        examples=["위탁계좌", "연금계좌", "ISA계좌", "예금계좌", "금현물계좌", "CMA"],
+        examples=[
+            "위탁계좌",
+            "연금계좌",
+            "ISA계좌",
+            "예금계좌",
+            "금현물계좌",
+            "CMA",
+            "기타계좌",
+        ],
     )
     display_order: int = Field(0, description="표시 순서", examples=[0])
 
@@ -141,7 +149,15 @@ class UpdateAccountRequest(BaseModel):
     type: str = Field(
         ...,
         description="계좌유형",
-        examples=["위탁계좌", "연금계좌", "ISA계좌", "예금계좌", "금현물계좌", "CMA"],
+        examples=[
+            "위탁계좌",
+            "연금계좌",
+            "ISA계좌",
+            "예금계좌",
+            "금현물계좌",
+            "CMA",
+            "기타계좌",
+        ],
     )
     display_order: int = Field(0, description="표시 순서", examples=[0])
 

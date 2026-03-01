@@ -144,6 +144,7 @@ const ACCOUNT_TYPES = [
   '예금계좌',
   '금현물계좌',
   'CMA',
+  '기타계좌',
 ];
 
 const getDataSourceLabel = (dataSource: string): string => {
@@ -1780,6 +1781,7 @@ export default function PortfolioPage() {
               >
                 <option value="증권사">증권사</option>
                 <option value="은행">은행</option>
+                <option value="기타기관">기타기관</option>
               </select>
               <button type="submit">생성</button>
             </form>
@@ -1810,6 +1812,7 @@ export default function PortfolioPage() {
               >
                 <option value="증권사">증권사</option>
                 <option value="은행">은행</option>
+                <option value="기타기관">기타기관</option>
               </select>
               <button type="submit">저장</button>
               <button type="button" onClick={cancelInstitutionEdit}>

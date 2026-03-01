@@ -8,7 +8,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS institutions (
     institution_id SERIAL PRIMARY KEY,
     name           VARCHAR(255) NOT NULL UNIQUE,
-    type           VARCHAR(50)  NOT NULL CHECK (type IN ('증권사', '은행', '기타')),
+    type           VARCHAR(50)  NOT NULL CHECK (type IN ('증권사', '은행', '기타기관')),
     display_order  INTEGER      NOT NULL DEFAULT 0,
     created_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );

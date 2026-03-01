@@ -35,7 +35,7 @@ class InstitutionEntity(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "type in ('증권사','은행','기타')", name="chk_institution_type"
+            "type in ('증권사','은행','기타기관')", name="chk_institution_type"
         ),
     )
 
