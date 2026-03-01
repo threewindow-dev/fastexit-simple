@@ -520,13 +520,13 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
         async with connection.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO account_groups (name, include_in_weekly_report, display_order, created_at)
+                INSERT INTO account_groups (name, include_in_report, display_order, created_at)
                 VALUES (%s, %s, %s, %s)
-                RETURNING account_group_id, name, include_in_weekly_report, display_order, created_at
+                RETURNING account_group_id, name, include_in_report, display_order, created_at
                 """,
                 (
                     group.name,
-                    group.include_in_weekly_report,
+                    group.include_in_report,
                     group.display_order,
                     _utc_now_naive(),
                 ),
@@ -548,7 +548,7 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             account_group_id=group_id,
             name=row["name"],
             account_ids=list(group.account_ids),
-            include_in_weekly_report=row["include_in_weekly_report"],
+            include_in_report=row["include_in_report"],
             display_order=row["display_order"],
             created_at=row["created_at"],
         )
@@ -571,7 +571,7 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
         async with connection.cursor() as cur:
             await cur.execute(
                 """
-                SELECT g.account_group_id, g.name, g.include_in_weekly_report, g.display_order, g.created_at, m.account_id
+                SELECT g.account_group_id, g.name, g.include_in_report, g.display_order, g.created_at, m.account_id
                 FROM account_groups g
                 LEFT JOIN account_group_accounts m
                   ON g.account_group_id = m.account_group_id
@@ -593,7 +593,7 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             account_group_id=first["account_group_id"],
             name=first["name"],
             account_ids=account_ids,
-            include_in_weekly_report=first["include_in_weekly_report"],
+            include_in_report=first["include_in_report"],
             display_order=first["display_order"],
             created_at=first["created_at"],
         )
@@ -603,10 +603,10 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "UPDATE account_groups SET name = %s, include_in_weekly_report = %s, display_order = %s WHERE account_group_id = %s",
+                "UPDATE account_groups SET name = %s, include_in_report = %s, display_order = %s WHERE account_group_id = %s",
                 (
                     group.name,
-                    group.include_in_weekly_report,
+                    group.include_in_report,
                     group.display_order,
                     group.account_group_id,
                 ),
@@ -643,7 +643,7 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
         async with connection.cursor() as cur:
             await cur.execute(
                 """
-                SELECT g.account_group_id, g.name, g.include_in_weekly_report, g.display_order, g.created_at, m.account_id
+                SELECT g.account_group_id, g.name, g.include_in_report, g.display_order, g.created_at, m.account_id
                 FROM account_groups g
                 LEFT JOIN account_group_accounts m
                   ON g.account_group_id = m.account_group_id
@@ -663,7 +663,7 @@ class PsycopgAccountGroupRepository(_BaseRepo, AccountGroupRepository):
                     account_group_id=group_id,
                     name=row["name"],
                     account_ids=[],
-                    include_in_weekly_report=row["include_in_weekly_report"],
+                    include_in_report=row["include_in_report"],
                     display_order=row["display_order"],
                     created_at=row["created_at"],
                 )

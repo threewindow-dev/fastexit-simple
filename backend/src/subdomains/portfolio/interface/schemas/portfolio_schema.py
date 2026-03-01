@@ -205,8 +205,8 @@ class CreateAccountGroupRequest(BaseModel):
     account_ids: list[int] = Field(
         ..., description="그룹에 포함할 계좌 ID 목록", examples=[[1, 2, 3]]
     )
-    include_in_weekly_report: bool = Field(
-        False, description="주간 보고서에 포함", examples=[True]
+    include_in_report: bool = Field(
+        False, description="보고서에 포함", examples=[True]
     )
 
 
@@ -215,8 +215,8 @@ class UpdateAccountGroupRequest(BaseModel):
     account_ids: list[int] = Field(
         ..., description="그룹에 포함할 계좌 ID 목록", examples=[[1, 4, 7]]
     )
-    include_in_weekly_report: bool = Field(
-        False, description="주간 보고서에 포함", examples=[False]
+    include_in_report: bool = Field(
+        False, description="보고서에 포함", examples=[False]
     )
 
 
@@ -224,7 +224,7 @@ class AccountGroupResponseData(BaseModel):
     account_group_id: int | None = Field(None, description="계좌 그룹 ID", examples=[5])
     name: str = Field(..., description="그룹명")
     account_ids: list[int] = Field(..., description="포함된 계좌 ID 목록")
-    include_in_weekly_report: bool = Field(..., description="주간 보고서에 포함")
+    include_in_report: bool = Field(..., description="보고서에 포함")
     display_order: int = Field(..., description="표시 순서")
     created_at: str = Field(..., description="생성 시각")
 

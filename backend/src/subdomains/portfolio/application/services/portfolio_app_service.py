@@ -30,6 +30,7 @@ from subdomains.portfolio.application.dtos import (
     AnnualAccountGroupReportQuery,
     AssetClassReportQuery,
     WeeklyPivotReportQuery,
+    AnnualPivotReportQuery,
     InstitutionResult,
     ProductResult,
     AccountResult,
@@ -270,7 +271,7 @@ class PortfolioAppService:
         model = AccountGroup.create(
             name=command.name,
             account_ids=command.account_ids,
-            include_in_weekly_report=command.include_in_weekly_report,
+            include_in_report=command.include_in_report,
         )
         saved = await self._account_group_repo.add(model)
         return AccountGroupResult.from_domain(saved)
@@ -297,7 +298,7 @@ class PortfolioAppService:
             account_group_id=existing.account_group_id,
             name=command.name,
             account_ids=command.account_ids,
-            include_in_weekly_report=command.include_in_weekly_report,
+            include_in_report=command.include_in_report,
             display_order=existing.display_order,
             created_at=existing.created_at,
         )
@@ -609,11 +610,11 @@ class PortfolioAppService:
                 )
             )
 
-        # 7. 계좌그룹 행 데이터 생성 (include_in_weekly_report=True인 그룹들)
+        # 7. 계좌그룹 행 데이터 생성 (include_in_report=True인 그룹들)
         account_group_rows = []
         account_groups = await self._account_group_repo.get_all()
         for group in account_groups:
-            if not group.include_in_weekly_report:
+            if not group.include_in_report:
                 continue
 
             # 해당 그룹에 속한 계좌들의 평가액을 주차별로 합산
@@ -646,6 +647,128 @@ class PortfolioAppService:
 
         return WeeklyPivotReportResult(
             year=query.year,
+            weeks=weeks,
+            account_groups=account_group_rows,
+            accounts=accounts,
+        )
+
+    @transactional(mode="readonly")
+    async def annual_pivot_report(
+        self, query: AnnualPivotReportQuery
+    ) -> WeeklyPivotReportResult:
+        """연간 Pivot 보고서: 모든 연간 스냅샷을 열로 표시 (include_in_report=True인 계좌그룹만)"""
+        # 1. 연간 스냅샷 목록 조회
+        year_snapshots = await self._snapshot_repo.get_annual_by_user(query.user_id)
+        year_snapshots.sort(key=lambda x: x.reference_date)
+
+        if not year_snapshots:
+            return WeeklyPivotReportResult(year=0, weeks=[], account_groups=[], accounts=[])
+
+        # 2. 연간 스냅샷을 기준으로 열 정보 생성
+        weeks = [
+            WeeklyPivotWeekInfo(
+                weekly_snapshot_id=snap.annual_snapshot_id,
+                reference_date=snap.reference_date,
+                week_number=snap.reference_date.year,
+            )
+            for snap in year_snapshots
+        ]
+
+        # 3. 각 연간 스냅샷의 보유자산 데이터 조회 및 계좌별 집계
+        account_map: dict[int, dict] = {}
+        for snapshot in year_snapshots:
+            annual_holdings_data = await self._report_repo.get_annual_snapshot_holdings(
+                snapshot.annual_snapshot_id
+            )
+            for row in annual_holdings_data:
+                account_id = row.get("account_id")
+                if account_id not in account_map:
+                    account_map[account_id] = {
+                        "account_id": account_id,
+                        "institution_id": row.get("institution_id"),
+                        "account_name": row.get("account_name"),
+                        "institution_name": row.get("institution_name"),
+                        "display_order": row.get("account_display_order"),
+                        "valuations": {},
+                    }
+
+                annual_snapshot_id = row.get("annual_snapshot_id")
+                amount = float(row.get("valuation_amount", 0) or 0)
+                if annual_snapshot_id not in account_map[account_id]["valuations"]:
+                    account_map[account_id]["valuations"][annual_snapshot_id] = 0
+                account_map[account_id]["valuations"][annual_snapshot_id] += amount
+
+        # 4. Institution display_order 조회 (정렬용)
+        institutions = await self._institution_repo.get_all()
+        inst_display_orders = {
+            inst.institution_id: inst.display_order for inst in institutions
+        }
+
+        # 5. 계좌 행 데이터 생성 및 정렬
+        accounts = []
+        for account_data in sorted(
+            account_map.values(),
+            key=lambda x: (
+                inst_display_orders.get(x["institution_id"], 999),
+                x["display_order"],
+            ),
+        ):
+            valuations = [
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=snap.annual_snapshot_id,
+                    amount=account_data["valuations"].get(snap.annual_snapshot_id, 0.0),
+                )
+                for snap in year_snapshots
+            ]
+
+            accounts.append(
+                WeeklyPivotAccountRow(
+                    account_id=account_data["account_id"],
+                    account_name=account_data["account_name"],
+                    institution_name=account_data["institution_name"],
+                    valuations=valuations,
+                )
+            )
+
+        # 6. 계좌그룹 행 데이터 생성 (include_in_report=True인 그룹들)
+        account_group_rows = []
+        account_groups = await self._account_group_repo.get_all()
+        for group in account_groups:
+            if not group.include_in_report:
+                continue
+
+            # 해당 그룹에 속한 계좌들의 평가액을 연간 스냅샷별로 합산
+            group_valuations_by_snapshot = {}
+            for account_id in group.account_ids:
+                if account_id in account_map:
+                    for snapshot_id, amount in account_map[account_id][
+                        "valuations"
+                    ].items():
+                        if snapshot_id not in group_valuations_by_snapshot:
+                            group_valuations_by_snapshot[snapshot_id] = 0
+                        group_valuations_by_snapshot[snapshot_id] += amount
+
+            valuations = [
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=snap.annual_snapshot_id,
+                    amount=group_valuations_by_snapshot.get(
+                        snap.annual_snapshot_id, 0.0
+                    ),
+                )
+                for snap in year_snapshots
+            ]
+
+            account_group_rows.append(
+                WeeklyPivotAccountGroupRow(
+                    account_group_id=group.account_group_id,
+                    account_group_name=group.name,
+                    display_order=group.display_order,
+                    valuations=valuations,
+                )
+            )
+
+        return WeeklyPivotReportResult(
+            year=0,  # 연간 보고서는 연도 구분이 없음
             weeks=weeks,
             account_groups=account_group_rows,
             accounts=accounts,

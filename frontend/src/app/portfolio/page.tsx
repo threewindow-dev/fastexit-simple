@@ -37,7 +37,7 @@ interface AccountGroup {
   account_group_id: number;
   name: string;
   account_ids: number[];
-  include_in_weekly_report: boolean;
+  include_in_report: boolean;
   display_order: number;
   created_at: string;
 }
@@ -189,7 +189,7 @@ export default function PortfolioPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [weeklyReportData, setWeeklyReportData] = useState<WeeklyPivotReportData | null>(null);
   const [weeklyReportYear, setWeeklyReportYear] = useState<number>(new Date().getFullYear());
-  const [annualReportData, setAnnualReportData] = useState<any>(null);
+  const [annualReportData, setAnnualReportData] = useState<WeeklyPivotReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -253,18 +253,18 @@ export default function PortfolioPage() {
   const [newAccountGroup, setNewAccountGroup] = useState<{
     name: string;
     account_ids: number[];
-    include_in_weekly_report: boolean;
+    include_in_report: boolean;
   }>({
     name: '',
     account_ids: [],
-    include_in_weekly_report: false,
+    include_in_report: false,
   });
   const [showAccountGroupForm, setShowAccountGroupForm] = useState(false);
   const [editingAccountGroup, setEditingAccountGroup] = useState<{
     account_group_id: number;
     name: string;
     account_ids: number[];
-    include_in_weekly_report: boolean;
+    include_in_report: boolean;
   } | null>(null);
   const [showAccountGroupEditForm, setShowAccountGroupEditForm] = useState(false);
 
@@ -855,7 +855,7 @@ export default function PortfolioPage() {
     try {
       setLoading(true);
       const response = await fetch(
-        `${API_BASE_URL}/portfolio/reports/annual/accounts?user_id=1`
+        `${API_BASE_URL}/portfolio/reports/annual/pivot?user_id=1`
       );
       if (!response.ok) throw new Error('Failed to fetch annual report');
       const result = await response.json();
@@ -1255,7 +1255,7 @@ export default function PortfolioPage() {
       const payload = {
         name: newAccountGroup.name.trim(),
         account_ids: newAccountGroup.account_ids,
-        include_in_weekly_report: newAccountGroup.include_in_weekly_report,
+        include_in_report: newAccountGroup.include_in_report,
       };
       const response = await fetch(`${API_BASE_URL}/portfolio/account-groups`, {
         method: 'POST',
@@ -1265,7 +1265,7 @@ export default function PortfolioPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to create account group');
 
-      setNewAccountGroup({ name: '', account_ids: [], include_in_weekly_report: false });
+      setNewAccountGroup({ name: '', account_ids: [], include_in_report: false });
       setShowAccountGroupForm(false);
       await fetchAccountGroups();
       alert('계좌그룹이 생성되었습니다.');
@@ -1279,7 +1279,7 @@ export default function PortfolioPage() {
       account_group_id: group.account_group_id,
       name: group.name,
       account_ids: [...group.account_ids],
-      include_in_weekly_report: group.include_in_weekly_report,
+      include_in_report: group.include_in_report,
     });
     setShowAccountGroupEditForm(true);
     setShowAccountGroupForm(false);
@@ -1306,7 +1306,7 @@ export default function PortfolioPage() {
       const payload = {
         name: editingAccountGroup.name.trim(),
         account_ids: editingAccountGroup.account_ids,
-        include_in_weekly_report: editingAccountGroup.include_in_weekly_report,
+        include_in_report: editingAccountGroup.include_in_report,
       };
       const response = await fetch(
         `${API_BASE_URL}/portfolio/account-groups/${editingAccountGroup.account_group_id}`,
@@ -2341,7 +2341,7 @@ export default function PortfolioPage() {
                   setShowAccountGroupEditForm(false);
                   setEditingAccountGroup(null);
                   if (showAccountGroupForm) {
-                    setNewAccountGroup({ name: '', account_ids: [], include_in_weekly_report: false });
+                    setNewAccountGroup({ name: '', account_ids: [], include_in_report: false });
                   }
                 }}
               >
@@ -2383,16 +2383,16 @@ export default function PortfolioPage() {
               <label style={{ display: 'block', margin: '10px 0' }}>
                 <input
                   type="checkbox"
-                  checked={newAccountGroup.include_in_weekly_report}
+                  checked={newAccountGroup.include_in_report}
                   onChange={(e) =>
                     setNewAccountGroup((prev) => ({
                       ...prev,
-                      include_in_weekly_report: e.target.checked,
+                      include_in_report: e.target.checked,
                     }))
                   }
                   style={{ marginRight: '8px' }}
                 />
-                주간 보고서에 포함
+                보고서에 포함
               </label>
               <button type="submit">생성</button>
             </form>
@@ -2435,20 +2435,20 @@ export default function PortfolioPage() {
               <label style={{ display: 'block', margin: '10px 0' }}>
                 <input
                   type="checkbox"
-                  checked={editingAccountGroup.include_in_weekly_report}
+                  checked={editingAccountGroup.include_in_report}
                   onChange={(e) =>
                     setEditingAccountGroup((prev) =>
                       prev
                         ? {
                             ...prev,
-                            include_in_weekly_report: e.target.checked,
+                            include_in_report: e.target.checked,
                           }
                         : prev
                     )
                   }
                   style={{ marginRight: '8px' }}
                 />
-                주간 보고서에 포함
+                보고서에 포함
               </label>
               <div className={styles.actionButtons}>
                 <button type="submit">저장</button>
@@ -2467,7 +2467,7 @@ export default function PortfolioPage() {
                   <th>번호</th>
                   <th>그룹명</th>
                   <th>포함 계좌</th>
-                  <th>주간 보고서 포함</th>
+                  <th>보고서 포함</th>
                   <th>생성일</th>
                   <th>작업</th>
                 </tr>
@@ -2521,7 +2521,7 @@ export default function PortfolioPage() {
                       <td style={{ textAlign: 'center' }}>
                         <input
                           type="checkbox"
-                          checked={group.include_in_weekly_report}
+                          checked={group.include_in_report}
                           readOnly
                           style={{ cursor: 'default' }}
                         />
@@ -3588,110 +3588,70 @@ export default function PortfolioPage() {
       {activeTab === 'annualReport' && (
         <div className={styles.tabContent}>
           <div className={styles.sectionHeader}>
-            <h2>연간 보고서</h2>
+            <h2>연간 보고서 (Pivot)</h2>
           </div>
 
           {loading ? (
             <div className={styles.loading}>로딩 중...</div>
-          ) : annualReportData && annualReportData.items && annualReportData.items.length > 0 ? (
+          ) : annualReportData && annualReportData.weeks.length > 0 ? (
             <div style={{ overflowX: 'auto' }}>
-              {(() => {
-                // 연도별 데이터 구조화
-                const yearMap = new Map<number, Map<string, Map<string, number>>>();
-                const years = new Set<number>();
-                const institutions = new Map<string, number>();
-                const accountsByInstitution = new Map<string, Map<string, number>>();
-
-                annualReportData.items.forEach((item: any) => {
-                  years.add(item.year);
-                  institutions.set(item.institution_name, item.institution_display_order);
-                  
-                  if (!accountsByInstitution.has(item.institution_name)) {
-                    accountsByInstitution.set(item.institution_name, new Map());
-                  }
-                  accountsByInstitution.get(item.institution_name)!.set(item.account_name, item.account_display_order);
-
-                  if (!yearMap.has(item.year)) {
-                    yearMap.set(item.year, new Map());
-                  }
-                  const instMap = yearMap.get(item.year)!;
-                  if (!instMap.has(item.institution_name)) {
-                    instMap.set(item.institution_name, new Map());
-                  }
-                  instMap.get(item.institution_name)!.set(item.account_name, item.total_valuation);
-                });
-
-                const sortedYears = Array.from(years).sort((a, b) => a - b);
-                const sortedInstitutions = Array.from(institutions.entries()).sort((a, b) => a[1] - b[1]).map(([name]) => name);
-
-                return (
-                  <table className={styles.table} style={{ minWidth: '800px' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 2 }}>
-                          금융기관
-                        </th>
-                        <th style={{ position: 'sticky', left: '150px', backgroundColor: '#fff', zIndex: 2 }}>
-                          계좌
-                        </th>
-                        {sortedYears.map((year) => (
-                          <th key={year} style={{ minWidth: '120px' }}>
-                            {year}년
-                          </th>
-                        ))}
+              <table className={styles.table} style={{ minWidth: '800px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 2 }}>
+                      금융기관
+                    </th>
+                    <th style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 2 }}>
+                      계좌
+                    </th>
+                    {annualReportData.weeks.map((yearPoint) => (
+                      <th key={yearPoint.weekly_snapshot_id} style={{ minWidth: '100px', fontSize: '12px', padding: '8px 4px' }}>
+                        {new Date(yearPoint.reference_date).getFullYear()}년
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {annualReportData.account_groups && annualReportData.account_groups.length > 0 && (
+                    <>
+                      <tr style={{ borderBottom: '2px solid #ccc' }}>
+                        <td colSpan={annualReportData.weeks.length + 2} style={{ padding: '12px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                          계좌 그룹
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {sortedInstitutions.map((institution) => {
-                        const accountsMap = accountsByInstitution.get(institution) || new Map();
-                        const accounts = Array.from(accountsMap.entries()).sort((a, b) => a[1] - b[1]).map(([name]) => name);
-                        return accounts.map((account, accountIdx) => (
-                          <tr key={`${institution}-${account}`}>
-                            {accountIdx === 0 && (
-                              <td 
-                                rowSpan={accounts.length}
-                                style={{ 
-                                  position: 'sticky', 
-                                  left: 0, 
-                                  backgroundColor: '#fff', 
-                                  zIndex: 1, 
-                                  fontWeight: 'bold',
-                                  verticalAlign: 'middle'
-                                }}
-                              >
-                                {institution}
-                              </td>
-                            )}
-                            <td style={{ position: 'sticky', left: '150px', backgroundColor: '#fff', zIndex: 1 }}>
-                              {account}
+                      {[...annualReportData.account_groups].sort((a, b) => a.display_order - b.display_order).map((group) => (
+                        <tr key={group.account_group_id} style={{ backgroundColor: '#fffacd' }}>
+                          <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold' }}>
+                            {group.account_group_name}
+                          </td>
+                          <td style={{ position: 'sticky', left: '120px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '12px', color: '#666' }}>
+                            (합계)
+                          </td>
+                          {group.valuations.map((val, idx) => (
+                            <td key={idx} style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                              {val.amount > 0
+                                ? val.amount.toLocaleString('ko-KR', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0,
+                                  })
+                                : '-'}
                             </td>
-                            {sortedYears.map((year) => {
-                              const value = yearMap.get(year)?.get(institution)?.get(account) || 0;
-                              return (
-                                <td key={year} style={{ textAlign: 'right' }}>
-                                  {value > 0
-                                    ? value.toLocaleString('ko-KR', {
-                                        minimumFractionDigits: 0,
-                                        maximumFractionDigits: 0,
-                                      })
-                                    : '-'}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ));
-                      })}
-                      {/* 총합 행 */}
-                      <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0', borderTop: '2px solid #333' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1 }}>
+                          ))}
+                        </tr>
+                      ))}
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#ffeb99' }}>
+                        <td style={{ position: 'sticky', left: 0, backgroundColor: '#ffeb99', zIndex: 1 }}>
                           총합
                         </td>
-                        {sortedYears.map((year) => {
-                          const total = annualReportData.items
-                            .filter((item: any) => item.year === year)
-                            .reduce((sum: number, item: any) => sum + item.total_valuation, 0);
+                        <td style={{ position: 'sticky', left: '120px', backgroundColor: '#ffeb99', zIndex: 1 }}>
+                        </td>
+                        {annualReportData.weeks.map((yearPoint, yearIdx) => {
+                          const total = annualReportData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[yearIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
                           return (
-                            <td key={year} style={{ textAlign: 'right' }}>
+                            <td key={yearPoint.weekly_snapshot_id} style={{ textAlign: 'right' }}>
                               {total > 0
                                 ? total.toLocaleString('ko-KR', {
                                     minimumFractionDigits: 0,
@@ -3702,39 +3662,91 @@ export default function PortfolioPage() {
                           );
                         })}
                       </tr>
-                      {/* 전년 대비 변화 행 */}
+                      <tr style={{ borderTop: '2px solid #ccc', borderBottom: '2px solid #ccc' }}>
+                        <td colSpan={annualReportData.weeks.length + 2} style={{ padding: '12px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                          전체 계좌
+                        </td>
+                      </tr>
+                    </>
+                  )}
+
+                  {annualReportData.accounts.map((account) => (
+                    <tr key={account.account_id}>
+                      <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1 }}>
+                        {account.institution_name}
+                      </td>
+                      <td style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 1 }}>
+                        {account.account_name}
+                      </td>
+                      {account.valuations.map((val, idx) => (
+                        <td key={idx} style={{ textAlign: 'right' }}>
+                          {val.amount > 0
+                            ? val.amount.toLocaleString('ko-KR', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0,
+                              })
+                            : '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+
+                  {annualReportData.accounts.length > 0 && (
+                    <>
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1 }}>
+                          총합
+                        </td>
+                        {annualReportData.weeks.map((yearPoint, yearIdx) => {
+                          const total = annualReportData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[yearIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
+                          return (
+                            <td key={yearPoint.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                              {total > 0
+                                ? total.toLocaleString('ko-KR', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0,
+                                  })
+                                : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#fff5f5' }}>
                         <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1 }}>
                           전년 대비 변화
                         </td>
-                        {sortedYears.map((year, yearIdx) => {
-                          const currentTotal = annualReportData.items
-                            .filter((item: any) => item.year === year)
-                            .reduce((sum: number, item: any) => sum + item.total_valuation, 0);
+                        {annualReportData.weeks.map((yearPoint, yearIdx) => {
+                          const currentTotal = annualReportData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[yearIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
 
                           let changePercent = 0;
                           let changeColor = 'black';
 
                           if (yearIdx > 0) {
-                            const prevYear = sortedYears[yearIdx - 1];
-                            const prevTotal = annualReportData.items
-                              .filter((item: any) => item.year === prevYear)
-                              .reduce((sum: number, item: any) => sum + item.total_valuation, 0);
+                            const prevTotal = annualReportData.accounts.reduce((sum, account) => {
+                              const val = account.valuations[yearIdx - 1];
+                              return sum + (val ? val.amount : 0);
+                            }, 0);
 
                             if (prevTotal > 0) {
                               changePercent = ((currentTotal - prevTotal) / prevTotal) * 100;
 
                               if (changePercent >= 1) {
-                                changeColor = '#d32f2f'; // Red
+                                changeColor = '#d32f2f';
                               } else if (changePercent <= -1) {
-                                changeColor = '#1976d2'; // Blue
+                                changeColor = '#1976d2';
                               }
                             }
                           }
 
                           return (
                             <td
-                              key={year}
+                              key={yearPoint.weekly_snapshot_id}
                               style={{
                                 textAlign: 'right',
                                 color: changeColor,
@@ -3745,10 +3757,10 @@ export default function PortfolioPage() {
                           );
                         })}
                       </tr>
-                    </tbody>
-                  </table>
-                );
-              })()}
+                    </>
+                  )}
+                </tbody>
+              </table>
             </div>
           ) : (
             <div className={styles.infoBox}>

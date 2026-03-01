@@ -40,6 +40,7 @@ from subdomains.portfolio.application.dtos import (
     AnnualAccountGroupReportQuery,
     AssetClassReportQuery,
     WeeklyPivotReportQuery,
+    AnnualPivotReportQuery,
 )
 from subdomains.portfolio.application.services import PortfolioAppService
 from subdomains.portfolio.interface.schemas import (
@@ -519,7 +520,7 @@ async def list_account_groups(
             account_group_id=result.account_group_id,
             name=result.name,
             account_ids=result.account_ids,
-            include_in_weekly_report=result.include_in_weekly_report,
+            include_in_report=result.include_in_report,
             display_order=result.display_order,
             created_at=_iso(result.created_at),
         )
@@ -541,14 +542,14 @@ async def create_account_group(
     cmd = CreateAccountGroupCommand(
         name=request.name,
         account_ids=request.account_ids,
-        include_in_weekly_report=request.include_in_weekly_report,
+        include_in_report=request.include_in_report,
     )
     result = await service.create_account_group(cmd)
     data = AccountGroupResponseData(
         account_group_id=result.account_group_id,
         name=result.name,
         account_ids=result.account_ids,
-        include_in_weekly_report=result.include_in_weekly_report,
+        include_in_report=result.include_in_report,
         display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
@@ -570,14 +571,14 @@ async def update_account_group(
         account_group_id=account_group_id,
         name=request.name,
         account_ids=request.account_ids,
-        include_in_weekly_report=request.include_in_weekly_report,
+        include_in_report=request.include_in_report,
     )
     result = await service.update_account_group(cmd)
     data = AccountGroupResponseData(
         account_group_id=result.account_group_id,
         name=result.name,
         account_ids=result.account_ids,
-        include_in_weekly_report=result.include_in_weekly_report,
+        include_in_report=result.include_in_report,
         display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
@@ -1144,6 +1145,65 @@ async def weekly_pivot_report(
     """연도별 주간 스냅샷을 열로, 계좌를 행으로 하는 Pivot 보고서"""
     query = WeeklyPivotReportQuery(user_id=user_id, year=year)
     result = await service.weekly_pivot_report(query)
+
+    weeks = [
+        WeeklyPivotWeekInfo(
+            weekly_snapshot_id=w.weekly_snapshot_id,
+            reference_date=w.reference_date,
+            week_number=w.week_number,
+        )
+        for w in result.weeks
+    ]
+
+    account_groups = [
+        WeeklyPivotAccountGroupRow(
+            account_group_id=grp.account_group_id,
+            account_group_name=grp.account_group_name,
+            display_order=grp.display_order,
+            valuations=[
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=val.weekly_snapshot_id, amount=val.amount
+                )
+                for val in grp.valuations
+            ],
+        )
+        for grp in result.account_groups
+    ]
+
+    accounts = [
+        WeeklyPivotAccountRow(
+            account_id=acc.account_id,
+            account_name=acc.account_name,
+            institution_name=acc.institution_name,
+            valuations=[
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=val.weekly_snapshot_id, amount=val.amount
+                )
+                for val in acc.valuations
+            ],
+        )
+        for acc in result.accounts
+    ]
+
+    data = WeeklyPivotReportData(
+        year=result.year, weeks=weeks, account_groups=account_groups, accounts=accounts
+    )
+    return WeeklyPivotReportResponse(code=0, message="success", data=data)
+
+
+@router.get(
+    "/reports/annual/pivot",
+    response_model=WeeklyPivotReportResponse,
+    summary="연간 Pivot 보고서 (모든 연간 스냅샷을 열로)",
+    responses={**common_responses},
+)
+async def annual_pivot_report(
+    user_id: int = Query(..., description="사용자 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> WeeklyPivotReportResponse:
+    """모든 연간 스냅샷을 열로, 계좌를 행으로 하는 Pivot 보고서"""
+    query = AnnualPivotReportQuery(user_id=user_id)
+    result = await service.annual_pivot_report(query)
 
     weeks = [
         WeeklyPivotWeekInfo(

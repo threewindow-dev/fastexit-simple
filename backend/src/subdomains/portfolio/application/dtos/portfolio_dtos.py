@@ -175,7 +175,7 @@ class CreateAnnualSnapshotCommand:
 class CreateAccountGroupCommand:
     name: str
     account_ids: list[int]
-    include_in_weekly_report: bool = False
+    include_in_report: bool = False
 
 
 @dataclass
@@ -183,7 +183,7 @@ class UpdateAccountGroupCommand:
     account_group_id: int
     name: str
     account_ids: list[int]
-    include_in_weekly_report: bool = False
+    include_in_report: bool = False
 
 
 @dataclass
@@ -227,6 +227,11 @@ class AssetClassReportQuery:
 class WeeklyPivotReportQuery:
     user_id: int
     year: int
+
+
+@dataclass
+class AnnualPivotReportQuery:
+    user_id: int
 
 
 # ============================================================================
@@ -308,7 +313,7 @@ class AccountGroupResult:
     account_group_id: int | None
     name: str
     account_ids: list[int]
-    include_in_weekly_report: bool
+    include_in_report: bool
     display_order: int
     created_at: datetime
 
@@ -318,7 +323,7 @@ class AccountGroupResult:
             account_group_id=model.account_group_id,
             name=model.name,
             account_ids=model.account_ids,
-            include_in_weekly_report=model.include_in_weekly_report,
+            include_in_report=model.include_in_report,
             display_order=model.display_order,
             created_at=model.created_at,
         )

@@ -466,7 +466,7 @@ class SQLAlchemyAccountGroupRepository(_BaseRepo, AccountGroupRepository):
         session = self._require_session(conn)
         entity = AccountGroupEntity(
             name=group.name,
-            include_in_weekly_report=group.include_in_weekly_report,
+            include_in_report=group.include_in_report,
             display_order=group.display_order,
         )
         session.add(entity)
@@ -488,7 +488,7 @@ class SQLAlchemyAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             account_group_id=entity.account_group_id,
             name=entity.name,
             account_ids=list(group.account_ids),
-            include_in_weekly_report=entity.include_in_weekly_report,
+            include_in_report=entity.include_in_report,
             display_order=entity.display_order,
             created_at=entity.created_at,
         )
@@ -528,7 +528,7 @@ class SQLAlchemyAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             account_group_id=group_entity.account_group_id,
             name=group_entity.name,
             account_ids=account_ids,
-            include_in_weekly_report=group_entity.include_in_weekly_report,
+            include_in_report=group_entity.include_in_report,
             display_order=group_entity.display_order,
             created_at=group_entity.created_at,
         )
@@ -541,7 +541,7 @@ class SQLAlchemyAccountGroupRepository(_BaseRepo, AccountGroupRepository):
             .where(AccountGroupEntity.account_group_id == group.account_group_id)
             .values(
                 name=group.name,
-                include_in_weekly_report=group.include_in_weekly_report,
+                include_in_report=group.include_in_report,
                 display_order=group.display_order,
             )
         )
@@ -609,7 +609,7 @@ class SQLAlchemyAccountGroupRepository(_BaseRepo, AccountGroupRepository):
                 account_group_id=entity.account_group_id,
                 name=entity.name,
                 account_ids=account_ids_by_group.get(entity.account_group_id, []),
-                include_in_weekly_report=entity.include_in_weekly_report,
+                include_in_report=entity.include_in_report,
                 display_order=entity.display_order,
                 created_at=entity.created_at,
             )
