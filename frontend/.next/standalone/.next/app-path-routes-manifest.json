@@ -1,0 +1,8 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/portfolio/[...path]/route": "/api/portfolio/[...path]",
+  "/api/users/[id]/route": "/api/users/[id]",
+  "/api/users/route": "/api/users",
+  "/page": "/",
+  "/portfolio/page": "/portfolio"
+}

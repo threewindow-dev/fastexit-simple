@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, ComposedChart, Bar, BarChart } from 'recharts';
 import styles from './portfolio.module.css';
 
 interface Institution {
@@ -144,6 +145,19 @@ interface SnapshotHolding {
   created_at: string | null;
 }
 
+interface TargetAllocation {
+  target_allocation_id: number;
+  year: number;
+  account_group_id: number;
+  target_amount: string;
+}
+
+interface TargetAllocationTotal {
+  target_allocation_total_id: number;
+  year: number;
+  target_amount: string;
+}
+
 interface Report {
   period_type: string;
   reference_date: string;
@@ -175,7 +189,7 @@ const getDataSourceLabel = (dataSource: string): string => {
 };
 
 export default function PortfolioPage() {
-  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport' | 'annualReport'>('institutions');
+  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport' | 'annualReport' | 'snapshotAnalysis' | 'targetAllocations'>('institutions');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -192,6 +206,16 @@ export default function PortfolioPage() {
   const [annualReportData, setAnnualReportData] = useState<WeeklyPivotReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [targetYear, setTargetYear] = useState<number>(new Date().getFullYear());
+  const [targetAllocations, setTargetAllocations] = useState<TargetAllocation[]>([]);
+  const [todayTargetAllocations, setTodayTargetAllocations] = useState<TargetAllocation[]>([]);
+  const [targetAllocationTotal, setTargetAllocationTotal] = useState<TargetAllocationTotal | null>(null);
+  const [targetTotalDraft, setTargetTotalDraft] = useState('');
+  const [savingTargetTotal, setSavingTargetTotal] = useState(false);
+  const [deletingTargetTotal, setDeletingTargetTotal] = useState(false);
+  const [targetDrafts, setTargetDrafts] = useState<Record<number, string>>({});
+  const [savingTargetAccountGroupId, setSavingTargetAccountGroupId] = useState<number | null>(null);
+  const [deletingTargetAccountGroupId, setDeletingTargetAccountGroupId] = useState<number | null>(null);
 
   // Institution Form
   const [newInstitution, setNewInstitution] = useState({
@@ -588,6 +612,127 @@ export default function PortfolioPage() {
     return b.annual_snapshot_id - a.annual_snapshot_id;
   });
 
+  const sortedAccountGroups = [...accountGroups].sort((a, b) => {
+    const diff = (a.display_order ?? 0) - (b.display_order ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+    return a.account_group_id - b.account_group_id;
+  });
+
+  const reportYears = annualReportData
+    ? annualReportData.weeks.map((item) => new Date(item.reference_date).getFullYear())
+    : [];
+  const targetYearOptions = Array.from(
+    new Set([targetYear, ...reportYears, new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1])
+  ).sort((a, b) => a - b);
+
+  const annualReportYearIndex = annualReportData
+    ? annualReportData.weeks.findIndex(
+        (item) => new Date(item.reference_date).getFullYear() === targetYear
+      )
+    : -1;
+  const currentYear = new Date().getFullYear();
+  const useLatestDailySnapshotForActual = targetYear === currentYear;
+  const latestDailySnapshotForTargetYear = useLatestDailySnapshotForActual
+    ? sortedSnapshots.find(
+        (snapshot) => new Date(snapshot.reference_date).getFullYear() === targetYear
+      ) ?? null
+    : null;
+
+  const targetAmountMap = new Map<number, number>();
+  targetAllocations.forEach((target) => {
+    const amount = Number(target.target_amount);
+    if (!Number.isNaN(amount)) {
+      targetAmountMap.set(target.account_group_id, amount);
+    }
+  });
+
+  const actualAmountMap = new Map<number, number>();
+  if (useLatestDailySnapshotForActual && latestDailySnapshotForTargetYear) {
+    const accountToGroupIds = new Map<number, number[]>();
+    sortedAccountGroups.forEach((group) => {
+      group.account_ids.forEach((accountId) => {
+        const existing = accountToGroupIds.get(accountId) ?? [];
+        existing.push(group.account_group_id);
+        accountToGroupIds.set(accountId, existing);
+      });
+    });
+
+    const holdingToAccountId = new Map<number, number>();
+    holdings
+      .filter((holding) => !holding.deleted_at)
+      .forEach((holding) => {
+        holdingToAccountId.set(holding.holding_id, holding.account_id);
+      });
+
+    snapshotHoldings
+      .filter(
+        (snapshotHolding) =>
+          snapshotHolding.snapshot_id === latestDailySnapshotForTargetYear.snapshot_id
+      )
+      .forEach((snapshotHolding) => {
+        const accountId = holdingToAccountId.get(snapshotHolding.holding_id);
+        if (accountId == null) {
+          return;
+        }
+
+        const groupIds = accountToGroupIds.get(accountId) ?? [];
+        if (groupIds.length === 0) {
+          return;
+        }
+
+        const amount = Number(snapshotHolding.valuation_amount);
+        if (!Number.isFinite(amount)) {
+          return;
+        }
+
+        groupIds.forEach((groupId) => {
+          actualAmountMap.set(groupId, (actualAmountMap.get(groupId) ?? 0) + amount);
+        });
+      });
+  } else if (annualReportData && annualReportYearIndex >= 0) {
+    annualReportData.account_groups.forEach((group) => {
+      const value = group.valuations[annualReportYearIndex]?.amount ?? 0;
+      actualAmountMap.set(group.account_group_id, value);
+    });
+  }
+
+  const targetComparisonRows = sortedAccountGroups.map((group) => {
+    const targetAmount = targetAmountMap.get(group.account_group_id) ?? 0;
+    const actualAmount = actualAmountMap.get(group.account_group_id) ?? 0;
+    const gapAmount = actualAmount - targetAmount;
+    const achievementRate = targetAmount > 0 ? (actualAmount / targetAmount) * 100 : null;
+    return {
+      accountGroupId: group.account_group_id,
+      accountGroupName: group.name,
+      targetAmount,
+      actualAmount,
+      gapAmount,
+      achievementRate,
+    };
+  });
+
+  const targetComparisonChartData = targetComparisonRows
+    .filter((row) => row.targetAmount > 0 || row.actualAmount > 0)
+    .map((row) => ({
+      그룹: row.accountGroupName,
+      목표금액: row.targetAmount,
+      실제금액: row.actualAmount,
+      달성률: row.achievementRate ?? 0,
+    }));
+
+  const totalActualAmount = targetComparisonRows.reduce(
+    (sum, row) => sum + row.actualAmount,
+    0
+  );
+  const totalTargetAmount = targetAllocationTotal
+    ? Number(targetAllocationTotal.target_amount)
+    : 0;
+  const totalGapAmount = totalActualAmount - totalTargetAmount;
+  const totalAchievementRate =
+    totalTargetAmount > 0 ? (totalActualAmount / totalTargetAmount) * 100 : null;
+
   const selectedSnapshot = selectedSnapshotId
     ? snapshots.find((snap) => snap.snapshot_id === Number(selectedSnapshotId)) || null
     : null;
@@ -637,8 +782,43 @@ export default function PortfolioPage() {
     } else if (activeTab === 'reports') {
       fetchAccounts();
       fetchAccountGroups();
+    } else if (activeTab === 'snapshotAnalysis') {
+      fetchSnapshots();
+      fetchSnapshotHoldings();
+      fetchAnnualSnapshots();
+      fetchAccountGroups();
+      fetchHoldings();
+      fetchProducts();
+      fetchCurrentYearTargetAllocations();
+    } else if (activeTab === 'targetAllocations') {
+      fetchAccountGroups();
+      fetchAnnualReport();
+      fetchSnapshots();
+      fetchHoldings();
+      fetchSnapshotHoldings();
+      fetchTargetAllocations(targetYear);
+      fetchTargetAllocationTotal(targetYear);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'targetAllocations') {
+      fetchTargetAllocations(targetYear);
+      fetchTargetAllocationTotal(targetYear);
+      if (targetYear === new Date().getFullYear()) {
+        fetchSnapshots();
+        fetchHoldings();
+        fetchSnapshotHoldings();
+      }
+    }
+  }, [activeTab, targetYear]);
+
+  // snapshotAnalysis 탭에서 annualSnapshots 로드 후 holdings 요청
+  useEffect(() => {
+    if (activeTab === 'snapshotAnalysis' && annualSnapshots.length > 0) {
+      fetchAllAnnualSnapshotHoldings(annualSnapshots);
+    }
+  }, [activeTab, annualSnapshots]);
 
   useEffect(() => {
     if (!selectedSnapshotId) {
@@ -799,6 +979,37 @@ export default function PortfolioPage() {
     }
   };
 
+  const fetchAllAnnualSnapshotHoldings = async (snaps: AnnualSnapshot[]) => {
+    if (snaps.length === 0) {
+      setAnnualSnapshotHoldings([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      let allHoldings: AnnualSnapshotHolding[] = [];
+      
+      for (const snap of snaps) {
+        const response = await fetch(
+          `${API_BASE_URL}/portfolio/annual-snapshot-holdings?annual_snapshot_id=${snap.annual_snapshot_id}`
+        );
+        if (response.ok) {
+          const result = await response.json();
+          const holdings = Array.isArray(result) ? result : result.data?.items || [];
+          allHoldings = [...allHoldings, ...holdings];
+        }
+      }
+      
+      setAnnualSnapshotHoldings(allHoldings);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error fetching annual snapshot holdings');
+      setAnnualSnapshotHoldings([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchHoldings = async () => {
     try {
       setLoading(true);
@@ -870,6 +1081,252 @@ export default function PortfolioPage() {
       setAnnualReportData(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const normalizeTargetAmountInput = (value: string) =>
+    value.replace(/[^0-9.-]/g, '').trim();
+
+  const formatTargetAmountInput = (value: string) => {
+    const normalized = normalizeTargetAmountInput(value);
+    if (normalized === '') {
+      return '';
+    }
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) {
+      return value;
+    }
+    return parsed.toLocaleString('ko-KR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+  };
+
+  const fetchTargetAllocations = async (year: number) => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/target-allocations?year=${year}`
+      );
+      if (!response.ok) {
+        throw new Error('Failed to fetch target allocations');
+      }
+      const result = await response.json();
+      const targets: TargetAllocation[] = result.targets ?? [];
+      setTargetAllocations(targets);
+
+      const draftMap: Record<number, string> = {};
+      targets.forEach((target) => {
+        const amount = Number(target.target_amount);
+        draftMap[target.account_group_id] = Number.isFinite(amount)
+          ? amount.toLocaleString('ko-KR', {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            })
+          : '';
+      });
+      setTargetDrafts(draftMap);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Error fetching target allocations'
+      );
+      setTargetAllocations([]);
+      setTargetDrafts({});
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTargetAllocationTotal = async (year: number) => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/target-allocations/total?year=${year}`
+      );
+      if (!response.ok) {
+        throw new Error('Failed to fetch target allocation total');
+      }
+      const result = await response.json();
+      const data: TargetAllocationTotal | null = result.data ?? null;
+      setTargetAllocationTotal(data);
+
+      if (data?.target_amount != null) {
+        const amount = Number(data.target_amount);
+        setTargetTotalDraft(
+          Number.isFinite(amount)
+            ? amount.toLocaleString('ko-KR', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+              })
+            : ''
+        );
+      } else {
+        setTargetTotalDraft('');
+      }
+    } catch {
+      setTargetAllocationTotal(null);
+      setTargetTotalDraft('');
+    }
+  };
+
+  const fetchCurrentYearTargetAllocations = async () => {
+    try {
+      const year = new Date().getFullYear();
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/target-allocations?year=${year}`
+      );
+      if (!response.ok) {
+        throw new Error('Failed to fetch current year target allocations');
+      }
+      const result = await response.json();
+      const targets: TargetAllocation[] = result.targets ?? [];
+      setTodayTargetAllocations(targets);
+    } catch {
+      setTodayTargetAllocations([]);
+    }
+  };
+
+  const handleSaveTargetAllocation = async (accountGroupId: number) => {
+    const rawAmount = targetDrafts[accountGroupId] ?? '';
+    const normalizedAmount = normalizeTargetAmountInput(rawAmount);
+    if (normalizedAmount === '') {
+      alert('목표금액을 입력해주세요.');
+      return;
+    }
+
+    const amount = Number(normalizedAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      alert('목표금액은 0 이상의 숫자여야 합니다.');
+      return;
+    }
+
+    try {
+      setSavingTargetAccountGroupId(accountGroupId);
+      const response = await fetch(`${API_BASE_URL}/portfolio/target-allocations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          year: targetYear,
+          account_group_id: accountGroupId,
+          target_amount: amount,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to save target allocation');
+      }
+
+      await fetchTargetAllocations(targetYear);
+      await fetchAnnualReport();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save target allocation');
+    } finally {
+      setSavingTargetAccountGroupId(null);
+    }
+  };
+
+  const handleDeleteTargetAllocation = async (accountGroupId: number) => {
+    const target = targetAllocations.find(
+      (item) => item.account_group_id === accountGroupId
+    );
+    if (!target) {
+      setTargetDrafts((prev) => ({
+        ...prev,
+        [accountGroupId]: '',
+      }));
+      return;
+    }
+
+    if (!window.confirm('해당 목표 자산배분을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      setDeletingTargetAccountGroupId(accountGroupId);
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/target-allocations/${target.target_allocation_id}`,
+        {
+          method: 'DELETE',
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to delete target allocation');
+      }
+      await fetchTargetAllocations(targetYear);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete target allocation');
+    } finally {
+      setDeletingTargetAccountGroupId(null);
+    }
+  };
+
+  const handleSaveTargetAllocationTotal = async () => {
+    const normalizedAmount = normalizeTargetAmountInput(targetTotalDraft);
+    if (normalizedAmount === '') {
+      alert('총액 목표금액을 입력해주세요.');
+      return;
+    }
+
+    const amount = Number(normalizedAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      alert('총액 목표금액은 0 이상의 숫자여야 합니다.');
+      return;
+    }
+
+    try {
+      setSavingTargetTotal(true);
+      const response = await fetch(`${API_BASE_URL}/portfolio/target-allocations/total`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          year: targetYear,
+          target_amount: amount,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to save total target allocation');
+      }
+      await fetchTargetAllocationTotal(targetYear);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save total target allocation');
+    } finally {
+      setSavingTargetTotal(false);
+    }
+  };
+
+  const handleDeleteTargetAllocationTotal = async () => {
+    if (!targetAllocationTotal) {
+      setTargetTotalDraft('');
+      return;
+    }
+
+    if (!window.confirm('연간 총액 목표를 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      setDeletingTargetTotal(true);
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio/target-allocations/total?year=${targetYear}`,
+        { method: 'DELETE' }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to delete total target allocation');
+      }
+      setTargetAllocationTotal(null);
+      setTargetTotalDraft('');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete total target allocation');
+    } finally {
+      setDeletingTargetTotal(false);
     }
   };
 
@@ -1790,6 +2247,18 @@ export default function PortfolioPage() {
           onClick={() => setActiveTab('annualReport')}
         >
           연간 보고서
+        </button>
+        <button
+          className={activeTab === 'snapshotAnalysis' ? styles.activeTab : ''}
+          onClick={() => setActiveTab('snapshotAnalysis')}
+        >
+          스냅샷 분석
+        </button>
+        <button
+          className={activeTab === 'targetAllocations' ? styles.activeTab : ''}
+          onClick={() => setActiveTab('targetAllocations')}
+        >
+          목표 자산배분
         </button>
       </div>
 
@@ -3837,6 +4306,795 @@ export default function PortfolioPage() {
             <div className={styles.infoBox}>
               <p>연간 스냅샷 데이터가 없습니다.</p>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Snapshot Analysis Tab */}
+      {activeTab === 'snapshotAnalysis' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>스냅샷 분석</h2>
+          </div>
+
+          {(() => {
+            // 가장 최근 일일 스냅샷 찾기 (snapshots 배열은 모두 일일 스냅샷)
+            const latestSnapshot = snapshots
+              .sort((a, b) => new Date(b.reference_date).getTime() - new Date(a.reference_date).getTime())[0];
+
+            if (!latestSnapshot) {
+              return (
+                <div className={styles.infoBox}>
+                  <p>조회할 일일 스냅샷이 없습니다.</p>
+                </div>
+              );
+            }
+
+            // 해당 스냅샷의 모든 holdings
+            const latestHoldings = snapshotHoldings.filter(
+              (sh) => sh.snapshot_id === latestSnapshot.snapshot_id
+            );
+
+            if (latestHoldings.length === 0) {
+              return (
+                <div className={styles.infoBox}>
+                  <p>해당 스냅샷에 보유자산이 없습니다.</p>
+                </div>
+              );
+            }
+
+            // 자산 유형별 합계 계산
+            const assetClassMap = new Map<string, number>();
+            latestHoldings.forEach((snapshotHolding) => {
+              const holding = holdings.find((h) => h.holding_id === snapshotHolding.holding_id);
+              const product = holding ? products.find((p) => p.product_id === holding.product_id) : undefined;
+              const assetClass = product?.asset_class || '미분류';
+              const amount = Number(snapshotHolding.valuation_amount || 0);
+              assetClassMap.set(assetClass, (assetClassMap.get(assetClass) || 0) + amount);
+            });
+
+            const chartData = Array.from(assetClassMap.entries())
+              .map(([name, value]) => ({
+                name,
+                value,
+              }))
+              .sort((a, b) => b.value - a.value);
+
+            const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF6B6B'];
+
+            const totalValue = chartData.reduce((sum, item) => sum + item.value, 0);
+
+            // 커스텀 Legend 컴포넌트 (비중 순서 유지)
+            const CustomPieLegend = (props: any) => {
+              const { payload } = props;
+              
+              // chartData의 순서(비중 순)를 유지
+              const orderedPayload = chartData.map((item) => {
+                const entry = payload.find((p: any) => p.value === item.name);
+                return entry;
+              }).filter(Boolean);
+
+              return (
+                <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+                  {orderedPayload.map((entry: any, index: number) => (
+                    <div key={`legend-${index}`} style={{ display: 'flex', alignItems: 'center', marginRight: '20px', marginBottom: '5px' }}>
+                      <div style={{ width: '14px', height: '14px', backgroundColor: entry.color, marginRight: '5px' }}></div>
+                      <span style={{ fontSize: '14px' }}>{entry.value}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            };
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ backgroundColor: '#f5f5f5', padding: '15px', borderRadius: '5px' }}>
+                  <p style={{ margin: '0 0 10px 0' }}>
+                    <strong>기준일:</strong> {latestSnapshot.reference_date}
+                  </p>
+                  <p style={{ margin: '0' }}>
+                    <strong>총 평가금액:</strong> {totalValue.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
+                  </p>
+                </div>
+
+                {/* 원그래프와 표를 가로로 배치 */}
+                <div style={{ display: 'flex', gap: '40px', alignItems: 'flex-start' }}>
+                  {/* 원그래프 */}
+                  <div style={{ flex: '0 0 750px' }}>
+                    <ResponsiveContainer width="100%" height={600}>
+                      <PieChart>
+                        <Pie
+                          data={chartData}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={180}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {chartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value) => {
+                            const amount = value ?? 0;
+                            const percentage = totalValue > 0 ? ((amount as number) / totalValue * 100).toFixed(2) : '0.00';
+                            return `${percentage}%`;
+                          }}
+                        />
+                        <Legend content={CustomPieLegend} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 자산 유형별 상세 표 */}
+                  <div style={{ flex: '1', minWidth: '300px' }}>
+                    <h3>자산 유형별 상세</h3>
+                    <table className={styles.table}>
+                      <thead>
+                        <tr>
+                          <th>자산 유형</th>
+                          <th style={{ textAlign: 'right' }}>금액</th>
+                          <th style={{ textAlign: 'right' }}>비중</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {chartData.map((item, idx) => (
+                          <tr key={idx}>
+                            <td>{item.name}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              {item.value.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              {((item.value / totalValue) * 100).toFixed(2)}%
+                            </td>
+                          </tr>
+                        ))}
+                        <tr style={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
+                          <td>합계</td>
+                          <td style={{ textAlign: 'right' }}>
+                            {totalValue.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
+                          </td>
+                          <td style={{ textAlign: 'right' }}>100.00%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 오늘 기준 목표자산배분 비교 */}
+          {(() => {
+            const currentYearForToday = new Date().getFullYear();
+            const latestCurrentYearSnapshot = sortedSnapshots.find(
+              (snapshot) =>
+                new Date(snapshot.reference_date).getFullYear() === currentYearForToday
+            );
+
+            if (!latestCurrentYearSnapshot) {
+              return null;
+            }
+
+            const targetMap = new Map<number, number>();
+            todayTargetAllocations.forEach((target) => {
+              const amount = Number(target.target_amount);
+              if (Number.isFinite(amount)) {
+                targetMap.set(target.account_group_id, amount);
+              }
+            });
+
+            const accountToGroupIds = new Map<number, number[]>();
+            sortedAccountGroups.forEach((group) => {
+              group.account_ids.forEach((accountId) => {
+                const existing = accountToGroupIds.get(accountId) ?? [];
+                existing.push(group.account_group_id);
+                accountToGroupIds.set(accountId, existing);
+              });
+            });
+
+            const holdingToAccountId = new Map<number, number>();
+            holdings
+              .filter((holding) => !holding.deleted_at)
+              .forEach((holding) => {
+                holdingToAccountId.set(holding.holding_id, holding.account_id);
+              });
+
+            const actualMap = new Map<number, number>();
+            snapshotHoldings
+              .filter(
+                (snapshotHolding) =>
+                  snapshotHolding.snapshot_id === latestCurrentYearSnapshot.snapshot_id
+              )
+              .forEach((snapshotHolding) => {
+                const accountId = holdingToAccountId.get(snapshotHolding.holding_id);
+                if (accountId == null) {
+                  return;
+                }
+                const groupIds = accountToGroupIds.get(accountId) ?? [];
+                if (groupIds.length === 0) {
+                  return;
+                }
+                const amount = Number(snapshotHolding.valuation_amount);
+                if (!Number.isFinite(amount)) {
+                  return;
+                }
+                groupIds.forEach((groupId) => {
+                  actualMap.set(groupId, (actualMap.get(groupId) ?? 0) + amount);
+                });
+              });
+
+            const chartData = sortedAccountGroups
+              .map((group) => {
+                const targetAmount = targetMap.get(group.account_group_id) ?? 0;
+                const actualAmount = actualMap.get(group.account_group_id) ?? 0;
+                const achievementRate =
+                  targetAmount > 0 ? (actualAmount / targetAmount) * 100 : 0;
+                return {
+                  그룹: group.name,
+                  목표금액: targetAmount,
+                  실제금액: actualAmount,
+                  달성률: achievementRate,
+                };
+              })
+              .filter((item) => item.목표금액 > 0 || item.실제금액 > 0);
+
+            if (chartData.length === 0) {
+              return null;
+            }
+
+            return (
+              <div style={{ marginTop: '40px' }}>
+                <h2>오늘 기준 목표자산배분 달성 현황</h2>
+                <p style={{ marginTop: '8px', color: '#666' }}>
+                  기준일: {latestCurrentYearSnapshot.reference_date}
+                </p>
+                <ResponsiveContainer width="100%" height={320}>
+                  <ComposedChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="그룹" />
+                    <YAxis
+                      yAxisId="left"
+                      tickFormatter={(value) =>
+                        Number(value).toLocaleString('ko-KR', {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })
+                      }
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+                    />
+                    <Tooltip
+                      formatter={(value: number | string | undefined, name: string | undefined) => {
+                        const numericValue = Number(value ?? 0);
+                        const label = name ?? '';
+                        if (label === '달성률') {
+                          return [`${numericValue.toFixed(2)}%`, label];
+                        }
+                        return [
+                          numericValue.toLocaleString('ko-KR', {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          }),
+                          label,
+                        ];
+                      }}
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="목표금액" />
+                    <Bar yAxisId="left" dataKey="실제금액" />
+                    <Line yAxisId="right" type="monotone" dataKey="달성률" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            );
+          })()}
+
+          {/* 연간 평가금액 추이 */}
+          {(() => {
+            if (annualSnapshots.length === 0) {
+              return null;
+            }
+
+            // 각 연도별 데이터 준비
+            const yearDataMap = new Map<string, { year: string; total: number; [key: string]: number | string }>();
+            
+            // annualSnapshots를 연도 기준으로 처리
+            annualSnapshots.forEach((snap) => {
+              const year = snap.reference_date.substring(0, 4); // YYYY 추출
+              
+              if (!yearDataMap.has(year)) {
+                yearDataMap.set(year, { year, total: 0 });
+              }
+              
+              const yearData = yearDataMap.get(year)!;
+              
+              // 이 연도의 annualSnapshotHoldings에서 같은 의존성으로 데이터 찾기
+              // (실제로는 API에서 각 스냅샷별 데이터가 필요함)
+              // 현재 데이터 한계로 annualSnapshotHoldings를 사용
+            });
+
+            // 실제 annualSnapshotHoldings를 이용해 연도별 계좌그룹별 합계 계산
+            const yearAccountGroupMap = new Map<string, Map<string, number>>();
+            
+            annualSnapshotHoldings.forEach((holding) => {
+              // holding이 어느 연도의 스냅샷인지 알 수 없으므로, 
+              // annualSnapshots의 reference_date를 기반으로 추론
+              const relatedSnapshot = annualSnapshots.find(
+                (s) => s.annual_snapshot_id === holding.annual_snapshot_id
+              );
+              
+              if (!relatedSnapshot) return;
+              
+              const year = relatedSnapshot.reference_date.substring(0, 4);
+              
+              // account_id로 계좌그룹 찾기
+              const accountGroup = accountGroups.find((ag) =>
+                ag.account_ids.includes(holding.account_id)
+              );
+              const accountGroupName = accountGroup?.name || '미분류';
+              
+              const amount = Number(holding.valuation_amount || 0);
+              
+              if (!yearAccountGroupMap.has(year)) {
+                yearAccountGroupMap.set(year, new Map());
+              }
+              
+              const groupMap = yearAccountGroupMap.get(year)!;
+              groupMap.set(accountGroupName, (groupMap.get(accountGroupName) || 0) + amount);
+            });
+
+            // 차트 데이터 생성 (전체합계를 먼저 추가하여 Legend 순서 제어)
+            const chartDataByYear = Array.from(yearAccountGroupMap.entries())
+              .map(([year, accountGroupMap]) => {
+                const yearObj: any = { year };
+                let total = 0;
+                
+                // 먼저 합계 계산
+                accountGroupMap.forEach((amount) => {
+                  total += amount;
+                });
+                
+                // 전체합계를 먼저 추가
+                yearObj.전체합계 = total;
+                
+                // 그 다음 계좌그룹별 금액 추가
+                accountGroupMap.forEach((amount, accountGroup) => {
+                  yearObj[accountGroup] = amount;
+                });
+                
+                return yearObj;
+              })
+              .sort((a, b) => a.year.localeCompare(b.year));
+
+            // 전년 대비 증가율 계산
+            chartDataByYear.forEach((item, index) => {
+              if (index > 0) {
+                const prevTotal = chartDataByYear[index - 1].전체합계;
+                const currentTotal = item.전체합계;
+                if (prevTotal > 0) {
+                  item.증가율 = ((currentTotal - prevTotal) / prevTotal) * 100;
+                } else {
+                  item.증가율 = 0;
+                }
+              } else {
+                item.증가율 = null; // 첫 해는 증가율 없음
+              }
+            });
+
+            if (chartDataByYear.length === 0) {
+              return null;
+            }
+
+            // 계좌그룹 목록 추출 (중복 제거 및 정렬)
+            const allAccountGroups = Array.from(
+              new Set(
+                chartDataByYear.flatMap((item) =>
+                  Object.keys(item).filter((key) => key !== 'year' && key !== '전체합계' && key !== '증가율')
+                )
+              )
+            ).sort();
+
+            const lineColors = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#82CA9D', '#8884D8', '#FFC658', '#FF6B6B'];
+
+            // 금액 차트용 커스텀 Tooltip 컴포넌트
+            const CustomAmountTooltip = (props: any) => {
+              const { active, payload, label } = props;
+              
+              if (!active || !payload || !payload.length) {
+                return null;
+              }
+
+              // 전체합계를 먼저, 나머지는 알파벳순으로 정렬
+              const orderedPayload = [
+                ...payload.filter((entry: any) => entry.dataKey === '전체합계'),
+                ...payload.filter((entry: any) => entry.dataKey !== '전체합계')
+                  .sort((a: any, b: any) => a.dataKey.localeCompare(b.dataKey))
+              ];
+
+              return (
+                <div style={{ 
+                  backgroundColor: 'white', 
+                  border: '1px solid #ccc', 
+                  padding: '10px',
+                  borderRadius: '4px'
+                }}>
+                  <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{`연도: ${label}`}</p>
+                  {orderedPayload.map((entry: any, index: number) => (
+                    <p key={`tooltip-${index}`} style={{ margin: '3px 0', color: entry.color }}>
+                      {`${entry.dataKey}: ${(entry.value as number).toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원`}
+                    </p>
+                  ))}
+                </div>
+              );
+            };
+
+            // 증가율 차트용 커스텀 Tooltip 컴포넌트
+            const CustomGrowthTooltip = (props: any) => {
+              const { active, payload, label } = props;
+              
+              if (!active || !payload || !payload.length) {
+                return null;
+              }
+
+              const growthRate = payload[0]?.value;
+
+              return (
+                <div style={{ 
+                  backgroundColor: 'white', 
+                  border: '1px solid #ccc', 
+                  padding: '10px',
+                  borderRadius: '4px'
+                }}>
+                  <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{`연도: ${label}`}</p>
+                  {growthRate !== null && growthRate !== undefined && (
+                    <p style={{ margin: '3px 0', color: '#82ca9d', fontWeight: 'bold' }}>
+                      {`증가율: ${growthRate >= 0 ? '+' : ''}${growthRate.toFixed(2)}%`}
+                    </p>
+                  )}
+                </div>
+              );
+            };
+
+            // 금액 차트용 커스텀 Legend 컴포넌트
+            const CustomAmountLegend = (props: any) => {
+              const { payload } = props;
+              
+              // 전체합계를 먼저, 나머지는 알파벳순으로 정렬
+              const orderedPayload = [
+                ...payload.filter((entry: any) => entry.value === '전체합계'),
+                ...payload.filter((entry: any) => entry.value !== '전체합계')
+                  .sort((a: any, b: any) => a.value.localeCompare(b.value))
+              ];
+
+              return (
+                <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+                  {orderedPayload.map((entry: any, index: number) => (
+                    <div key={`legend-${index}`} style={{ display: 'flex', alignItems: 'center', marginRight: '20px', marginBottom: '5px' }}>
+                      <div style={{ width: '14px', height: '14px', backgroundColor: entry.color, marginRight: '5px' }}></div>
+                      <span style={{ fontSize: '14px' }}>{entry.value}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            };
+
+            return (
+              <div style={{ marginTop: '40px' }}>
+                <h2>연간 평가금액 추이</h2>
+                
+                {/* 평가금액 선그래프 */}
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <LineChart data={chartDataByYear}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="year" />
+                      <YAxis 
+                        tickFormatter={(value) =>
+                          (value / 1000000).toFixed(0) + 'M'
+                        }
+                        label={{ value: '평가금액 (원)', angle: -90, position: 'insideLeft' }}
+                      />
+                      <Tooltip content={CustomAmountTooltip} />
+                      <Legend content={CustomAmountLegend} />
+                      {/* 전체 합계 라인 */}
+                      <Line
+                        type="monotone"
+                        dataKey="전체합계"
+                        stroke="#FF0000"
+                        strokeWidth={3}
+                        dot={{ fill: '#FF0000', r: 5 }}
+                        activeDot={{ r: 7 }}
+                      />
+                      {/* 계좌그룹별 라인 */}
+                      {allAccountGroups.map((group, idx) => (
+                        <Line
+                          key={group}
+                          type="monotone"
+                          dataKey={group}
+                          stroke={lineColors[idx % lineColors.length]}
+                          strokeWidth={2}
+                          dot={{ fill: lineColors[idx % lineColors.length], r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* 증가율 막대그래프 */}
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '40px' }}>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={chartDataByYear}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="year" />
+                      <YAxis 
+                        tickFormatter={(value) => `${value.toFixed(0)}%`}
+                        label={{ value: '증가율 (%)', angle: -90, position: 'insideLeft' }}
+                      />
+                      <Tooltip content={CustomGrowthTooltip} />
+                      <Bar
+                        dataKey="증가율"
+                        fill="#82ca9d"
+                        barSize={50}
+                        label={{
+                          position: 'top',
+                          formatter: (value: any) => {
+                            if (value === null || value === undefined) return '';
+                            const numValue = Number(value);
+                            return `${numValue >= 0 ? '+' : ''}${numValue.toFixed(2)}%`;
+                          },
+                          style: { fontSize: '12px', fontWeight: 'bold' }
+                        }}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Target Allocations Tab */}
+      {activeTab === 'targetAllocations' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>목표 자산배분</h2>
+          </div>
+
+          <div className={styles.form}>
+            <label htmlFor="target-allocation-year">목표 연도</label>
+            <select
+              id="target-allocation-year"
+              value={targetYear}
+              onChange={(e) => setTargetYear(Number(e.target.value))}
+            >
+              {targetYearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={styles.form}>
+            <label htmlFor="target-allocation-total">연간 총액 목표</label>
+            <input
+              id="target-allocation-total"
+              type="text"
+              inputMode="decimal"
+              value={targetTotalDraft}
+              onChange={(e) => setTargetTotalDraft(e.target.value)}
+              onBlur={(e) => {
+                const formatted = formatTargetAmountInput(e.target.value);
+                if (formatted !== e.target.value) {
+                  setTargetTotalDraft(formatted);
+                }
+              }}
+              placeholder="연간 총액 목표금액 입력"
+            />
+            <div className={styles.actionButtons}>
+              <button onClick={handleSaveTargetAllocationTotal} disabled={savingTargetTotal}>
+                {savingTargetTotal ? '저장 중...' : '총액 저장'}
+              </button>
+              <button onClick={handleDeleteTargetAllocationTotal} disabled={deletingTargetTotal}>
+                {deletingTargetTotal ? '삭제 중...' : '총액 삭제'}
+              </button>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className={styles.loading}>로딩 중...</div>
+          ) : sortedAccountGroups.length === 0 ? (
+            <div className={styles.infoBox}>
+              <p>계좌그룹이 없습니다. 먼저 계좌그룹을 생성해주세요.</p>
+            </div>
+          ) : (
+            <>
+              <div className={styles.tableWrapper} style={{ overflowX: 'auto' }}>
+                <table className={styles.table} style={{ minWidth: '980px' }}>
+                  <thead>
+                    <tr>
+                      <th>계좌그룹</th>
+                      <th style={{ textAlign: 'right' }}>목표금액</th>
+                      <th style={{ textAlign: 'right' }}>실제금액</th>
+                      <th style={{ textAlign: 'right' }}>차이(실제-목표)</th>
+                      <th style={{ textAlign: 'right' }}>달성률</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {targetComparisonRows.map((row) => {
+                      const draftValue =
+                        targetDrafts[row.accountGroupId] ??
+                        (row.targetAmount > 0
+                          ? row.targetAmount.toLocaleString('ko-KR', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })
+                          : '');
+
+                      return (
+                        <tr key={row.accountGroupId}>
+                          <td>{row.accountGroupName}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className={styles.amountInput}
+                              value={draftValue}
+                              onChange={(e) =>
+                                setTargetDrafts((prev) => ({
+                                  ...prev,
+                                  [row.accountGroupId]: e.target.value,
+                                }))
+                              }
+                              onBlur={(e) => {
+                                const formatted = formatTargetAmountInput(e.target.value);
+                                if (formatted !== e.target.value) {
+                                  setTargetDrafts((prev) => ({
+                                    ...prev,
+                                    [row.accountGroupId]: formatted,
+                                  }));
+                                }
+                              }}
+                              placeholder="목표금액 입력"
+                            />
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {row.actualAmount.toLocaleString('ko-KR', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {row.gapAmount.toLocaleString('ko-KR', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {row.achievementRate == null
+                              ? '-'
+                              : `${row.achievementRate.toFixed(2)}%`}
+                          </td>
+                          <td>
+                            <div className={styles.actionButtons}>
+                              <button
+                                onClick={() => handleSaveTargetAllocation(row.accountGroupId)}
+                                disabled={savingTargetAccountGroupId === row.accountGroupId}
+                              >
+                                {savingTargetAccountGroupId === row.accountGroupId
+                                  ? '저장 중...'
+                                  : '저장'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTargetAllocation(row.accountGroupId)}
+                                disabled={deletingTargetAccountGroupId === row.accountGroupId}
+                              >
+                                {deletingTargetAccountGroupId === row.accountGroupId
+                                  ? '삭제 중...'
+                                  : '삭제'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
+                      <td>총액</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {totalTargetAmount.toLocaleString('ko-KR', {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {totalActualAmount.toLocaleString('ko-KR', {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {totalGapAmount.toLocaleString('ko-KR', {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {totalAchievementRate == null
+                          ? '-'
+                          : `${totalAchievementRate.toFixed(2)}%`}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {useLatestDailySnapshotForActual && !latestDailySnapshotForTargetYear && (
+                <div className={styles.infoBox}>
+                  <p>{targetYear}년 일일 스냅샷이 없어 실제금액/달성률은 0으로 표시됩니다.</p>
+                </div>
+              )}
+
+              {!useLatestDailySnapshotForActual && annualReportYearIndex < 0 && (
+                <div className={styles.infoBox}>
+                  <p>{targetYear}년 실제금액 데이터(연간 보고서)가 없어 실제금액/달성률은 0으로 표시됩니다.</p>
+                </div>
+              )}
+
+              {targetComparisonChartData.length > 0 && (
+                <div style={{ marginTop: '24px' }}>
+                  <h3>목표 대비 실제 비교</h3>
+                  <ResponsiveContainer width="100%" height={320}>
+                    <ComposedChart data={targetComparisonChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="그룹" />
+                      <YAxis
+                        yAxisId="left"
+                        tickFormatter={(value) =>
+                          Number(value).toLocaleString('ko-KR', {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          })
+                        }
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+                      />
+                      <Tooltip
+                        formatter={(value: number | string | undefined, name: string | undefined) => {
+                          const numericValue = Number(value ?? 0);
+                          const label = name ?? '';
+                          if (label === '달성률') {
+                            return [`${numericValue.toFixed(2)}%`, label];
+                          }
+                          return [
+                            numericValue.toLocaleString('ko-KR', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            }),
+                            label,
+                          ];
+                        }}
+                      />
+                      <Legend />
+                      <Bar yAxisId="left" dataKey="목표금액" />
+                      <Bar yAxisId="left" dataKey="실제금액" />
+                      <Line yAxisId="right" type="monotone" dataKey="달성률" />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

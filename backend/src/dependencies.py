@@ -24,6 +24,7 @@ from subdomains.user.infra.repositories import (
     PsycopgUserRepository,
 )
 from subdomains.user.application.services.user_app_service import UserAppService
+from subdomains.portfolio.application.services import PortfolioAppService
 from subdomains.portfolio.infra.repositories import (
     SQLAlchemyInstitutionRepository,
     SQLAlchemyProductRepository,
@@ -32,6 +33,7 @@ from subdomains.portfolio.infra.repositories import (
     SQLAlchemyHoldingRepository,
     SQLAlchemySnapshotRepository,
     SQLAlchemyReportQueryRepository,
+    SqlAlchemyTargetAllocationRepository,
     PsycopgInstitutionRepository,
     PsycopgProductRepository,
     PsycopgAccountRepository,
@@ -39,8 +41,11 @@ from subdomains.portfolio.infra.repositories import (
     PsycopgHoldingRepository,
     PsycopgSnapshotRepository,
     PsycopgReportQueryRepository,
+    PsycopgTargetAllocationRepository,
 )
-from subdomains.portfolio.application.services import PortfolioAppService
+from subdomains.portfolio.application.services.target_allocation_app_service import (
+    TargetAllocationAppService,
+)
 
 # ============================================================================
 # 전역 인스턴스
@@ -161,6 +166,10 @@ async def get_portfolio_app_service() -> AsyncGenerator[PortfolioAppService, Non
 
     if config.repository_type == "sqlalchemy":
         tx_manager = SQLAlchemyTransactionManager(db_pool)
+        target_allocation_repo = SqlAlchemyTargetAllocationRepository()
+        target_allocation_service = TargetAllocationAppService(
+            repository=target_allocation_repo, transaction_manager=tx_manager
+        )
         service = PortfolioAppService(
             institution_repo=SQLAlchemyInstitutionRepository(),
             product_repo=SQLAlchemyProductRepository(),
@@ -170,10 +179,15 @@ async def get_portfolio_app_service() -> AsyncGenerator[PortfolioAppService, Non
             snapshot_repo=SQLAlchemySnapshotRepository(),
             report_repo=SQLAlchemyReportQueryRepository(),
             transaction_manager=tx_manager,
+            target_allocation_service=target_allocation_service,
         )
         yield service
     else:
         tx_manager = PsycopgTransactionManager(db_pool)
+        target_allocation_repo = PsycopgTargetAllocationRepository()
+        target_allocation_service = TargetAllocationAppService(
+            repository=target_allocation_repo, transaction_manager=tx_manager
+        )
         service = PortfolioAppService(
             institution_repo=PsycopgInstitutionRepository(),
             product_repo=PsycopgProductRepository(),
@@ -183,5 +197,6 @@ async def get_portfolio_app_service() -> AsyncGenerator[PortfolioAppService, Non
             snapshot_repo=PsycopgSnapshotRepository(),
             report_repo=PsycopgReportQueryRepository(),
             transaction_manager=tx_manager,
+            target_allocation_service=target_allocation_service,
         )
         yield service

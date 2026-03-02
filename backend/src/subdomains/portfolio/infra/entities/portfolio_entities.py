@@ -336,3 +336,44 @@ class AnnualSnapshotHoldingEntity(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<AnnualSnapshotHolding(id={self.annual_snapshot_holding_id}, annual_snapshot_id={self.annual_snapshot_id})>"
+
+
+class TargetAllocationEntity(Base):
+    __tablename__ = "target_allocations"
+
+    target_allocation_id = Column(Integer, primary_key=True, autoincrement=True)
+    year = Column(Integer, nullable=False)
+    account_group_id = Column(
+        Integer,
+        ForeignKey("account_groups.account_group_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_amount = Column(Numeric(15, 2), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=_utc_now_naive)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "year", "account_group_id", name="uq_target_allocation_year_group"
+        ),
+        Index("idx_target_allocations_year", "year"),
+        Index("idx_target_allocations_account_group", "account_group_id"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<TargetAllocation(id={self.target_allocation_id}, year={self.year}, account_group_id={self.account_group_id})>"
+
+
+class TargetAllocationTotalEntity(Base):
+    __tablename__ = "target_allocation_totals"
+
+    target_allocation_total_id = Column(Integer, primary_key=True, autoincrement=True)
+    year = Column(Integer, nullable=False, unique=True)
+    target_amount = Column(Numeric(15, 2), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=_utc_now_naive)
+
+    __table_args__ = (Index("idx_target_allocation_totals_year", "year"),)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<TargetAllocationTotal(id={self.target_allocation_total_id}, year={self.year})>"

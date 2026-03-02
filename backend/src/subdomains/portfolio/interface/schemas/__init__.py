@@ -70,6 +70,20 @@ from .portfolio_schema import (
     WeeklyPivotAccountRow,
     WeeklyPivotAccountGroupRow,
 )
+from .target_allocation_schema import (
+    TargetAllocationSchema,
+    CreateTargetAllocationRequest,
+    TargetAllocationListResponse,
+)
+from .target_allocation_response import (
+    TargetAllocationResponse,
+    DeleteTargetAllocationResponse,
+)
+from .target_allocation_total_schema import (
+    TargetAllocationTotalSchema,
+    CreateTargetAllocationTotalRequest,
+    TargetAllocationTotalResponse,
+)
 
 __all__ = [
     "CreateInstitutionRequest",
@@ -142,4 +156,12 @@ __all__ = [
     "WeeklyPivotAccountValuation",
     "WeeklyPivotAccountRow",
     "WeeklyPivotAccountGroupRow",
+    "TargetAllocationSchema",
+    "CreateTargetAllocationRequest",
+    "TargetAllocationListResponse",
+    "TargetAllocationResponse",
+    "DeleteTargetAllocationResponse",
+    "TargetAllocationTotalSchema",
+    "CreateTargetAllocationTotalRequest",
+    "TargetAllocationTotalResponse",
 ]

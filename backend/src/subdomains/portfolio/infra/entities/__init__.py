@@ -11,6 +11,8 @@ from .portfolio_entities import (
     WeeklySnapshotHoldingEntity,
     AnnualSnapshotEntity,
     AnnualSnapshotHoldingEntity,
+    TargetAllocationEntity,
+    TargetAllocationTotalEntity,
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "WeeklySnapshotHoldingEntity",
     "AnnualSnapshotEntity",
     "AnnualSnapshotHoldingEntity",
+    "TargetAllocationEntity",
+    "TargetAllocationTotalEntity",
 ]

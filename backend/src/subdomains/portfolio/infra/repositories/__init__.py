@@ -16,6 +16,12 @@ from .psycopg_portfolio_repository import (
     PsycopgSnapshotRepository,
     PsycopgReportQueryRepository,
 )
+from .sqlalchemy_target_allocation_repository import (
+    SqlAlchemyTargetAllocationRepository,
+)
+from .psycopg_target_allocation_repository import (
+    PsycopgTargetAllocationRepository,
+)
 
 __all__ = [
     "SQLAlchemyInstitutionRepository",
@@ -32,4 +38,6 @@ __all__ = [
     "PsycopgHoldingRepository",
     "PsycopgSnapshotRepository",
     "PsycopgReportQueryRepository",
+    "SqlAlchemyTargetAllocationRepository",
+    "PsycopgTargetAllocationRepository",
 ]

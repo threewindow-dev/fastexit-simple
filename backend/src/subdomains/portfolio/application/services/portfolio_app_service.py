@@ -69,6 +69,9 @@ from subdomains.portfolio.domain.protocols import (
     SnapshotRepository,
     ReportQueryRepository,
 )
+from subdomains.portfolio.application.services.target_allocation_app_service import (
+    TargetAllocationAppService,
+)
 from shared.decorators import transactional
 from shared.protocols.transaction import TransactionManager
 
@@ -86,6 +89,7 @@ class PortfolioAppService:
         snapshot_repo: SnapshotRepository,
         report_repo: ReportQueryRepository,
         transaction_manager: TransactionManager,
+        target_allocation_service: TargetAllocationAppService | None = None,
     ):
         self._institution_repo = institution_repo
         self._product_repo = product_repo
@@ -95,6 +99,7 @@ class PortfolioAppService:
         self._snapshot_repo = snapshot_repo
         self._report_repo = report_repo
         self._txm = transaction_manager
+        self.target_allocation_service = target_allocation_service
 
     # ------------------------------------------------------------------
     # Institutions

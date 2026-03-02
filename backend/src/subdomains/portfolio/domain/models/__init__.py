@@ -6,6 +6,8 @@ from .holding import Holding
 from .snapshot import Snapshot, SnapshotHolding
 from .weekly_snapshot import WeeklySnapshot
 from .annual_snapshot import AnnualSnapshot
+from .target_allocation import TargetAllocation
+from .target_allocation_total import TargetAllocationTotal
 
 __all__ = [
     "Institution",
@@ -17,4 +19,6 @@ __all__ = [
     "SnapshotHolding",
     "WeeklySnapshot",
     "AnnualSnapshot",
+    "TargetAllocation",
+    "TargetAllocationTotal",
 ]

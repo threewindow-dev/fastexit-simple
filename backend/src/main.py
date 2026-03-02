@@ -18,6 +18,8 @@ from subdomains.portfolio.infra.entities import (  # noqa: F401
     WeeklySnapshotHoldingEntity,
     AnnualSnapshotEntity,
     AnnualSnapshotHoldingEntity,
+    TargetAllocationEntity,
+    TargetAllocationTotalEntity,
 )
 
 from fastapi import FastAPI
