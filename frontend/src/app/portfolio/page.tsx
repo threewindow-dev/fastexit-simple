@@ -1774,18 +1774,6 @@ export default function PortfolioPage() {
           연간 스냅샷
         </button>
         <button
-          className={activeTab === 'annualSnapshotHoldings' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('annualSnapshotHoldings')}
-        >
-          연간 스냅샷 보유자산
-        </button>
-        <button
-          className={activeTab === 'snapshotHoldings' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('snapshotHoldings')}
-        >
-          일일 스냅샷 보유자산
-        </button>
-        <button
           className={activeTab === 'reports' ? styles.activeTab : ''}
           onClick={() => setActiveTab('reports')}
         >
@@ -2759,43 +2747,127 @@ export default function PortfolioPage() {
           ) : loading ? (
             <div className={styles.loading}>로딩 중...</div>
           ) : (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>번호</th>
-                  <th>금융기관</th>
-                  <th>계좌</th>
-                  <th>상품</th>
-                  <th>평가금액</th>
-                  <th>데이터출처</th>
-                  <th>생성일</th>
-                </tr>
-              </thead>
-              <tbody>
-                {annualSnapshotHoldings.length === 0 ? (
-                  <tr>
-                    <td colSpan={7}>보유자산 데이터가 없습니다.</td>
-                  </tr>
-                ) : (
-                  annualSnapshotHoldings.map((item, index) => (
-                    <tr key={item.annual_snapshot_holding_id}>
-                      <td>{index + 1}</td>
-                      <td>{item.institution_name}</td>
-                      <td>{item.account_name}</td>
-                      <td>{item.product_name}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        {Number(item.valuation_amount || 0).toLocaleString('ko-KR', {
+            (() => {
+              const totalSum = annualSnapshotHoldings.reduce(
+                (sum, item) => sum + Number(item.valuation_amount || 0),
+                0
+              );
+
+              const rows: React.ReactNode[] = [];
+              let currentAccountId: number | null = null;
+              let currentAccountLabel = '';
+              let accountSum = 0;
+
+              annualSnapshotHoldings.forEach((item, index) => {
+                // Account changed - push previous account summary
+                if (
+                  item.account_id !== currentAccountId &&
+                  currentAccountId !== null
+                ) {
+                  rows.push(
+                    <tr key={`summary-${currentAccountId}`}>
+                      <td colSpan={4}>계좌 합계 ({currentAccountLabel})</td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                        {accountSum.toLocaleString('ko-KR', {
                           minimumFractionDigits: 0,
                           maximumFractionDigits: 0,
                         })}
                       </td>
-                      <td>{getDataSourceLabel(item.data_source)}</td>
-                      <td>{item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</td>
+                      <td colSpan={2}></td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  );
+                }
+
+                // Update current account context
+                if (item.account_id !== currentAccountId) {
+                  currentAccountId = item.account_id;
+                  currentAccountLabel = item.account_name;
+                  accountSum = 0;
+                }
+
+                accountSum += Number(item.valuation_amount || 0);
+
+                rows.push(
+                  <tr key={item.annual_snapshot_holding_id}>
+                    <td>{index + 1}</td>
+                    <td>{item.institution_name}</td>
+                    <td>{item.account_name}</td>
+                    <td>{item.product_name}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {Number(item.valuation_amount || 0).toLocaleString('ko-KR', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      })}
+                    </td>
+                    <td>{getDataSourceLabel(item.data_source)}</td>
+                    <td>{item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</td>
+                  </tr>
+                );
+              });
+
+              // Push final account summary
+              if (currentAccountId !== null) {
+                rows.push(
+                  <tr key={`summary-${currentAccountId}-final`}>
+                    <td colSpan={4}>계좌 합계 ({currentAccountLabel})</td>
+                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                      {accountSum.toLocaleString('ko-KR', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      })}
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                );
+              }
+
+              return (
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>번호</th>
+                      <th>금융기관</th>
+                      <th>계좌</th>
+                      <th>상품</th>
+                      <th>평가금액</th>
+                      <th>데이터출처</th>
+                      <th>생성일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {annualSnapshotHoldings.length === 0 ? (
+                      <tr>
+                        <td colSpan={7}>보유자산 데이터가 없습니다.</td>
+                      </tr>
+                    ) : (
+                      <>
+                        <tr>
+                          <td colSpan={4}>전체 합계</td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                            {totalSum.toLocaleString('ko-KR', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
+                          </td>
+                          <td colSpan={2}></td>
+                        </tr>
+                        {rows}
+                        <tr>
+                          <td colSpan={4}>전체 합계</td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                            {totalSum.toLocaleString('ko-KR', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
+                          </td>
+                          <td colSpan={2}></td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+              );
+            })()
           )}
         </div>
       )}
@@ -3149,105 +3221,104 @@ export default function PortfolioPage() {
               };
 
               const totalSum = views.reduce((sum, view) => {
-                const draftValue = snapshotHoldingDrafts[view.holding.holding_id] ?? '';
-                return sum + parseAmount(draftValue);
+                const draftValue = snapshotHoldingDrafts[view.holding.holding_id];
+                const effectiveValue = isSnapshotLocked 
+                  ? (view.existing?.valuation_amount ?? '')
+                  : (draftValue !== undefined ? draftValue : (view.existing?.valuation_amount ?? ''));
+                return sum + parseAmount(effectiveValue);
               }, 0);
               const totalPreviousSum = views.reduce((sum, view) => {
                 const previousAmount = previousAmountsByHolding.get(view.holding.holding_id);
                 return sum + (previousAmount ?? 0);
               }, 0);
-              let accountSum = 0;
-              let accountPreviousSum = 0;
-              let currentAccountId: number | null = null;
-              let currentAccountLabel = '';
-              const rows: React.ReactNode[] = [];
-
-              views.forEach((view, index) => {
+              // Group views by account
+              const viewsByAccount = new Map<number, typeof views>();
+              views.forEach((view) => {
                 const accountId = view.account?.account_id ?? view.holding.account_id;
-                const accountLabel = `${view.institution?.name || '-'} - ${view.account?.name || '-'}`;
-                const amount = parseAmount(snapshotHoldingDrafts[view.holding.holding_id] ?? '');
-                const previousAmount = previousAmountsByHolding.get(view.holding.holding_id) ?? 0;
-
-                if (currentAccountId === null) {
-                  currentAccountId = accountId;
-                  currentAccountLabel = accountLabel;
-                  accountSum = 0;
-                  accountPreviousSum = 0;
-                } else if (currentAccountId !== accountId) {
-                  rows.push(
-                    <tr key={`summary-${currentAccountId}`}>
-                      <td colSpan={4}>계좌 합계 ({currentAccountLabel})</td>
-                      <td className={styles.amountCell}>{formatAmount(accountPreviousSum)}</td>
-                      <td className={styles.amountCell}>{formatAmount(accountSum)}</td>
-                      <td className={styles.amountCell}>
-                        {formatRatio(totalSum > 0 ? (accountSum / totalSum) * 100 : 0)}
-                      </td>
-                      <td></td>
-                    </tr>
-                  );
-                  currentAccountId = accountId;
-                  currentAccountLabel = accountLabel;
-                  accountSum = 0;
-                  accountPreviousSum = 0;
+                if (!viewsByAccount.has(accountId)) {
+                  viewsByAccount.set(accountId, []);
                 }
-
-                accountSum += amount;
-                accountPreviousSum += previousAmount;
-
-                rows.push(
-                  <tr key={`${snapshotId}-${view.holding.holding_id}`}>
-                    <td>{snapshot?.reference_date || '-'}</td>
-                    <td>{truncateText(view.institution?.name || '-')}</td>
-                    <td>{truncateText(view.account?.name || '-')}</td>
-                    <td>{truncateText(view.product?.product_name || '-')}</td>
-                    <td className={styles.amountCell}>
-                      {previousAmount != null && previousAmount > 0 ? formatAmount(previousAmount) : '-'}
-                    </td>
-                    <td>
-                      {(() => {
-                        const draftValue = snapshotHoldingDrafts[view.holding.holding_id] ?? '';
-                        const isDirty = isDraftDifferent(draftValue, view.existing?.valuation_amount);
-                        return (
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            className={`${styles.amountInput}${isDirty ? ` ${styles.amountInputDirty}` : ''}`}
-                            data-index={index}
-                            data-holding-id={view.holding.holding_id}
-                            value={draftValue}
-                            disabled={isSnapshotLocked}
-                            onChange={(e) =>
-                              setSnapshotHoldingDrafts((prev) => ({
-                                ...prev,
-                                [view.holding.holding_id]: e.target.value,
-                              }))
-                            }
-                            onBlur={(e) => {
-                              const formatted = formatSnapshotAmountInput(e.target.value);
-                              if (formatted !== e.target.value) {
-                                setSnapshotHoldingDrafts((prev) => ({
-                                  ...prev,
-                                  [view.holding.holding_id]: formatted,
-                                }));
-                              }
-                            }}
-                            onKeyDown={handleSnapshotAmountKeyDown}
-                          />
-                        );
-                      })()}
-                    </td>
-                    <td className={styles.amountCell}>
-                      {formatRatio(totalSum > 0 ? (amount / totalSum) * 100 : 0)}
-                    </td>
-                    <td>{getDataSourceLabel(view.existing?.data_source || snapshotHoldingDataSource)}</td>
-                  </tr>
-                );
+                viewsByAccount.get(accountId)!.push(view);
               });
 
-              if (currentAccountId !== null) {
+              const rows: React.ReactNode[] = [];
+              let globalIndex = 0;
+
+              viewsByAccount.forEach((accountViews) => {
+                let accountSum = 0;
+                let accountPreviousSum = 0;
+                const firstView = accountViews[0];
+                const accountLabel = `${firstView.institution?.name || '-'} - ${firstView.account?.name || '-'}`;
+                const accountId = firstView.account?.account_id ?? firstView.holding.account_id;
+
+                accountViews.forEach((view) => {
+                  const draftValue = snapshotHoldingDrafts[view.holding.holding_id];
+                  const effectiveValue = isSnapshotLocked 
+                    ? (view.existing?.valuation_amount ?? '')
+                    : (draftValue !== undefined ? draftValue : (view.existing?.valuation_amount ?? ''));
+                  const amount = parseAmount(effectiveValue);
+                  const previousAmount = previousAmountsByHolding.get(view.holding.holding_id) ?? 0;
+
+                  accountSum += amount;
+                  accountPreviousSum += previousAmount;
+
+                  globalIndex += 1;
+                  rows.push(
+                    <tr key={`${snapshotId}-${view.holding.holding_id}`}>
+                      <td>{globalIndex}</td>
+                      <td>{truncateText(view.institution?.name || '-')}</td>
+                      <td>{truncateText(view.account?.name || '-')}</td>
+                      <td>{truncateText(view.product?.product_name || '-')}</td>
+                      <td className={styles.amountCell}>
+                        {previousAmount != null && previousAmount > 0 ? formatAmount(previousAmount) : '-'}
+                      </td>
+                      <td>
+                        {(() => {
+                          const draftValue = snapshotHoldingDrafts[view.holding.holding_id];
+                          const displayValue = isSnapshotLocked 
+                            ? (view.existing?.valuation_amount ?? '')
+                            : (draftValue !== undefined ? draftValue : (view.existing?.valuation_amount ?? ''));
+                          const isDirty = isDraftDifferent(displayValue, view.existing?.valuation_amount);
+                          return (
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className={`${styles.amountInput}${isDirty ? ` ${styles.amountInputDirty}` : ''}`}
+                              data-index={globalIndex - 1}
+                              data-holding-id={view.holding.holding_id}
+                              value={displayValue}
+                              disabled={isSnapshotLocked}
+                              onChange={(e) =>
+                                setSnapshotHoldingDrafts((prev) => ({
+                                  ...prev,
+                                  [view.holding.holding_id]: e.target.value,
+                                }))
+                              }
+                              onBlur={(e) => {
+                                const formatted = formatSnapshotAmountInput(e.target.value);
+                                if (formatted !== e.target.value) {
+                                  setSnapshotHoldingDrafts((prev) => ({
+                                    ...prev,
+                                    [view.holding.holding_id]: formatted,
+                                  }));
+                                }
+                              }}
+                              onKeyDown={handleSnapshotAmountKeyDown}
+                            />
+                          );
+                        })()}
+                      </td>
+                      <td className={styles.amountCell}>
+                        {formatRatio(totalSum > 0 ? (amount / totalSum) * 100 : 0)}
+                      </td>
+                      <td>{getDataSourceLabel(view.existing?.data_source || snapshotHoldingDataSource)}</td>
+                    </tr>
+                  );
+                });
+
                 rows.push(
-                  <tr key={`summary-${currentAccountId}-final`}>
-                    <td colSpan={4}>계좌 합계 ({currentAccountLabel})</td>
+                  <tr key={`summary-${accountId}`}>
+                    <td colSpan={4}>계좌 합계 ({accountLabel})</td>
                     <td className={styles.amountCell}>{formatAmount(accountPreviousSum)}</td>
                     <td className={styles.amountCell}>{formatAmount(accountSum)}</td>
                     <td className={styles.amountCell}>
@@ -3256,13 +3327,13 @@ export default function PortfolioPage() {
                     <td></td>
                   </tr>
                 );
-              }
+              });
 
               return (
                 <table className={styles.table} ref={snapshotHoldingsTableRef}>
                   <thead>
                     <tr>
-                      <th>스냅샷일자</th>
+                      <th>번호</th>
                       <th>금융기관</th>
                       <th>계좌이름</th>
                       <th>상품이름</th>
@@ -3389,7 +3460,7 @@ export default function PortfolioPage() {
               <select
                 value={weeklyReportYear}
                 onChange={(e) => setWeeklyReportYear(Number(e.target.value))}
-                style={{ padding: '5px 10px', fontSize: '14px' }}
+                style={{ padding: '5px 10px', fontSize: '13px' }}
               >
                 {[2024, 2025, 2026, 2027, 2028].map((year) => (
                   <option key={year} value={year}>
@@ -3403,18 +3474,18 @@ export default function PortfolioPage() {
           {loading ? (
             <div className={styles.loading}>로딩 중...</div>
           ) : weeklyReportData && weeklyReportData.weeks.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
+            <div className={styles.tableWrapper} style={{ overflowX: 'auto' }}>
               <table className={styles.table} style={{ minWidth: '800px' }}>
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#fff' }}>
                   <tr>
-                    <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 2 }}>
+                    <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 11, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                       금융기관
                     </th>
-                    <th style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 2 }}>
+                    <th style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 11, width: '200px', minWidth: '200px' }}>
                       계좌
                     </th>
                     {weeklyReportData.weeks.map((week) => (
-                      <th key={week.weekly_snapshot_id} style={{ minWidth: '100px', fontSize: '12px', padding: '8px 4px' }}>
+                      <th key={week.weekly_snapshot_id} style={{ backgroundColor: '#fff', minWidth: '100px', fontSize: '11px', padding: '6px 4px', textAlign: 'center' }}>
                         {week.reference_date} (W{week.week_number})
                       </th>
                     ))}
@@ -3425,16 +3496,16 @@ export default function PortfolioPage() {
                   {weeklyReportData.account_groups && weeklyReportData.account_groups.length > 0 && (
                     <>
                       <tr style={{ borderBottom: '2px solid #ccc' }}>
-                        <td colSpan={weeklyReportData.weeks.length + 2} style={{ padding: '12px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                        <td colSpan={weeklyReportData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
                           계좌 그룹
                         </td>
                       </tr>
                       {[...weeklyReportData.account_groups].sort((a, b) => a.display_order - b.display_order).map((group) => (
                         <tr key={group.account_group_id} style={{ backgroundColor: '#fffacd' }}>
-                          <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold' }}>
+                          <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold', width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                             {group.account_group_name}
                           </td>
-                          <td style={{ position: 'sticky', left: '120px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '12px', color: '#666' }}>
+                          <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '11px', color: '#666', width: '200px', minWidth: '200px' }}>
                             (합계)
                           </td>
                           {group.valuations.map((val, idx) => (
@@ -3451,10 +3522,10 @@ export default function PortfolioPage() {
                       ))}
                       {/* 계좌 그룹 총합 행 */}
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#ffeb99' }}>
-                        <td style={{ position: 'sticky', left: 0, backgroundColor: '#ffeb99', zIndex: 1 }}>
+                        <td style={{ position: 'sticky', left: 0, backgroundColor: '#ffeb99', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                           총합
                         </td>
-                        <td style={{ position: 'sticky', left: '120px', backgroundColor: '#ffeb99', zIndex: 1 }}>
+                        <td style={{ position: 'sticky', left: '160px', backgroundColor: '#ffeb99', zIndex: 1, width: '200px', minWidth: '200px' }}>
                         </td>
                         {weeklyReportData.weeks.map((week, weekIdx) => {
                           const total = weeklyReportData.accounts.reduce((sum, account) => {
@@ -3474,7 +3545,7 @@ export default function PortfolioPage() {
                         })}
                       </tr>
                       <tr style={{ borderTop: '2px solid #ccc', borderBottom: '2px solid #ccc' }}>
-                        <td colSpan={weeklyReportData.weeks.length + 2} style={{ padding: '12px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                        <td colSpan={weeklyReportData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
                           전체 계좌
                         </td>
                       </tr>
@@ -3483,10 +3554,10 @@ export default function PortfolioPage() {
 
                   {weeklyReportData.accounts.map((account) => (
                     <tr key={account.account_id}>
-                      <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1 }}>
+                      <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                         {account.institution_name}
                       </td>
-                      <td style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 1 }}>
+                      <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 1, width: '200px', minWidth: '200px' }}>
                         {account.account_name}
                       </td>
                       {account.valuations.map((val, idx) => (
@@ -3505,7 +3576,7 @@ export default function PortfolioPage() {
                   {weeklyReportData.accounts.length > 0 && (
                     <>
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1 }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1, width: '360px', minWidth: '360px' }}>
                           총합
                         </td>
                         {weeklyReportData.weeks.map((week, weekIdx) => {
@@ -3527,7 +3598,7 @@ export default function PortfolioPage() {
                       </tr>
                       {/* 전주 대비 변화 행 */}
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#fff5f5' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1 }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1, width: '360px', minWidth: '360px' }}>
                           전주 대비 변화
                         </td>
                         {weeklyReportData.weeks.map((week, weekIdx) => {
@@ -3594,18 +3665,18 @@ export default function PortfolioPage() {
           {loading ? (
             <div className={styles.loading}>로딩 중...</div>
           ) : annualReportData && annualReportData.weeks.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
+            <div className={styles.tableWrapper} style={{ overflowX: 'auto' }}>
               <table className={styles.table} style={{ minWidth: '800px' }}>
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#fff' }}>
                   <tr>
-                    <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 2 }}>
+                    <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 11, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                       금융기관
                     </th>
-                    <th style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 2 }}>
+                    <th style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 11, width: '200px', minWidth: '200px' }}>
                       계좌
                     </th>
                     {annualReportData.weeks.map((yearPoint) => (
-                      <th key={yearPoint.weekly_snapshot_id} style={{ minWidth: '100px', fontSize: '12px', padding: '8px 4px' }}>
+                      <th key={yearPoint.weekly_snapshot_id} style={{ backgroundColor: '#fff', minWidth: '100px', fontSize: '11px', padding: '6px 4px', textAlign: 'center' }}>
                         {new Date(yearPoint.reference_date).getFullYear()}년
                       </th>
                     ))}
@@ -3615,16 +3686,16 @@ export default function PortfolioPage() {
                   {annualReportData.account_groups && annualReportData.account_groups.length > 0 && (
                     <>
                       <tr style={{ borderBottom: '2px solid #ccc' }}>
-                        <td colSpan={annualReportData.weeks.length + 2} style={{ padding: '12px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                        <td colSpan={annualReportData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
                           계좌 그룹
                         </td>
                       </tr>
                       {[...annualReportData.account_groups].sort((a, b) => a.display_order - b.display_order).map((group) => (
                         <tr key={group.account_group_id} style={{ backgroundColor: '#fffacd' }}>
-                          <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold' }}>
+                          <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold', width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                             {group.account_group_name}
                           </td>
-                          <td style={{ position: 'sticky', left: '120px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '12px', color: '#666' }}>
+                          <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '11px', color: '#666', width: '200px', minWidth: '200px' }}>
                             (합계)
                           </td>
                           {group.valuations.map((val, idx) => (
@@ -3640,10 +3711,10 @@ export default function PortfolioPage() {
                         </tr>
                       ))}
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#ffeb99' }}>
-                        <td style={{ position: 'sticky', left: 0, backgroundColor: '#ffeb99', zIndex: 1 }}>
+                        <td style={{ position: 'sticky', left: 0, backgroundColor: '#ffeb99', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                           총합
                         </td>
-                        <td style={{ position: 'sticky', left: '120px', backgroundColor: '#ffeb99', zIndex: 1 }}>
+                        <td style={{ position: 'sticky', left: '160px', backgroundColor: '#ffeb99', zIndex: 1, width: '200px', minWidth: '200px' }}>
                         </td>
                         {annualReportData.weeks.map((yearPoint, yearIdx) => {
                           const total = annualReportData.accounts.reduce((sum, account) => {
@@ -3663,7 +3734,7 @@ export default function PortfolioPage() {
                         })}
                       </tr>
                       <tr style={{ borderTop: '2px solid #ccc', borderBottom: '2px solid #ccc' }}>
-                        <td colSpan={annualReportData.weeks.length + 2} style={{ padding: '12px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                        <td colSpan={annualReportData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
                           전체 계좌
                         </td>
                       </tr>
@@ -3672,10 +3743,10 @@ export default function PortfolioPage() {
 
                   {annualReportData.accounts.map((account) => (
                     <tr key={account.account_id}>
-                      <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1 }}>
+                      <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                         {account.institution_name}
                       </td>
-                      <td style={{ position: 'sticky', left: '120px', backgroundColor: '#fff', zIndex: 1 }}>
+                      <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 1, width: '200px', minWidth: '200px' }}>
                         {account.account_name}
                       </td>
                       {account.valuations.map((val, idx) => (
@@ -3694,7 +3765,7 @@ export default function PortfolioPage() {
                   {annualReportData.accounts.length > 0 && (
                     <>
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1 }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1, width: '360px', minWidth: '360px' }}>
                           총합
                         </td>
                         {annualReportData.weeks.map((yearPoint, yearIdx) => {

@@ -662,7 +662,9 @@ class PortfolioAppService:
         year_snapshots.sort(key=lambda x: x.reference_date)
 
         if not year_snapshots:
-            return WeeklyPivotReportResult(year=0, weeks=[], account_groups=[], accounts=[])
+            return WeeklyPivotReportResult(
+                year=0, weeks=[], account_groups=[], accounts=[]
+            )
 
         # 2. 연간 스냅샷을 기준으로 열 정보 생성
         weeks = [

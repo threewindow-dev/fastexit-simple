@@ -205,9 +205,7 @@ class CreateAccountGroupRequest(BaseModel):
     account_ids: list[int] = Field(
         ..., description="그룹에 포함할 계좌 ID 목록", examples=[[1, 2, 3]]
     )
-    include_in_report: bool = Field(
-        False, description="보고서에 포함", examples=[True]
-    )
+    include_in_report: bool = Field(False, description="보고서에 포함", examples=[True])
 
 
 class UpdateAccountGroupRequest(BaseModel):
