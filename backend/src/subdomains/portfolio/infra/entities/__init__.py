@@ -12,6 +12,7 @@ from .portfolio_entities import (
     AnnualSnapshotEntity,
     AnnualSnapshotHoldingEntity,
     TargetAllocationEntity,
+    TargetAllocationAccountEntity,
     TargetAllocationTotalEntity,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "AnnualSnapshotEntity",
     "AnnualSnapshotHoldingEntity",
     "TargetAllocationEntity",
+    "TargetAllocationAccountEntity",
     "TargetAllocationTotalEntity",
 ]

@@ -5,7 +5,11 @@ from decimal import Decimal
 
 from shared.decorators import transactional
 from shared.protocols.transaction import TransactionManager
-from subdomains.portfolio.domain.models import TargetAllocation, TargetAllocationTotal
+from subdomains.portfolio.domain.models import (
+    TargetAllocation,
+    TargetAllocationAccount,
+    TargetAllocationTotal,
+)
 from subdomains.portfolio.domain.protocols.target_allocation_repository import (
     TargetAllocationRepository,
 )
@@ -22,6 +26,103 @@ class TargetAllocationAppService:
         """Initialize with repository and transaction manager."""
         self.repository = repository
         self._txm = transaction_manager
+
+    # ========== Account-Level Target Allocations ==========
+
+    @transactional(mode="writable")
+    async def create_or_update_account_target(
+        self, year: int, account_id: int, target_amount: Decimal
+    ) -> TargetAllocationAccount:
+        """Create or update an account-level target allocation."""
+        existing = await self.repository.get_account_by_year_and_account(
+            year, account_id
+        )
+
+        if existing:
+            # Update
+            updated = TargetAllocationAccount(
+                target_allocation_account_id=existing.target_allocation_account_id,
+                year=year,
+                account_id=account_id,
+                target_amount=target_amount,
+                created_at=existing.created_at,
+                updated_at=datetime.utcnow(),
+            )
+            return await self.repository.save_account(updated)
+        else:
+            # Create
+            new_allocation = TargetAllocationAccount.create(
+                year, account_id, target_amount
+            )
+            return await self.repository.save_account(new_allocation)
+
+    @transactional(mode="readonly")
+    async def get_account_targets_by_year(
+        self, year: int
+    ) -> list[TargetAllocationAccount]:
+        """Get all account-level target allocations for a specific year."""
+        return await self.repository.get_accounts_by_year(year)
+
+    @transactional(mode="readonly")
+    async def get_account_targets_by_year_and_group(
+        self, year: int, account_group_id: int
+    ) -> list[TargetAllocationAccount]:
+        """Get account-level targets for a year and account group."""
+        return await self.repository.get_accounts_by_year_and_account_group(
+            year, account_group_id
+        )
+
+    @transactional(mode="readonly")
+    async def get_account_target(
+        self, year: int, account_id: int
+    ) -> TargetAllocationAccount | None:
+        """Get a specific account-level target allocation."""
+        return await self.repository.get_account_by_year_and_account(year, account_id)
+
+    @transactional(mode="writable")
+    async def delete_account_target(self, target_allocation_account_id: int) -> None:
+        """Delete an account-level target allocation."""
+        await self.repository.delete_account(target_allocation_account_id)
+
+    # ========== Account-Group-Level Target (Aggregated from Accounts) ==========
+
+    @transactional(mode="readonly")
+    async def get_account_group_target_by_year(
+        self, year: int, account_group_id: int
+    ) -> Decimal:
+        """Get aggregated target amount for account group (sum of all accounts in group)."""
+        account_targets = await self.repository.get_accounts_by_year_and_account_group(
+            year, account_group_id
+        )
+        return sum(
+            (target.target_amount for target in account_targets),
+            Decimal("0"),
+        )
+
+    @transactional(mode="readonly")
+    async def get_all_account_groups_targets_by_year(
+        self, year: int, account_group_ids: list[int]
+    ) -> dict[int, Decimal]:
+        """Get aggregated target amounts for multiple account groups."""
+        result = {}
+        for account_group_id in account_group_ids:
+            result[account_group_id] = await self.get_account_group_target_by_year(
+                year, account_group_id
+            )
+        return result
+
+    # ========== Annual Total Target (Aggregated from All Accounts) ==========
+
+    @transactional(mode="readonly")
+    async def get_total_account_target_by_year(self, year: int) -> Decimal:
+        """Get aggregated total target amount for year (sum of all accounts)."""
+        account_targets = await self.repository.get_accounts_by_year(year)
+        return sum(
+            (target.target_amount for target in account_targets),
+            Decimal("0"),
+        )
+
+    # ========== Legacy Account-Group-Level Methods (Deprecated) ==========
 
     @transactional(mode="writable")
     async def create_or_update_target(
@@ -69,6 +170,8 @@ class TargetAllocationAppService:
     async def delete_target(self, target_allocation_id: int) -> None:
         """Delete a target allocation."""
         await self.repository.delete(target_allocation_id)
+
+    # ========== Annual Total Target (Legacy, manually set) ==========
 
     @transactional(mode="writable")
     async def create_or_update_total_target(

@@ -19,6 +19,7 @@ from subdomains.portfolio.infra.entities import (  # noqa: F401
     AnnualSnapshotEntity,
     AnnualSnapshotHoldingEntity,
     TargetAllocationEntity,
+    TargetAllocationAccountEntity,
     TargetAllocationTotalEntity,
 )
 

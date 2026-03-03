@@ -364,6 +364,32 @@ class TargetAllocationEntity(Base):
         return f"<TargetAllocation(id={self.target_allocation_id}, year={self.year}, account_group_id={self.account_group_id})>"
 
 
+class TargetAllocationAccountEntity(Base):
+    __tablename__ = "target_allocation_accounts"
+
+    target_allocation_account_id = Column(Integer, primary_key=True, autoincrement=True)
+    year = Column(Integer, nullable=False)
+    account_id = Column(
+        Integer,
+        ForeignKey("accounts.account_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_amount = Column(Numeric(15, 2), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=_utc_now_naive)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "year", "account_id", name="uq_target_allocation_account_year_account"
+        ),
+        Index("idx_target_allocation_accounts_year", "year"),
+        Index("idx_target_allocation_accounts_account", "account_id"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<TargetAllocationAccount(id={self.target_allocation_account_id}, year={self.year}, account_id={self.account_id})>"
+
+
 class TargetAllocationTotalEntity(Base):
     __tablename__ = "target_allocation_totals"
 

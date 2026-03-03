@@ -117,6 +117,10 @@ from subdomains.portfolio.interface.schemas import (
     TargetAllocationListResponse,
     TargetAllocationResponse,
     DeleteTargetAllocationResponse,
+    CreateTargetAllocationAccountRequest,
+    TargetAllocationAccountSchema,
+    TargetAllocationAccountListResponse,
+    TargetAllocationAccountResponse,
     CreateTargetAllocationTotalRequest,
     TargetAllocationTotalSchema,
     TargetAllocationTotalResponse,
@@ -1288,6 +1292,120 @@ async def list_snapshot_holdings(
 
 
 # ---------------------------------------------------------------------------
+# Target Allocations - Account-Level
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/target-allocations/account",
+    response_model=TargetAllocationAccountResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="계좌 단위 목표 평가금액 설정",
+    responses={**common_responses},
+)
+async def create_or_update_account_target_allocation(
+    request: CreateTargetAllocationAccountRequest,
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> TargetAllocationAccountResponse:
+    """계좌 단위 목표 평가금액을 설정하거나 업데이트합니다."""
+    account_target = (
+        await service.target_allocation_service.create_or_update_account_target(
+            year=request.year,
+            account_id=request.account_id,
+            target_amount=request.target_amount,
+        )
+    )
+    return TargetAllocationAccountResponse(
+        code=0,
+        message="success",
+        data=TargetAllocationAccountSchema(
+            target_allocation_account_id=account_target.target_allocation_account_id,
+            year=account_target.year,
+            account_id=account_target.account_id,
+            target_amount=account_target.target_amount,
+        ),
+    )
+
+
+@router.get(
+    "/target-allocations/account",
+    response_model=TargetAllocationAccountListResponse,
+    summary="연도별 계좌 단위 목표 평가금액 조회",
+    responses={**common_responses},
+)
+async def get_account_target_allocations_by_year(
+    year: int = Query(..., description="연도", ge=2020, le=2100),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> TargetAllocationAccountListResponse:
+    """특정 연도의 모든 계좌 단위 목표 평가금액을 조회합니다."""
+    account_targets = (
+        await service.target_allocation_service.get_account_targets_by_year(year=year)
+    )
+    return TargetAllocationAccountListResponse(
+        year=year,
+        account_targets=[
+            TargetAllocationAccountSchema(
+                target_allocation_account_id=t.target_allocation_account_id,
+                year=t.year,
+                account_id=t.account_id,
+                target_amount=t.target_amount,
+            )
+            for t in account_targets
+        ],
+    )
+
+
+@router.get(
+    "/target-allocations/account/{year}/{account_id}",
+    response_model=TargetAllocationAccountResponse,
+    summary="특정 계좌의 목표 평가금액 조회",
+    responses={**common_responses},
+)
+async def get_account_target_allocation(
+    year: int = Path(..., description="연도", ge=2020, le=2100),
+    account_id: int = Path(..., description="계좌 ID", gt=0),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> TargetAllocationAccountResponse:
+    """특정 연도와 계좌의 목표 평가금액을 조회합니다."""
+    account_target = await service.target_allocation_service.get_account_target(
+        year=year, account_id=account_id
+    )
+    return TargetAllocationAccountResponse(
+        code=0,
+        message="success",
+        data=(
+            TargetAllocationAccountSchema(
+                target_allocation_account_id=account_target.target_allocation_account_id,
+                year=account_target.year,
+                account_id=account_target.account_id,
+                target_amount=account_target.target_amount,
+            )
+            if account_target
+            else None
+        ),
+    )
+
+
+@router.delete(
+    "/target-allocations/account/{target_allocation_account_id}",
+    response_model=DeleteTargetAllocationResponse,
+    summary="계좌 단위 목표 평가금액 삭제",
+    responses={**common_responses},
+)
+async def delete_account_target_allocation(
+    target_allocation_account_id: int = Path(
+        ..., description="계좌 단위 목표 ID", gt=0
+    ),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DeleteTargetAllocationResponse:
+    """계좌 단위 목표 평가금액을 삭제합니다."""
+    await service.target_allocation_service.delete_account_target(
+        target_allocation_account_id=target_allocation_account_id
+    )
+    return DeleteTargetAllocationResponse(code=0, message="success", data=None)
+
+
+# ---------------------------------------------------------------------------
 # Target Allocations
 # ---------------------------------------------------------------------------
 
@@ -1361,59 +1479,59 @@ async def delete_total_target_allocation(
     return DeleteTargetAllocationResponse(code=0, message="success", data=None)
 
 
-@router.post(
-    "/target-allocations",
-    response_model=TargetAllocationResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="목표 자산배분 설정",
-    responses={**common_responses},
-)
-async def create_or_update_target_allocation(
-    request: CreateTargetAllocationRequest,
-    service: PortfolioAppService = Depends(get_portfolio_app_service),
-) -> TargetAllocationResponse:
-    """목표 자산배분을 설정하거나 업데이트합니다."""
-    target = await service.target_allocation_service.create_or_update_target(
-        year=request.year,
-        account_group_id=request.account_group_id,
-        target_amount=request.target_amount,
-    )
-    return TargetAllocationResponse(
-        code=0,
-        message="success",
-        data=TargetAllocationSchema(
-            target_allocation_id=target.target_allocation_id,
-            year=target.year,
-            account_group_id=target.account_group_id,
-            target_amount=target.target_amount,
-        ),
-    )
+# @router.post(
+#     "/target-allocations",
+#     response_model=TargetAllocationResponse,
+#     status_code=status.HTTP_201_CREATED,
+#     summary="목표 자산배분 설정",
+#     responses={**common_responses},
+# )
+# async def create_or_update_target_allocation(
+#     request: CreateTargetAllocationRequest,
+#     service: PortfolioAppService = Depends(get_portfolio_app_service),
+# ) -> TargetAllocationResponse:
+#     """목표 자산배분을 설정하거나 업데이트합니다."""
+#     target = await service.target_allocation_service.create_or_update_target(
+#         year=request.year,
+#         account_group_id=request.account_group_id,
+#         target_amount=request.target_amount,
+#     )
+#     return TargetAllocationResponse(
+#         code=0,
+#         message="success",
+#         data=TargetAllocationSchema(
+#             target_allocation_id=target.target_allocation_id,
+#             year=target.year,
+#             account_group_id=target.account_group_id,
+#             target_amount=target.target_amount,
+#         ),
+#     )
 
 
-@router.get(
-    "/target-allocations",
-    response_model=TargetAllocationListResponse,
-    summary="연도별 목표 자산배분 조회",
-    responses={**common_responses},
-)
-async def get_target_allocations_by_year(
-    year: int = Query(..., description="연도", ge=2020, le=2100),
-    service: PortfolioAppService = Depends(get_portfolio_app_service),
-) -> TargetAllocationListResponse:
-    """특정 연도의 모든 목표 자산배분을 조회합니다."""
-    targets = await service.target_allocation_service.get_targets_by_year(year=year)
-    return TargetAllocationListResponse(
-        year=year,
-        targets=[
-            TargetAllocationSchema(
-                target_allocation_id=t.target_allocation_id,
-                year=t.year,
-                account_group_id=t.account_group_id,
-                target_amount=t.target_amount,
-            )
-            for t in targets
-        ],
-    )
+# @router.get(
+#     "/target-allocations",
+#     response_model=TargetAllocationListResponse,
+#     summary="연도별 목표 자산배분 조회",
+#     responses={**common_responses},
+# )
+# async def get_target_allocations_by_year(
+#     year: int = Query(..., description="연도", ge=2020, le=2100),
+#     service: PortfolioAppService = Depends(get_portfolio_app_service),
+# ) -> TargetAllocationListResponse:
+#     """특정 연도의 모든 목표 자산배분을 조회합니다."""
+#     targets = await service.target_allocation_service.get_targets_by_year(year=year)
+#     return TargetAllocationListResponse(
+#         year=year,
+#         targets=[
+#             TargetAllocationSchema(
+#                 target_allocation_id=t.target_allocation_id,
+#                 year=t.year,
+#                 account_group_id=t.account_group_id,
+#                 target_amount=t.target_amount,
+#             )
+#             for t in targets
+#         ],
+#     )
 
 
 @router.get(

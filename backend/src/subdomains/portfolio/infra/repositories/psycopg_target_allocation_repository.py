@@ -4,7 +4,11 @@ from datetime import datetime
 from decimal import Decimal
 
 from shared.decorators import use_transaction
-from subdomains.portfolio.domain.models import TargetAllocation, TargetAllocationTotal
+from subdomains.portfolio.domain.models import (
+    TargetAllocation,
+    TargetAllocationAccount,
+    TargetAllocationTotal,
+)
 from subdomains.portfolio.domain.protocols.target_allocation_repository import (
     TargetAllocationRepository,
 )
@@ -13,7 +17,172 @@ from subdomains.portfolio.domain.protocols.target_allocation_repository import (
 class PsycopgTargetAllocationRepository(TargetAllocationRepository):
     """Psycopg implementation of target allocation repository."""
 
+    # ========== Account-Level Target Allocations ==========
+
     @use_transaction()
+    async def save_account(
+        self, conn, target_allocation_account: TargetAllocationAccount
+    ) -> TargetAllocationAccount:
+        """Save or update an account-level target allocation."""
+        if target_allocation_account.target_allocation_account_id is None:
+            async with conn.cursor() as cur:
+                current_time = datetime.utcnow()
+                await cur.execute(
+                    """
+                    INSERT INTO target_allocation_accounts (year, account_id, target_amount, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING target_allocation_account_id, created_at, updated_at
+                    """,
+                    (
+                        target_allocation_account.year,
+                        target_allocation_account.account_id,
+                        target_allocation_account.target_amount,
+                        current_time,
+                        current_time,
+                    ),
+                )
+                row = await cur.fetchone()
+                if not row:
+                    raise ValueError("Failed to insert account target allocation")
+                return TargetAllocationAccount(
+                    target_allocation_account_id=row[0],
+                    year=target_allocation_account.year,
+                    account_id=target_allocation_account.account_id,
+                    target_amount=target_allocation_account.target_amount,
+                    created_at=row[1],
+                    updated_at=row[2],
+                )
+
+        async with conn.cursor() as cur:
+            current_time = datetime.utcnow()
+            await cur.execute(
+                """
+                UPDATE target_allocation_accounts
+                SET year = %s, account_id = %s, target_amount = %s, updated_at = %s
+                WHERE target_allocation_account_id = %s
+                RETURNING created_at, updated_at
+                """,
+                (
+                    target_allocation_account.year,
+                    target_allocation_account.account_id,
+                    target_allocation_account.target_amount,
+                    current_time,
+                    target_allocation_account.target_allocation_account_id,
+                ),
+            )
+            row = await cur.fetchone()
+            if not row:
+                raise ValueError(
+                    f"Account target allocation with ID {target_allocation_account.target_allocation_account_id} not found"
+                )
+            return TargetAllocationAccount(
+                target_allocation_account_id=target_allocation_account.target_allocation_account_id,
+                year=target_allocation_account.year,
+                account_id=target_allocation_account.account_id,
+                target_amount=target_allocation_account.target_amount,
+                created_at=row[0],
+                updated_at=row[1],
+            )
+
+    @use_transaction()
+    async def get_account_by_year_and_account(
+        self, conn, year: int, account_id: int
+    ) -> TargetAllocationAccount | None:
+        """Get an account-level target allocation by year and account ID."""
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT target_allocation_account_id, year, account_id, target_amount, created_at, updated_at
+                FROM target_allocation_accounts
+                WHERE year = %s AND account_id = %s
+                """,
+                (year, account_id),
+            )
+            row = await cur.fetchone()
+            if not row:
+                return None
+            return TargetAllocationAccount(
+                target_allocation_account_id=row[0],
+                year=row[1],
+                account_id=row[2],
+                target_amount=Decimal(str(row[3])),
+                created_at=row[4],
+                updated_at=row[5],
+            )
+
+    @use_transaction()
+    async def get_accounts_by_year(
+        self, conn, year: int
+    ) -> list[TargetAllocationAccount]:
+        """Get all account-level target allocations for a specific year."""
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT target_allocation_account_id, year, account_id, target_amount, created_at, updated_at
+                FROM target_allocation_accounts
+                WHERE year = %s
+                ORDER BY account_id
+                """,
+                (year,),
+            )
+            rows = await cur.fetchall()
+            return [
+                TargetAllocationAccount(
+                    target_allocation_account_id=row[0],
+                    year=row[1],
+                    account_id=row[2],
+                    target_amount=Decimal(str(row[3])),
+                    created_at=row[4],
+                    updated_at=row[5],
+                )
+                for row in rows
+            ]
+
+    @use_transaction()
+    async def get_accounts_by_year_and_account_group(
+        self, conn, year: int, account_group_id: int
+    ) -> list[TargetAllocationAccount]:
+        """Get account-level targets for a year and account group."""
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT taa.target_allocation_account_id, taa.year, taa.account_id, taa.target_amount, taa.created_at, taa.updated_at
+                FROM target_allocation_accounts taa
+                INNER JOIN account_group_accounts aga ON taa.account_id = aga.account_id
+                WHERE taa.year = %s AND aga.account_group_id = %s
+                ORDER BY taa.account_id
+                """,
+                (year, account_group_id),
+            )
+            rows = await cur.fetchall()
+            return [
+                TargetAllocationAccount(
+                    target_allocation_account_id=row[0],
+                    year=row[1],
+                    account_id=row[2],
+                    target_amount=Decimal(str(row[3])),
+                    created_at=row[4],
+                    updated_at=row[5],
+                )
+                for row in rows
+            ]
+
+    @use_transaction()
+    async def delete_account(self, conn, target_allocation_account_id: int) -> None:
+        """Delete an account-level target allocation."""
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM target_allocation_accounts
+                WHERE target_allocation_account_id = %s
+                """,
+                (target_allocation_account_id,),
+            )
+            if cur.rowcount == 0:
+                raise ValueError(
+                    f"Account target allocation with ID {target_allocation_account_id} not found"
+                )
+
     async def save(self, conn, target_allocation: TargetAllocation) -> TargetAllocation:
         """Save or update a target allocation."""
         if target_allocation.target_allocation_id is None:

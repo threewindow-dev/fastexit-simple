@@ -2,11 +2,50 @@
 
 from abc import ABC, abstractmethod
 
-from subdomains.portfolio.domain.models import TargetAllocation, TargetAllocationTotal
+from subdomains.portfolio.domain.models import (
+    TargetAllocation,
+    TargetAllocationAccount,
+    TargetAllocationTotal,
+)
 
 
 class TargetAllocationRepository(ABC):
     """Protocol for target allocation repository operations."""
+
+    # ========== Account-Level Target Allocations ==========
+
+    @abstractmethod
+    async def save_account(
+        self, target_allocation_account: TargetAllocationAccount
+    ) -> TargetAllocationAccount:
+        """Save or update an account-level target allocation."""
+        pass
+
+    @abstractmethod
+    async def get_account_by_year_and_account(
+        self, year: int, account_id: int
+    ) -> TargetAllocationAccount | None:
+        """Get an account-level target allocation by year and account ID."""
+        pass
+
+    @abstractmethod
+    async def get_accounts_by_year(self, year: int) -> list[TargetAllocationAccount]:
+        """Get all account-level target allocations for a specific year."""
+        pass
+
+    @abstractmethod
+    async def get_accounts_by_year_and_account_group(
+        self, year: int, account_group_id: int
+    ) -> list[TargetAllocationAccount]:
+        """Get account-level target allocations for a year and account group."""
+        pass
+
+    @abstractmethod
+    async def delete_account(self, target_allocation_account_id: int) -> None:
+        """Delete an account-level target allocation."""
+        pass
+
+    # ========== Account-Group-Level Target Allocations (Legacy, kept for backward compatibility) ==========
 
     @abstractmethod
     async def save(self, target_allocation: TargetAllocation) -> TargetAllocation:
@@ -29,6 +68,8 @@ class TargetAllocationRepository(ABC):
     async def delete(self, target_allocation_id: int) -> None:
         """Delete a target allocation."""
         pass
+
+    # ========== Annual Total Target Allocations ==========
 
     @abstractmethod
     async def save_total(

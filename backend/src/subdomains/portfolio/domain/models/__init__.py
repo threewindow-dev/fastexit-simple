@@ -7,6 +7,7 @@ from .snapshot import Snapshot, SnapshotHolding
 from .weekly_snapshot import WeeklySnapshot
 from .annual_snapshot import AnnualSnapshot
 from .target_allocation import TargetAllocation
+from .target_allocation_account import TargetAllocationAccount
 from .target_allocation_total import TargetAllocationTotal
 
 __all__ = [
@@ -20,5 +21,6 @@ __all__ = [
     "WeeklySnapshot",
     "AnnualSnapshot",
     "TargetAllocation",
+    "TargetAllocationAccount",
     "TargetAllocationTotal",
 ]

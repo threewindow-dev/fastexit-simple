@@ -75,8 +75,14 @@ from .target_allocation_schema import (
     CreateTargetAllocationRequest,
     TargetAllocationListResponse,
 )
+from .target_allocation_account_schema import (
+    TargetAllocationAccountSchema,
+    CreateTargetAllocationAccountRequest,
+    TargetAllocationAccountListResponse,
+)
 from .target_allocation_response import (
     TargetAllocationResponse,
+    TargetAllocationAccountResponse,
     DeleteTargetAllocationResponse,
 )
 from .target_allocation_total_schema import (
@@ -159,7 +165,11 @@ __all__ = [
     "TargetAllocationSchema",
     "CreateTargetAllocationRequest",
     "TargetAllocationListResponse",
+    "TargetAllocationAccountSchema",
+    "CreateTargetAllocationAccountRequest",
+    "TargetAllocationAccountListResponse",
     "TargetAllocationResponse",
+    "TargetAllocationAccountResponse",
     "DeleteTargetAllocationResponse",
     "TargetAllocationTotalSchema",
     "CreateTargetAllocationTotalRequest",

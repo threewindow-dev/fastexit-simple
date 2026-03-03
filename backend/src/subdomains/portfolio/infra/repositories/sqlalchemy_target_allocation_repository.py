@@ -4,12 +4,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.decorators import use_transaction
-from subdomains.portfolio.domain.models import TargetAllocation, TargetAllocationTotal
+from subdomains.portfolio.domain.models import (
+    TargetAllocation,
+    TargetAllocationAccount,
+    TargetAllocationTotal,
+)
 from subdomains.portfolio.domain.protocols.target_allocation_repository import (
     TargetAllocationRepository,
 )
 from subdomains.portfolio.infra.entities import (
     TargetAllocationEntity,
+    TargetAllocationAccountEntity,
     TargetAllocationTotalEntity,
 )
 
@@ -17,7 +22,124 @@ from subdomains.portfolio.infra.entities import (
 class SqlAlchemyTargetAllocationRepository(TargetAllocationRepository):
     """SQLAlchemy implementation of target allocation repository."""
 
+    # ========== Account-Level Target Allocations ==========
+
     @use_transaction()
+    async def save_account(
+        self, conn: AsyncSession, target_allocation_account: TargetAllocationAccount
+    ) -> TargetAllocationAccount:
+        """Save or update an account-level target allocation."""
+        session: AsyncSession = conn
+
+        if target_allocation_account.target_allocation_account_id is None:
+            # Insert new record
+            entity = TargetAllocationAccountEntity(
+                year=target_allocation_account.year,
+                account_id=target_allocation_account.account_id,
+                target_amount=target_allocation_account.target_amount,
+                created_at=target_allocation_account.created_at,
+                updated_at=target_allocation_account.updated_at,
+            )
+            session.add(entity)
+            await session.flush()
+            await session.refresh(
+                entity,
+                ["target_allocation_account_id", "created_at", "updated_at"],
+            )
+            return self._account_entity_to_model(entity)
+        else:
+            # Update existing record
+            stmt = select(TargetAllocationAccountEntity).where(
+                TargetAllocationAccountEntity.target_allocation_account_id
+                == target_allocation_account.target_allocation_account_id
+            )
+            result = await session.execute(stmt)
+            entity = result.scalars().first()
+            if entity:
+                entity.year = target_allocation_account.year
+                entity.account_id = target_allocation_account.account_id
+                entity.target_amount = target_allocation_account.target_amount
+                entity.updated_at = target_allocation_account.updated_at
+                await session.flush()
+                await session.refresh(entity)
+                return self._account_entity_to_model(entity)
+            else:
+                raise ValueError(
+                    f"Target allocation account with ID {target_allocation_account.target_allocation_account_id} not found"
+                )
+
+    @use_transaction()
+    async def get_account_by_year_and_account(
+        self, conn: AsyncSession, year: int, account_id: int
+    ) -> TargetAllocationAccount | None:
+        """Get an account-level target allocation by year and account ID."""
+        stmt = select(TargetAllocationAccountEntity).where(
+            (TargetAllocationAccountEntity.year == year)
+            & (TargetAllocationAccountEntity.account_id == account_id)
+        )
+        result = await conn.execute(stmt)
+        entity = result.scalars().first()
+        return self._account_entity_to_model(entity) if entity else None
+
+    @use_transaction()
+    async def get_accounts_by_year(
+        self, conn: AsyncSession, year: int
+    ) -> list[TargetAllocationAccount]:
+        """Get all account-level target allocations for a specific year."""
+        stmt = select(TargetAllocationAccountEntity).where(
+            TargetAllocationAccountEntity.year == year
+        )
+        result = await conn.execute(stmt)
+        entities = result.scalars().all()
+        return [self._account_entity_to_model(entity) for entity in entities]
+
+    @use_transaction()
+    async def get_accounts_by_year_and_account_group(
+        self, conn: AsyncSession, year: int, account_group_id: int
+    ) -> list[TargetAllocationAccount]:
+        """Get account-level target allocations for a year and account group."""
+        from subdomains.portfolio.infra.entities import (
+            AccountGroupAccountEntity,
+        )
+
+        stmt = select(TargetAllocationAccountEntity).where(
+            TargetAllocationAccountEntity.year == year
+        )
+        result = await conn.execute(stmt)
+        all_targets = result.scalars().all()
+
+        # Filter by account_group_id
+        stmt_group = select(AccountGroupAccountEntity.account_id).where(
+            AccountGroupAccountEntity.account_group_id == account_group_id
+        )
+        result_group = await conn.execute(stmt_group)
+        account_ids_in_group = {row[0] for row in result_group.fetchall()}
+
+        return [
+            self._account_entity_to_model(entity)
+            for entity in all_targets
+            if entity.account_id in account_ids_in_group
+        ]
+
+    @use_transaction()
+    async def delete_account(
+        self, conn: AsyncSession, target_allocation_account_id: int
+    ) -> None:
+        """Delete an account-level target allocation."""
+        stmt = select(TargetAllocationAccountEntity).where(
+            TargetAllocationAccountEntity.target_allocation_account_id
+            == target_allocation_account_id
+        )
+        result = await conn.execute(stmt)
+        entity = result.scalars().first()
+        if entity:
+            await conn.delete(entity)
+            await conn.flush()
+        else:
+            raise ValueError(
+                f"Target allocation account with ID {target_allocation_account_id} not found"
+            )
+
     async def save(
         self, conn: AsyncSession, target_allocation: TargetAllocation
     ) -> TargetAllocation:
@@ -163,6 +285,20 @@ class SqlAlchemyTargetAllocationRepository(TargetAllocationRepository):
             raise ValueError(f"Target allocation total for year {year} not found")
         await conn.delete(entity)
         await conn.flush()
+
+    @staticmethod
+    def _account_entity_to_model(
+        entity: TargetAllocationAccountEntity,
+    ) -> TargetAllocationAccount:
+        """Convert account entity to domain model."""
+        return TargetAllocationAccount(
+            target_allocation_account_id=entity.target_allocation_account_id,
+            year=entity.year,
+            account_id=entity.account_id,
+            target_amount=entity.target_amount,
+            created_at=entity.created_at,
+            updated_at=entity.updated_at,
+        )
 
     @staticmethod
     def _entity_to_model(entity: TargetAllocationEntity) -> TargetAllocation:
