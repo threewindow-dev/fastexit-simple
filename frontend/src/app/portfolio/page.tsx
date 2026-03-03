@@ -623,6 +623,14 @@ export default function PortfolioPage() {
         (item) => new Date(item.reference_date).getFullYear() === targetYear
       )
     : -1;
+
+  // 전년도 평가금액을 시작일 평가금액으로 사용
+  const previousYearIndex = annualReportData
+    ? annualReportData.weeks.findIndex(
+        (item) => new Date(item.reference_date).getFullYear() === targetYear - 1
+      )
+    : -1;
+
   const currentYear = new Date().getFullYear();
   const useLatestDailySnapshotForActual = targetYear === currentYear;
   const latestDailySnapshotForTargetYear = useLatestDailySnapshotForActual
@@ -695,29 +703,69 @@ export default function PortfolioPage() {
     });
   }
 
+  // 전년도 평가금액 맵 생성 (시작일 평가금액)
+  const startingAmountMap = new Map<number, number>();
+  if (annualReportData && previousYearIndex >= 0) {
+    annualReportData.account_groups.forEach((group) => {
+      const value = group.valuations[previousYearIndex]?.amount ?? 0;
+      startingAmountMap.set(group.account_group_id, value);
+    });
+  }
+
   const targetComparisonRows = sortedAccountGroups.map((group) => {
     const targetAmount = targetAmountMap.get(group.account_group_id) ?? 0;
     const actualAmount = actualAmountMap.get(group.account_group_id) ?? 0;
+    const startingAmount = startingAmountMap.get(group.account_group_id) ?? 0;
     const gapAmount = actualAmount - targetAmount;
     const achievementRate = targetAmount > 0 ? (actualAmount / targetAmount) * 100 : null;
+    const targetGrowthRate = startingAmount > 0 ? ((targetAmount - startingAmount) / startingAmount) * 100 : null;
     return {
       accountGroupId: group.account_group_id,
       accountGroupName: group.name,
       targetAmount,
       actualAmount,
+      startingAmount,
       gapAmount,
       achievementRate,
+      targetGrowthRate,
     };
   });
 
-  const targetComparisonChartData = targetComparisonRows
-    .filter((row) => row.targetAmount > 0 || row.actualAmount > 0)
-    .map((row) => ({
-      그룹: row.accountGroupName,
-      목표금액: row.targetAmount,
-      실제금액: row.actualAmount,
-      달성률: row.achievementRate ?? 0,
-    }));
+  // 전체 합계 계산 및 전체 목표 성장률
+  const totalTargetAmount = targetComparisonRows.reduce(
+    (sum, row) => sum + row.targetAmount,
+    0
+  );
+  const totalActualAmount = targetComparisonRows.reduce(
+    (sum, row) => sum + row.actualAmount,
+    0
+  );
+  const totalStartingAmount = targetComparisonRows.reduce(
+    (sum, row) => sum + row.startingAmount,
+    0
+  );
+  const totalGapAmount = totalActualAmount - totalTargetAmount;
+  const totalAchievementRate =
+    totalTargetAmount > 0 ? (totalActualAmount / totalTargetAmount) * 100 : null;
+  const totalTargetGrowthRate = totalStartingAmount > 0 ? ((totalTargetAmount - totalStartingAmount) / totalStartingAmount) * 100 : null;
+
+  const targetComparisonChartData = [
+    ...targetComparisonRows
+      .filter((row) => row.targetAmount > 0 || row.actualAmount > 0)
+      .map((row) => ({
+        그룹: row.accountGroupName,
+        목표금액: row.targetAmount,
+        실제금액: row.actualAmount,
+        달성률: row.achievementRate ?? 0,
+      })),
+    // 전체 합계 추가
+    {
+      그룹: '전체 합계',
+      목표금액: totalTargetAmount,
+      실제금액: totalActualAmount,
+      달성률: totalAchievementRate ?? 0,
+    },
+  ];
 
   const targetDistributionChartData = targetComparisonRows
     .filter((row) => row.targetAmount > 0)
@@ -742,18 +790,6 @@ export default function PortfolioPage() {
       draftAmount: targetAccountDrafts[account.account_id] ?? '',
     };
   });
-
-  const totalActualAmount = targetComparisonRows.reduce(
-    (sum, row) => sum + row.actualAmount,
-    0
-  );
-  const totalTargetAmount = accountTargetAllocations.reduce((sum, accountTarget) => {
-    const amount = Number(accountTarget.target_amount);
-    return Number.isFinite(amount) ? sum + amount : sum;
-  }, 0);
-  const totalGapAmount = totalActualAmount - totalTargetAmount;
-  const totalAchievementRate =
-    totalTargetAmount > 0 ? (totalActualAmount / totalTargetAmount) * 100 : null;
 
   const selectedSnapshot = selectedSnapshotId
     ? snapshots.find((snap) => snap.snapshot_id === Number(selectedSnapshotId)) || null
@@ -4447,7 +4483,7 @@ export default function PortfolioPage() {
                 });
               });
 
-            const chartData = sortedAccountGroups
+            const mappedChartData = sortedAccountGroups
               .map((group) => {
                 const targetAmount = targetMap.get(group.account_group_id) ?? 0;
                 const actualAmount = actualMap.get(group.account_group_id) ?? 0;
@@ -4461,6 +4497,22 @@ export default function PortfolioPage() {
                 };
               })
               .filter((item) => item.목표금액 > 0 || item.실제금액 > 0);
+
+            // 전체 합계 계산
+            const totalTarget = Array.from(targetMap.values()).reduce((sum, val) => sum + val, 0);
+            const totalActual = Array.from(actualMap.values()).reduce((sum, val) => sum + val, 0);
+            const totalAchievementRate = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+
+            // 전체 합계 행 추가
+            const chartData = [
+              ...mappedChartData,
+              {
+                그룹: '전체 합계',
+                목표금액: totalTarget,
+                실제금액: totalActual,
+                달성률: totalAchievementRate,
+              },
+            ];
 
             if (chartData.length === 0) {
               return null;
@@ -4906,7 +4958,8 @@ export default function PortfolioPage() {
                     <thead>
                       <tr>
                         <th>계좌그룹</th>
-                        <th style={{ textAlign: 'right' }}>목표금액 (자동)</th>
+                        <th style={{ textAlign: 'right' }}>목표 (금액)</th>
+                        <th style={{ textAlign: 'right' }}>목표 (%)</th>
                         <th style={{ textAlign: 'right' }}>실제금액</th>
                         <th style={{ textAlign: 'right' }}>차이(실제-목표)</th>
                         <th style={{ textAlign: 'right' }}>달성률</th>
@@ -4921,6 +4974,11 @@ export default function PortfolioPage() {
                               minimumFractionDigits: 0,
                               maximumFractionDigits: 0,
                             })}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {row.targetGrowthRate == null
+                              ? '-'
+                              : `${row.targetGrowthRate.toFixed(2)}%`}
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             {row.actualAmount.toLocaleString('ko-KR', {
@@ -4948,6 +5006,11 @@ export default function PortfolioPage() {
                             minimumFractionDigits: 0,
                             maximumFractionDigits: 0,
                           })}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {totalTargetGrowthRate == null
+                            ? '-'
+                            : `${totalTargetGrowthRate.toFixed(2)}%`}
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {totalActualAmount.toLocaleString('ko-KR', {
