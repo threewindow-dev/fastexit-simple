@@ -184,11 +184,13 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 """
                 INSERT INTO products (
                     product_name, asset_class, region, currency,
-                    investment_type, characteristics, risk_level, display_order, created_at
+                    investment_type, characteristics, risk_level, allow_snapshot_input,
+                    display_order, created_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING product_id, product_name, asset_class, region, currency,
-                          investment_type, characteristics, risk_level, display_order, created_at
+                          investment_type, characteristics, risk_level,
+                          allow_snapshot_input, display_order, created_at
                 """,
                 (
                     product.product_name,
@@ -198,6 +200,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                     product.investment_type,
                     product.characteristics,
                     product.risk_level,
+                    product.allow_snapshot_input,
                     product.display_order,
                     _utc_now_naive(),
                 ),
@@ -212,6 +215,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             investment_type=row["investment_type"],
             characteristics=row["characteristics"],
             risk_level=row["risk_level"],
+            allow_snapshot_input=row["allow_snapshot_input"],
             display_order=row["display_order"],
             created_at=row["created_at"],
         )
@@ -223,7 +227,8 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             await cur.execute(
                 """
                 SELECT product_id, product_name, asset_class, region, currency,
-                      investment_type, characteristics, risk_level, display_order, created_at
+                        investment_type, characteristics, risk_level,
+                        allow_snapshot_input, display_order, created_at
                 FROM products WHERE product_id = %s
                 """,
                 (product_id,),
@@ -240,6 +245,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             investment_type=row["investment_type"],
             characteristics=row["characteristics"],
             risk_level=row["risk_level"],
+            allow_snapshot_input=row["allow_snapshot_input"],
             display_order=row["display_order"],
             created_at=row["created_at"],
         )
@@ -258,6 +264,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                     investment_type = %s,
                     characteristics = %s,
                     risk_level = %s,
+                    allow_snapshot_input = %s,
                     display_order = %s
                 WHERE product_id = %s
                 """,
@@ -269,6 +276,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                     product.investment_type,
                     product.characteristics,
                     product.risk_level,
+                    product.allow_snapshot_input,
                     product.display_order,
                     product.product_id,
                 ),
@@ -310,7 +318,8 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             await cur.execute(
                 """
                 SELECT product_id, product_name, asset_class, region, currency,
-                       investment_type, characteristics, risk_level, display_order, created_at
+                      investment_type, characteristics, risk_level,
+                      allow_snapshot_input, display_order, created_at
                 FROM products ORDER BY display_order, product_id
                 """
             )
@@ -325,6 +334,7 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 investment_type=row["investment_type"],
                 characteristics=row["characteristics"],
                 risk_level=row["risk_level"],
+                allow_snapshot_input=row["allow_snapshot_input"],
                 display_order=row["display_order"],
                 created_at=row["created_at"],
             )

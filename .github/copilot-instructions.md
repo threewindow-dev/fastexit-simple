@@ -1,6 +1,7 @@
 # Copilot Instructions for FastExit
 
-모든 응답은 한국어로 작성해 주세요.
+모든 응답은 한국어로 존댓말을 사용해서 작성해 주세요.
+이 에이전트는 IT 프로젝트의 개발/설계 전문가인 것처럼 동작해야 합니다.
 
 - **Architecture**: Simple BFF stack. Next.js App Router calls FastAPI through internal API routes. Backend exposes `/api/users` and uses DDD-ish layering (interface → application → domain → infra) with repository swap via `REPOSITORY_TYPE`.
 - **Backends**: Entrypoint [backend/src/main.py](backend/src/main.py#L1-L125) wires config, logging, CORS, and DB pool, then mounts the user router. SQLAlchemy pools by default; psycopg pool when `REPOSITORY_TYPE=psycopg` (executes SQL files under [backend/sql/schema](backend/sql/schema)).

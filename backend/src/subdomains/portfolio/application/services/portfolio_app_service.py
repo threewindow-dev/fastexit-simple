@@ -59,6 +59,7 @@ from subdomains.portfolio.domain import (
     DuplicateEntityError,
     NotFoundError,
     SnapshotLockedError,
+    InvalidStateError,
 )
 from subdomains.portfolio.domain.protocols import (
     InstitutionRepository,
@@ -170,6 +171,7 @@ class PortfolioAppService:
             investment_type=command.investment_type,
             characteristics=command.characteristics,
             risk_level=command.risk_level,
+            allow_snapshot_input=command.allow_snapshot_input,
             display_order=command.display_order,
         )
         saved = await self._product_repo.add(model)
@@ -210,6 +212,7 @@ class PortfolioAppService:
             investment_type=command.investment_type,
             characteristics=command.characteristics,
             risk_level=command.risk_level,
+            allow_snapshot_input=command.allow_snapshot_input,
         )
         saved = await self._product_repo.update(product)
         return ProductResult.from_domain(saved)
@@ -389,6 +392,20 @@ class PortfolioAppService:
         snapshot = await self._snapshot_repo.find_by_id(command.snapshot_id)
         if snapshot is None:
             raise NotFoundError("snapshot", command.snapshot_id)
+
+        holding = await self._holding_repo.find_by_id(command.holding_id)
+        if holding is None:
+            raise NotFoundError("holding", command.holding_id)
+
+        product = await self._product_repo.find_by_id(holding.product_id)
+        if product is None:
+            raise NotFoundError("product", holding.product_id)
+        if not product.allow_snapshot_input:
+            raise InvalidStateError(
+                "snapshot_holding",
+                f"snapshot input is disabled for product '{product.product_name}'",
+            )
+
         snapshot.upsert_holding(
             holding_id=command.holding_id,
             valuation_amount=command.valuation_amount,
@@ -814,6 +831,7 @@ class PortfolioAppService:
                 investment_type=prod.investment_type,
                 characteristics=prod.characteristics,
                 risk_level=prod.risk_level,
+                allow_snapshot_input=prod.allow_snapshot_input,
                 display_order=prod.display_order,
                 created_at=prod.created_at,
             )

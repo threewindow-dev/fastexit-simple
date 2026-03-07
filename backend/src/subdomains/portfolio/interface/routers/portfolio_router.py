@@ -292,6 +292,7 @@ async def list_products(
             investment_type=r.investment_type,
             risk_level=r.risk_level,
             characteristics=r.characteristics,
+            allow_snapshot_input=r.allow_snapshot_input,
             display_order=r.display_order,
             created_at=_iso(r.created_at),
         )
@@ -318,6 +319,7 @@ async def create_product(
         investment_type=request.investment_type,
         characteristics=request.characteristics,
         risk_level=request.risk_level,
+        allow_snapshot_input=request.allow_snapshot_input,
         display_order=request.display_order,
     )
     result = await service.create_product(cmd)
@@ -330,6 +332,7 @@ async def create_product(
         investment_type=result.investment_type,
         characteristics=result.characteristics,
         risk_level=result.risk_level,
+        allow_snapshot_input=result.allow_snapshot_input,
         display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
@@ -357,6 +360,7 @@ async def update_product(
         investment_type=request.investment_type,
         characteristics=request.characteristics,
         risk_level=request.risk_level,
+        allow_snapshot_input=request.allow_snapshot_input,
     )
     result = await service.update_product(cmd)
     data = ProductResponseData(
@@ -368,6 +372,7 @@ async def update_product(
         investment_type=result.investment_type,
         characteristics=result.characteristics,
         risk_level=result.risk_level,
+        allow_snapshot_input=result.allow_snapshot_input,
         display_order=result.display_order,
         created_at=_iso(result.created_at),
     )

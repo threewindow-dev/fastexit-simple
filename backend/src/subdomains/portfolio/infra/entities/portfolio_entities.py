@@ -54,6 +54,7 @@ class ProductEntity(Base):
     investment_type = Column(String(50), nullable=False)
     characteristics = Column(ARRAY(String), nullable=True)
     risk_level = Column(String(20), nullable=False)
+    allow_snapshot_input = Column(Boolean, nullable=False, default=True)
     display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
 

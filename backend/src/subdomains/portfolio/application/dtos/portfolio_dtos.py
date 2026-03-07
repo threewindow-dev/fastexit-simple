@@ -51,6 +51,7 @@ class CreateProductCommand:
     investment_type: str
     characteristics: list[str] | None
     risk_level: str
+    allow_snapshot_input: bool = True
     display_order: int = 0
 
 
@@ -64,6 +65,7 @@ class UpdateProductCommand:
     investment_type: str
     characteristics: list[str] | None
     risk_level: str
+    allow_snapshot_input: bool = True
 
 
 @dataclass
@@ -268,6 +270,7 @@ class ProductResult:
     investment_type: str
     characteristics: list[str] | None
     risk_level: str
+    allow_snapshot_input: bool
     display_order: int
     created_at: datetime
 
@@ -282,6 +285,7 @@ class ProductResult:
             investment_type=model.investment_type,
             characteristics=model.characteristics,
             risk_level=model.risk_level,
+            allow_snapshot_input=model.allow_snapshot_input,
             display_order=model.display_order,
             created_at=model.created_at,
         )

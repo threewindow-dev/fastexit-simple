@@ -138,6 +138,7 @@ async def test_db_pool(postgres_container):
                     investment_type VARCHAR(50) NOT NULL CHECK (investment_type IN ('직접', 'ETF')),
                     characteristics TEXT[] NULL,
                     risk_level VARCHAR(20) NOT NULL CHECK (risk_level IN ('안전', '위험')),
+                    allow_snapshot_input BOOLEAN NOT NULL DEFAULT TRUE,
                     display_order INTEGER NOT NULL DEFAULT 0,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE (product_name, asset_class, region, currency, investment_type)
@@ -453,6 +454,7 @@ class TestCreateProduct:
         assert data["message"] == "success"
         assert data["data"]["product_name"] == "삼성전자"
         assert data["data"]["asset_class"] == "주식"
+        assert data["data"]["allow_snapshot_input"] is True
         assert data["data"]["product_id"] is not None
 
     async def test_create_product_with_characteristics(self, client, clean_db):
@@ -475,6 +477,25 @@ class TestCreateProduct:
         assert response.status_code == 201
         data = response.json()
         assert data["data"]["characteristics"] == ["배당", "인덱스"]
+
+    async def test_create_product_with_snapshot_input_disabled(self, client, clean_db):
+        """Should create product with allow_snapshot_input=false"""
+        payload = {
+            "product_name": "평가금액 보정",
+            "asset_class": "기타자산",
+            "region": "대한민국",
+            "currency": "KRW",
+            "investment_type": "직접",
+            "characteristics": ["보정"],
+            "risk_level": "안전",
+            "allow_snapshot_input": False,
+        }
+
+        response = await client.post("/api/portfolio/products", json=payload)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["data"]["allow_snapshot_input"] is False
 
 
 # ============================================================================
@@ -770,6 +791,60 @@ class TestSnapshotHoldings:
         assert data["code"] == 0
         assert data["data"]["holding_id"] == holding_id
         assert data["data"]["valuation_amount"] == 1000000.0
+
+    async def test_upsert_snapshot_holding_rejects_disallowed_product(
+        self, client, clean_db
+    ):
+        """Should reject snapshot holding input when product disallows snapshot input"""
+        inst_response = await client.post(
+            "/api/portfolio/institutions", json={"name": "KB증권", "type": "증권사"}
+        )
+        institution_id = inst_response.json()["data"]["institution_id"]
+
+        prod_response = await client.post(
+            "/api/portfolio/products",
+            json={
+                "product_name": "평가금액 보정",
+                "asset_class": "기타자산",
+                "region": "대한민국",
+                "currency": "KRW",
+                "investment_type": "직접",
+                "risk_level": "안전",
+                "allow_snapshot_input": False,
+            },
+        )
+        product_id = prod_response.json()["data"]["product_id"]
+
+        acc_response = await client.post(
+            "/api/portfolio/accounts",
+            json={
+                "institution_id": institution_id,
+                "name": "계좌1",
+                "type": "위탁계좌",
+            },
+        )
+        account_id = acc_response.json()["data"]["account_id"]
+
+        holding_response = await client.post(
+            "/api/portfolio/holdings",
+            json={"account_id": account_id, "product_id": product_id},
+        )
+        holding_id = holding_response.json()["data"]["holding_id"]
+
+        snapshot_response = await client.post(
+            "/api/portfolio/snapshots",
+            json={"user_id": 1, "reference_date": "2025-01-22"},
+        )
+        snapshot_id = snapshot_response.json()["data"]["snapshot_id"]
+
+        response = await client.post(
+            f"/api/portfolio/snapshots/{snapshot_id}/holdings/{holding_id}",
+            json={"valuation_amount": 1000000.0, "data_source": "manual"},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert data["code"] == "SNAPSHOT_HOLDING_INVALID_STATE"
 
 
 class TestSnapshotLock:

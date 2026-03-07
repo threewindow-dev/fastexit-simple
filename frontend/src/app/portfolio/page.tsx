@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, ComposedChart, Bar, BarChart } from 'recharts';
 import styles from './portfolio.module.css';
+import { filterSnapshotInputEligibleHoldings } from './snapshotInputPolicy';
 
 interface Institution {
   institution_id: number;
@@ -21,6 +22,7 @@ interface Product {
   investment_type: string;
   characteristics?: string[];
   risk_level: string;
+  allow_snapshot_input: boolean;
   display_order: number;
   created_at: string;
 }
@@ -230,6 +232,7 @@ export default function PortfolioPage() {
     currency: 'KRW',
     investment_type: '직접',
     risk_level: '위험',
+    allow_snapshot_input: true,
     characteristics: '',
   });
   const [showProductForm, setShowProductForm] = useState(false);
@@ -241,6 +244,7 @@ export default function PortfolioPage() {
     currency: string;
     investment_type: string;
     risk_level: string;
+    allow_snapshot_input: boolean;
     characteristics: string;
   } | null>(null);
   const [showProductEditForm, setShowProductEditForm] = useState(false);
@@ -329,8 +333,7 @@ export default function PortfolioPage() {
     }
 
     const draftMap: Record<number, string> = {};
-    holdings
-      .filter((holding) => !holding.deleted_at)
+    filterSnapshotInputEligibleHoldings(holdings, products)
       .forEach((holding) => {
         const existing = snapshotHoldings.find(
           (item) => item.snapshot_id === snapshotId && item.holding_id === holding.holding_id
@@ -885,7 +888,7 @@ export default function PortfolioPage() {
 
     const snapshotId = parseInt(selectedSnapshotId, 10);
     setSnapshotHoldingDrafts(buildSnapshotDrafts(snapshotId, true));
-  }, [selectedSnapshotId, holdings, snapshotHoldings]);
+  }, [selectedSnapshotId, holdings, products, snapshotHoldings]);
 
   useEffect(() => {
     if (!selectedSnapshotId || typeof window === 'undefined') {
@@ -1447,6 +1450,7 @@ export default function PortfolioPage() {
         currency: 'KRW',
         investment_type: '직접',
         risk_level: '위험',
+        allow_snapshot_input: true,
         characteristics: '',
       });
       setShowProductForm(false);
@@ -1467,6 +1471,7 @@ export default function PortfolioPage() {
       currency: product.currency,
       investment_type: product.investment_type,
       risk_level: product.risk_level,
+      allow_snapshot_input: product.allow_snapshot_input,
       characteristics: product.characteristics?.join(', ') || '',
     });
     setShowProductEditForm(true);
@@ -1489,6 +1494,7 @@ export default function PortfolioPage() {
         currency: editingProduct.currency,
         investment_type: editingProduct.investment_type,
         risk_level: editingProduct.risk_level,
+        allow_snapshot_input: editingProduct.allow_snapshot_input,
         characteristics: editingProduct.characteristics
           ? editingProduct.characteristics.split(',').map((s) => s.trim())
           : undefined,
@@ -1851,8 +1857,7 @@ export default function PortfolioPage() {
         existingByHoldingId.set(item.holding_id, item);
       });
 
-    const targets = holdings
-      .filter((holding) => !holding.deleted_at)
+    const targets = filterSnapshotInputEligibleHoldings(holdings, products)
       .map((holding) => ({
         holding,
         amount: snapshotHoldingDrafts[holding.holding_id] ?? '',
@@ -2411,6 +2416,16 @@ export default function PortfolioPage() {
                 <option value="안전">안전</option>
                 <option value="위험">위험</option>
               </select>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={newProduct.allow_snapshot_input}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, allow_snapshot_input: e.target.checked })
+                  }
+                />
+                스냅샷 평가금액 입력 허용
+              </label>
               <input
                 type="text"
                 placeholder="특성 (쉼표로 구분, 선택사항)"
@@ -2500,6 +2515,19 @@ export default function PortfolioPage() {
                 <option value="안전">안전</option>
                 <option value="위험">위험</option>
               </select>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={editingProduct.allow_snapshot_input}
+                  onChange={(e) =>
+                    setEditingProduct({
+                      ...editingProduct,
+                      allow_snapshot_input: e.target.checked,
+                    })
+                  }
+                />
+                스냅샷 평가금액 입력 허용
+              </label>
               <input
                 type="text"
                 placeholder="특성 (쉼표로 구분, 선택사항)"
@@ -2532,6 +2560,7 @@ export default function PortfolioPage() {
                   <th>통화</th>
                   <th>투자유형</th>
                   <th>위험도</th>
+                  <th>스냅샷 입력</th>
                   <th>작업</th>
                 </tr>
               </thead>
@@ -2558,6 +2587,7 @@ export default function PortfolioPage() {
                     <td>{prod.currency}</td>
                     <td>{prod.investment_type}</td>
                     <td>{prod.risk_level}</td>
+                    <td>{prod.allow_snapshot_input ? '허용' : '제외'}</td>
                     <td>
                       <div className={styles.actionButtons}>
                         <button onClick={() => openProductEdit(prod)}>수정</button>
@@ -3581,8 +3611,7 @@ export default function PortfolioPage() {
                   });
               }
 
-              const views = holdings
-                .filter((holding) => !holding.deleted_at)
+              const views = filterSnapshotInputEligibleHoldings(holdings, products)
                 .map((holding) => {
                   const account = accounts.find((a) => a.account_id === holding.account_id) || null;
                   const institution = institutions.find((i) => i.institution_id === account?.institution_id) || null;

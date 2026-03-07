@@ -193,6 +193,7 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             investment_type=product.investment_type,
             characteristics=product.characteristics,
             risk_level=product.risk_level,
+            allow_snapshot_input=product.allow_snapshot_input,
             display_order=product.display_order,
         )
         session.add(entity)
@@ -206,6 +207,7 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             investment_type=entity.investment_type,
             characteristics=entity.characteristics,
             risk_level=entity.risk_level,
+            allow_snapshot_input=entity.allow_snapshot_input,
             display_order=entity.display_order,
             created_at=entity.created_at,
         )
@@ -228,6 +230,7 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             investment_type=entity.investment_type,
             characteristics=entity.characteristics,
             risk_level=entity.risk_level,
+            allow_snapshot_input=entity.allow_snapshot_input,
             display_order=entity.display_order,
             created_at=entity.created_at,
         )
@@ -246,6 +249,7 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
                 investment_type=product.investment_type,
                 characteristics=product.characteristics,
                 risk_level=product.risk_level,
+                allow_snapshot_input=product.allow_snapshot_input,
                 display_order=product.display_order,
             )
         )
@@ -293,6 +297,7 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
                 investment_type=e.investment_type,
                 characteristics=e.characteristics,
                 risk_level=e.risk_level,
+                allow_snapshot_input=e.allow_snapshot_input,
                 display_order=e.display_order,
                 created_at=e.created_at,
             )

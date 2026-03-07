@@ -22,6 +22,7 @@ class Product:
     investment_type: str
     characteristics: list[str] | None
     risk_level: str
+    allow_snapshot_input: bool
     display_order: int
     created_at: datetime
 
@@ -49,6 +50,7 @@ class Product:
         investment_type: str,
         characteristics: list[str] | None,
         risk_level: str,
+        allow_snapshot_input: bool = True,
         display_order: int = 0,
     ) -> "Product":
         return cls(
@@ -60,6 +62,7 @@ class Product:
             investment_type=investment_type,
             characteristics=characteristics,
             risk_level=risk_level,
+            allow_snapshot_input=allow_snapshot_input,
             display_order=display_order,
             created_at=datetime.utcnow(),
         )
@@ -74,6 +77,7 @@ class Product:
             "investment_type": self.investment_type,
             "characteristics": self.characteristics,
             "risk_level": self.risk_level,
+            "allow_snapshot_input": self.allow_snapshot_input,
             "display_order": self.display_order,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -88,6 +92,7 @@ class Product:
         investment_type: str,
         characteristics: list[str] | None,
         risk_level: str,
+        allow_snapshot_input: bool,
     ) -> None:
         self.product_name = product_name
         self.asset_class = asset_class
@@ -96,4 +101,5 @@ class Product:
         self.investment_type = investment_type
         self.characteristics = characteristics
         self.risk_level = risk_level
+        self.allow_snapshot_input = allow_snapshot_input
         self.__post_init__()
