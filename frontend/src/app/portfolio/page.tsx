@@ -185,7 +185,7 @@ const getDataSourceLabel = (dataSource: string): string => {
 };
 
 export default function PortfolioPage() {
-  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'reports' | 'weeklyReport' | 'annualReport' | 'snapshotAnalysis' | 'targetAllocations'>('institutions');
+  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'weeklyReport' | 'annualReport' | 'snapshotAnalysis' | 'targetAllocations'>('institutions');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -840,9 +840,6 @@ export default function PortfolioPage() {
       fetchWeeklyReport();
     } else if (activeTab === 'annualReport') {
       fetchAnnualReport();
-    } else if (activeTab === 'reports') {
-      fetchAccounts();
-      fetchAccountGroups();
     } else if (activeTab === 'snapshotAnalysis') {
       fetchSnapshots();
       fetchSnapshotHoldings();
@@ -2188,12 +2185,6 @@ export default function PortfolioPage() {
           onClick={() => setActiveTab('annualSnapshots')}
         >
           연간 스냅샷
-        </button>
-        <button
-          className={activeTab === 'reports' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('reports')}
-        >
-          보고서
         </button>
         <button
           className={activeTab === 'weeklyReport' ? styles.activeTab : ''}
@@ -3824,84 +3815,6 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* Reports Tab */}
-      {activeTab === 'reports' && (
-        <div className={styles.tabContent}>
-          <div className={styles.sectionHeader}>
-            <h2>보고서 조회</h2>
-            <button onClick={handleLoadReport}>조회</button>
-          </div>
-
-          <div className={styles.form}>
-            <select
-              value={reportFilter.report_type}
-              onChange={(e) => setReportFilter({ ...reportFilter, report_type: e.target.value })}
-            >
-              <option value="weekly_account">주간 계좌 보고서</option>
-              <option value="annual_account">연간 계좌 보고서</option>
-              <option value="weekly_account_group">주간 계좌그룹 보고서</option>
-              <option value="annual_account_group">연간 계좌그룹 보고서</option>
-              <option value="asset_class">자산클래스 보고서</option>
-            </select>
-            <input
-              type="date"
-              value={reportFilter.reference_date}
-              onChange={(e) => setReportFilter({ ...reportFilter, reference_date: e.target.value })}
-            />
-            {(reportFilter.report_type === 'weekly_account' || reportFilter.report_type === 'annual_account') && (
-              <input
-                type="number"
-                placeholder="계좌 ID"
-                value={reportFilter.account_id}
-                onChange={(e) => setReportFilter({ ...reportFilter, account_id: e.target.value })}
-              />
-            )}
-            {(reportFilter.report_type === 'weekly_account_group' || reportFilter.report_type === 'annual_account_group') && (
-              <select
-                value={reportFilter.account_group_id}
-                onChange={(e) => setReportFilter({ ...reportFilter, account_group_id: e.target.value })}
-              >
-                <option value="">계좌그룹 선택</option>
-                {accountGroups.map((group) => (
-                  <option key={group.account_group_id} value={group.account_group_id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {loading ? (
-            <div className={styles.loading}>로딩 중...</div>
-          ) : reports.length > 0 ? (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>기간유형</th>
-                  <th>기준일</th>
-                  <th>계좌/그룹/자산</th>
-                  <th>총 평가금액</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((report, idx) => (
-                  <tr key={idx}>
-                    <td>{report.period_type}</td>
-                    <td>{report.reference_date}</td>
-                    <td>{report.account_name || report.account_group_name || report.asset_class || '-'}</td>
-                    <td>{report.total_value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className={styles.infoBox}>
-              <p>보고서 타입을 선택하고 조회 버튼을 클릭하세요.</p>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Weekly Pivot Report Tab */}
       {activeTab === 'weeklyReport' && (
         <div className={styles.tabContent}>
@@ -4129,7 +4042,7 @@ export default function PortfolioPage() {
                     </th>
                     {annualReportData.weeks.map((yearPoint) => (
                       <th key={yearPoint.weekly_snapshot_id} style={{ backgroundColor: '#fff', minWidth: '100px', fontSize: '11px', padding: '6px 4px', textAlign: 'center' }}>
-                        {new Date(yearPoint.reference_date).getFullYear()}년
+                        {new Date(yearPoint.reference_date).getFullYear() - 1}년
                       </th>
                     ))}
                   </tr>
@@ -4608,7 +4521,7 @@ export default function PortfolioPage() {
             
             // annualSnapshots를 연도 기준으로 처리
             annualSnapshots.forEach((snap) => {
-              const year = snap.reference_date.substring(0, 4); // YYYY 추출
+              const year = String(Number(snap.reference_date.substring(0, 4)) - 1); // 연간 스냅샷 연도 -1
               
               if (!yearDataMap.has(year)) {
                 yearDataMap.set(year, { year, total: 0 });
@@ -4633,7 +4546,7 @@ export default function PortfolioPage() {
               
               if (!relatedSnapshot) return;
               
-              const year = relatedSnapshot.reference_date.substring(0, 4);
+              const year = String(Number(relatedSnapshot.reference_date.substring(0, 4)) - 1); // 연간 스냅샷 연도 -1
               
               // account_id로 계좌그룹 찾기
               const accountGroup = accountGroups.find((ag) =>
@@ -4650,6 +4563,35 @@ export default function PortfolioPage() {
               const groupMap = yearAccountGroupMap.get(year)!;
               groupMap.set(accountGroupName, (groupMap.get(accountGroupName) || 0) + amount);
             });
+
+            // 최신 일간 스냅샷 (당일) 데이터 추가
+            const latestDailySnapshot = snapshots
+              .sort((a, b) => new Date(b.reference_date).getTime() - new Date(a.reference_date).getTime())[0];
+            
+            if (latestDailySnapshot) {
+              const currentYear = String(new Date(latestDailySnapshot.reference_date).getFullYear());
+              const latestDailyHoldings = snapshotHoldings.filter(
+                (sh) => sh.snapshot_id === latestDailySnapshot.snapshot_id
+              );
+              
+              if (!yearAccountGroupMap.has(currentYear)) {
+                yearAccountGroupMap.set(currentYear, new Map());
+              }
+              const latestYearGroupMap = yearAccountGroupMap.get(currentYear)!;
+              
+              latestDailyHoldings.forEach((snapshotHolding) => {
+                const holding = holdings.find((h) => h.holding_id === snapshotHolding.holding_id);
+                if (!holding) return;
+                
+                const accountGroup = accountGroups.find((ag) =>
+                  ag.account_ids.includes(holding.account_id)
+                );
+                const accountGroupName = accountGroup?.name || '미분류';
+                const amount = Number(snapshotHolding.valuation_amount || 0);
+                
+                latestYearGroupMap.set(accountGroupName, (latestYearGroupMap.get(accountGroupName) || 0) + amount);
+              });
+            }
 
             // 차트 데이터 생성 (전체합계를 먼저 추가하여 Legend 순서 제어)
             const chartDataByYear = Array.from(yearAccountGroupMap.entries())

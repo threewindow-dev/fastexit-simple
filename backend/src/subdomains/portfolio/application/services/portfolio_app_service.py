@@ -693,7 +693,7 @@ class PortfolioAppService:
             WeeklyPivotWeekInfo(
                 weekly_snapshot_id=snap.annual_snapshot_id,
                 reference_date=snap.reference_date,
-                week_number=snap.reference_date.year,
+                week_number=snap.reference_date.year - 1,
             )
             for snap in year_snapshots
         ]

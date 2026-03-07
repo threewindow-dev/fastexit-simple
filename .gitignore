@@ -13,6 +13,7 @@ __pycache__/
 dist/
 build/
 venv/
+scripts/.venv/*
 env/
 .env
 *.log
