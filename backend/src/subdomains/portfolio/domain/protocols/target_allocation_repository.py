@@ -1,6 +1,7 @@
 """Protocol for target allocation repository."""
 
 from abc import ABC, abstractmethod
+from decimal import Decimal
 
 from subdomains.portfolio.domain.models import (
     TargetAllocation,
@@ -86,4 +87,30 @@ class TargetAllocationRepository(ABC):
     @abstractmethod
     async def delete_total_by_year(self, year: int) -> None:
         """Delete annual total target allocation by year."""
+        pass
+
+    # ========== Asset Class Target Allocations ==========
+
+    @abstractmethod
+    async def save_asset_class(
+        self, year: int, asset_class: str, target_percentage: Decimal
+    ) -> dict:
+        """Save or update an asset class target allocation."""
+        pass
+
+    @abstractmethod
+    async def get_asset_class_by_year_and_class(
+        self, year: int, asset_class: str
+    ) -> dict | None:
+        """Get an asset class target allocation by year and asset class."""
+        pass
+
+    @abstractmethod
+    async def get_asset_classes_by_year(self, year: int) -> list[dict]:
+        """Get all asset class target allocations for a specific year."""
+        pass
+
+    @abstractmethod
+    async def delete_asset_class(self, target_allocation_asset_class_id: int) -> None:
+        """Delete an asset class target allocation."""
         pass

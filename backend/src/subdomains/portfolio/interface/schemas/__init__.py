@@ -74,6 +74,9 @@ from .target_allocation_schema import (
     TargetAllocationSchema,
     CreateTargetAllocationRequest,
     TargetAllocationListResponse,
+    TargetAllocationAssetClassSchema,
+    CreateTargetAllocationAssetClassRequest,
+    TargetAllocationAssetClassListResponse,
 )
 from .target_allocation_account_schema import (
     TargetAllocationAccountSchema,

@@ -15,6 +15,7 @@ from .portfolio_entities import (
     TargetAllocationAccountEntity,
     TargetAllocationTotalEntity,
 )
+from .target_allocation_asset_class_entity import TargetAllocationAssetClassEntity
 
 __all__ = [
     "InstitutionEntity",
@@ -32,4 +33,5 @@ __all__ = [
     "TargetAllocationEntity",
     "TargetAllocationAccountEntity",
     "TargetAllocationTotalEntity",
+    "TargetAllocationAssetClassEntity",
 ]

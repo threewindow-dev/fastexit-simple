@@ -202,3 +202,33 @@ class TargetAllocationAppService:
     async def delete_total_target_by_year(self, year: int) -> None:
         """Delete annual total target allocation by year."""
         await self.repository.delete_total_by_year(year)
+
+    # ========== Asset Class Target Allocations ==========
+
+    @transactional(mode="writable")
+    async def create_or_update_asset_class_target(
+        self, year: int, asset_class: str, target_percentage: Decimal
+    ) -> dict:
+        """Create or update an asset class target allocation."""
+        return await self.repository.save_asset_class(
+            year, asset_class, float(target_percentage)
+        )
+
+    @transactional(mode="readonly")
+    async def get_asset_class_targets_by_year(self, year: int) -> list[dict]:
+        """Get all asset class target allocations for a specific year."""
+        return await self.repository.get_asset_classes_by_year(year)
+
+    @transactional(mode="readonly")
+    async def get_asset_class_target(self, year: int, asset_class: str) -> dict | None:
+        """Get a specific asset class target allocation."""
+        return await self.repository.get_asset_class_by_year_and_class(
+            year, asset_class
+        )
+
+    @transactional(mode="writable")
+    async def delete_asset_class_target(
+        self, target_allocation_asset_class_id: int
+    ) -> None:
+        """Delete an asset class target allocation."""
+        await self.repository.delete_asset_class(target_allocation_asset_class_id)

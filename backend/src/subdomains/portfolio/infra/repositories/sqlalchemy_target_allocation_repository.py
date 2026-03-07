@@ -324,3 +324,123 @@ class SqlAlchemyTargetAllocationRepository(TargetAllocationRepository):
             created_at=entity.created_at,
             updated_at=entity.updated_at,
         )
+
+    # ========== Asset Class Target Allocations ==========
+
+    @use_transaction()
+    async def save_asset_class(
+        self, conn: AsyncSession, year: int, asset_class: str, target_percentage: float
+    ) -> dict:
+        """Save or update an asset class target allocation."""
+        from decimal import Decimal
+        from datetime import datetime
+        from subdomains.portfolio.infra.entities.target_allocation_asset_class_entity import (
+            TargetAllocationAssetClassEntity,
+        )
+
+        session: AsyncSession = conn
+
+        # Check if exists
+        stmt = select(TargetAllocationAssetClassEntity).where(
+            (TargetAllocationAssetClassEntity.year == year)
+            & (TargetAllocationAssetClassEntity.asset_class == asset_class)
+        )
+        result = await session.execute(stmt)
+        entity = result.scalars().first()
+
+        if entity:
+            # Update
+            entity.target_percentage = Decimal(str(target_percentage))
+            entity.updated_at = datetime.utcnow()
+        else:
+            # Insert
+            entity = TargetAllocationAssetClassEntity(
+                year=year,
+                asset_class=asset_class,
+                target_percentage=Decimal(str(target_percentage)),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+            session.add(entity)
+
+        await session.flush()
+        await session.refresh(entity)
+        return {
+            "target_allocation_asset_class_id": entity.target_allocation_asset_class_id,
+            "year": entity.year,
+            "asset_class": entity.asset_class,
+            "target_percentage": float(entity.target_percentage),
+            "created_at": entity.created_at.isoformat(),
+            "updated_at": entity.updated_at.isoformat(),
+        }
+
+    @use_transaction()
+    async def get_asset_class_by_year_and_class(
+        self, conn: AsyncSession, year: int, asset_class: str
+    ) -> dict | None:
+        """Get an asset class target allocation by year and asset class."""
+        from subdomains.portfolio.infra.entities.target_allocation_asset_class_entity import (
+            TargetAllocationAssetClassEntity,
+        )
+
+        stmt = select(TargetAllocationAssetClassEntity).where(
+            (TargetAllocationAssetClassEntity.year == year)
+            & (TargetAllocationAssetClassEntity.asset_class == asset_class)
+        )
+        result = await conn.execute(stmt)
+        entity = result.scalars().first()
+        if not entity:
+            return None
+        return {
+            "target_allocation_asset_class_id": entity.target_allocation_asset_class_id,
+            "year": entity.year,
+            "asset_class": entity.asset_class,
+            "target_percentage": float(entity.target_percentage),
+            "created_at": entity.created_at.isoformat(),
+            "updated_at": entity.updated_at.isoformat(),
+        }
+
+    @use_transaction()
+    async def get_asset_classes_by_year(
+        self, conn: AsyncSession, year: int
+    ) -> list[dict]:
+        """Get all asset class target allocations for a specific year."""
+        from subdomains.portfolio.infra.entities.target_allocation_asset_class_entity import (
+            TargetAllocationAssetClassEntity,
+        )
+
+        stmt = select(TargetAllocationAssetClassEntity).where(
+            TargetAllocationAssetClassEntity.year == year
+        )
+        result = await conn.execute(stmt)
+        entities = result.scalars().all()
+        return [
+            {
+                "target_allocation_asset_class_id": entity.target_allocation_asset_class_id,
+                "year": entity.year,
+                "asset_class": entity.asset_class,
+                "target_percentage": float(entity.target_percentage),
+                "created_at": entity.created_at.isoformat(),
+                "updated_at": entity.updated_at.isoformat(),
+            }
+            for entity in entities
+        ]
+
+    @use_transaction()
+    async def delete_asset_class(
+        self, conn: AsyncSession, target_allocation_asset_class_id: int
+    ) -> None:
+        """Delete an asset class target allocation."""
+        from subdomains.portfolio.infra.entities.target_allocation_asset_class_entity import (
+            TargetAllocationAssetClassEntity,
+        )
+
+        stmt = select(TargetAllocationAssetClassEntity).where(
+            TargetAllocationAssetClassEntity.target_allocation_asset_class_id
+            == target_allocation_asset_class_id
+        )
+        result = await conn.execute(stmt)
+        entity = result.scalars().first()
+        if entity:
+            await conn.delete(entity)
+            await conn.flush()

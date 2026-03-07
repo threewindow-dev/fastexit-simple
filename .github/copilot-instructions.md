@@ -19,4 +19,7 @@
 - **Local dev**: Backend `uvicorn src.main:app --reload --port 8000` after `pip install -r requirements.txt` and setting `DB_*`. Frontend `npm install && npm run dev` with `BACKEND_URL` if hitting a local backend. Docker Compose runs both (ports: FE 3000, BE mapped to 8001, PG 5433) per [README.md](README.md#L1-L170).
 - **Conventions**: Stick to DDD layering, avoid importing infra in interface/application; route handlers depend only on services via FastAPI `Depends`. Preserve response shape and error codes. When adding schemas, follow existing Pydantic pattern (examples, descriptions) in the user module.
 - **When adding tables**: For SQLAlchemy mode, add ORM entities and let `_create_all_tables` run at startup. For psycopg mode, add numbered SQL under [backend/sql/schema](backend/sql/schema) executed in order on startup.
+  - **⚠️ CRITICAL - 데이터 손실 방지**: 테이블 구조 변경 시 **절대로 DB 볼륨을 삭제하지 않습니다**. SQLAlchemy는 누락된 테이블만 자동으로 생성하며, 기존 데이터는 유지됩니다. [DATABASE_MIGRATION_STANDARDS.md][../dev-standards/DATABASE_MIGRATION_STANDARDS.md] 참고.
+  - **Entity 추가 절차**: (1) 새 Entity 파일 생성, (2) `entities/__init__.py`에서 export, (3) `main.py`에서 import, (4) 컨테이너 재시작 → 테이블 자동 생성
+  - **기존 테이블 수정**: 컬럼 추가/삭제가 필요하면 마이그레이션 스크립트 생성 (SQL 또는 Alembic)
 - **External deps**: DB via PostgreSQL 17; psycopg3 and SQLAlchemy async; FastAPI 0.127.x; Next.js 15/React 19 with Node 24.x.

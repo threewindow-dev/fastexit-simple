@@ -411,3 +411,139 @@ class PsycopgTargetAllocationRepository(TargetAllocationRepository):
             )
             if cur.rowcount == 0:
                 raise ValueError(f"Target allocation total for year {year} not found")
+
+    # ========== Asset Class Target Allocations ==========
+
+    @use_transaction()
+    async def save_asset_class(
+        self, conn, year: int, asset_class: str, target_percentage: float
+    ) -> dict:
+        """Save or update an asset class target allocation."""
+        current_time = datetime.utcnow()
+        async with conn.cursor() as cur:
+            # Check if exists
+            await cur.execute(
+                """
+                SELECT target_allocation_asset_class_id, created_at
+                FROM target_allocation_asset_classes
+                WHERE year = %s AND asset_class = %s
+                """,
+                (year, asset_class),
+            )
+            row = await cur.fetchone()
+
+            if row:
+                # Update
+                await cur.execute(
+                    """
+                    UPDATE target_allocation_asset_classes
+                    SET target_percentage = %s, updated_at = %s
+                    WHERE target_allocation_asset_class_id = %s
+                    RETURNING target_allocation_asset_class_id, year, asset_class, 
+                              target_percentage, created_at, updated_at
+                    """,
+                    (Decimal(str(target_percentage)), current_time, row[0]),
+                )
+            else:
+                # Insert
+                await cur.execute(
+                    """
+                    INSERT INTO target_allocation_asset_classes 
+                    (year, asset_class, target_percentage, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING target_allocation_asset_class_id, year, asset_class, 
+                              target_percentage, created_at, updated_at
+                    """,
+                    (
+                        year,
+                        asset_class,
+                        Decimal(str(target_percentage)),
+                        current_time,
+                        current_time,
+                    ),
+                )
+
+            result_row = await cur.fetchone()
+            if not result_row:
+                raise ValueError("Failed to save asset class target allocation")
+
+            return {
+                "target_allocation_asset_class_id": result_row[0],
+                "year": result_row[1],
+                "asset_class": result_row[2],
+                "target_percentage": float(result_row[3]),
+                "created_at": result_row[4].isoformat(),
+                "updated_at": result_row[5].isoformat(),
+            }
+
+    @use_transaction()
+    async def get_asset_class_by_year_and_class(
+        self, conn, year: int, asset_class: str
+    ) -> dict | None:
+        """Get an asset class target allocation by year and asset class."""
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT target_allocation_asset_class_id, year, asset_class, 
+                       target_percentage, created_at, updated_at
+                FROM target_allocation_asset_classes
+                WHERE year = %s AND asset_class = %s
+                """,
+                (year, asset_class),
+            )
+            row = await cur.fetchone()
+            if not row:
+                return None
+            return {
+                "target_allocation_asset_class_id": row[0],
+                "year": row[1],
+                "asset_class": row[2],
+                "target_percentage": float(row[3]),
+                "created_at": row[4].isoformat(),
+                "updated_at": row[5].isoformat(),
+            }
+
+    @use_transaction()
+    async def get_asset_classes_by_year(self, conn, year: int) -> list[dict]:
+        """Get all asset class target allocations for a specific year."""
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT target_allocation_asset_class_id, year, asset_class, 
+                       target_percentage, created_at, updated_at
+                FROM target_allocation_asset_classes
+                WHERE year = %s
+                ORDER BY asset_class
+                """,
+                (year,),
+            )
+            rows = await cur.fetchall()
+            return [
+                {
+                    "target_allocation_asset_class_id": row[0],
+                    "year": row[1],
+                    "asset_class": row[2],
+                    "target_percentage": float(row[3]),
+                    "created_at": row[4].isoformat(),
+                    "updated_at": row[5].isoformat(),
+                }
+                for row in rows
+            ]
+
+    @use_transaction()
+    async def delete_asset_class(
+        self, conn, target_allocation_asset_class_id: int
+    ) -> None:
+        """Delete an asset class target allocation."""
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM target_allocation_asset_classes
+                WHERE target_allocation_asset_class_id = %s
+                """,
+                (target_allocation_asset_class_id,),
+            )
+            if cur.rowcount == 0:
+                raise ValueError(
+                    f"Asset class target allocation with ID {target_allocation_asset_class_id} not found"
+                )

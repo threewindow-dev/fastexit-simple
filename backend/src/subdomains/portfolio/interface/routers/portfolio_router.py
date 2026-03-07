@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Path, Query, status
 
 from core.common_responses import common_responses
 from dependencies import get_portfolio_app_service
+from shared.schemas import ApiResponse
 from subdomains.portfolio.application.dtos import (
     CreateInstitutionCommand,
     UpdateInstitutionCommand,
@@ -124,6 +125,7 @@ from subdomains.portfolio.interface.schemas import (
     CreateTargetAllocationTotalRequest,
     TargetAllocationTotalSchema,
     TargetAllocationTotalResponse,
+    CreateTargetAllocationAssetClassRequest,
 )
 
 router = APIRouter(
@@ -1585,3 +1587,81 @@ async def delete_target_allocation(
         target_allocation_id=target_allocation_id
     )
     return DeleteTargetAllocationResponse(code=0, message="success", data=None)
+
+
+# ========== Asset Class Target Allocation Endpoints ==========
+
+
+@router.post(
+    "/target-allocations/asset-classes",
+    response_model=ApiResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="자산클래스별 목표 비율 일괄 저장",
+    responses={**common_responses},
+)
+async def batch_create_or_update_asset_class_targets(
+    request: list[CreateTargetAllocationAssetClassRequest],
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> ApiResponse:
+    """자산클래스별 목표 비율을 일괄 저장합니다."""
+    from subdomains.portfolio.interface.schemas.target_allocation_schema import (
+        TargetAllocationAssetClassSchema,
+    )
+
+    results = []
+    for item in request:
+        result = (
+            await service.target_allocation_service.create_or_update_asset_class_target(
+                year=item.year,
+                asset_class=item.asset_class,
+                target_percentage=item.target_percentage,
+            )
+        )
+        results.append(
+            TargetAllocationAssetClassSchema(
+                target_allocation_asset_class_id=result[
+                    "target_allocation_asset_class_id"
+                ],
+                year=result["year"],
+                asset_class=result["asset_class"],
+                target_percentage=result["target_percentage"],
+            )
+        )
+
+    return ApiResponse(code=0, message="success", data={"targets": results})
+
+
+@router.get(
+    "/target-allocations/asset-classes/year/{year}",
+    response_model=ApiResponse,
+    summary="연도별 자산클래스 목표 비율 조회",
+    responses={**common_responses},
+)
+async def get_asset_class_targets_by_year(
+    year: int = Path(..., description="조회할 연도", ge=2020, le=2100),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> ApiResponse:
+    """특정 연도의 모든 자산클래스 목표 비율을 조회합니다."""
+    from subdomains.portfolio.interface.schemas.target_allocation_schema import (
+        TargetAllocationAssetClassSchema,
+    )
+
+    results = await service.target_allocation_service.get_asset_class_targets_by_year(
+        year=year
+    )
+
+    targets = [
+        TargetAllocationAssetClassSchema(
+            target_allocation_asset_class_id=r["target_allocation_asset_class_id"],
+            year=r["year"],
+            asset_class=r["asset_class"],
+            target_percentage=r["target_percentage"],
+        )
+        for r in results
+    ]
+
+    return ApiResponse(
+        code=0,
+        message="success",
+        data={"year": year, "targets": targets},
+    )

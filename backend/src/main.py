@@ -21,6 +21,7 @@ from subdomains.portfolio.infra.entities import (  # noqa: F401
     TargetAllocationEntity,
     TargetAllocationAccountEntity,
     TargetAllocationTotalEntity,
+    TargetAllocationAssetClassEntity,
 )
 
 from fastapi import FastAPI

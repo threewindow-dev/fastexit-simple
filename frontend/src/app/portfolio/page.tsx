@@ -223,6 +223,8 @@ export default function PortfolioPage() {
   const [todayAccountTargetAllocations, setTodayAccountTargetAllocations] = useState<TargetAllocationAccount[]>([]);
   const [targetAccountDrafts, setTargetAccountDrafts] = useState<Record<number, string>>({});
   const [savingAllTargetAccounts, setSavingAllTargetAccounts] = useState(false);
+  const [assetClassTargets, setAssetClassTargets] = useState<Record<string, string>>({});
+  const [savingAssetClassTargets, setSavingAssetClassTargets] = useState(false);
 
   // Institution Form
   const [newInstitution, setNewInstitution] = useState({
@@ -869,6 +871,7 @@ export default function PortfolioPage() {
     } else if (activeTab === 'targetAllocations') {
       fetchAccountGroups();
       fetchAccounts();
+      fetchProducts();
       fetchAnnualReport();
       fetchSnapshots();
       fetchHoldings();
@@ -1370,6 +1373,63 @@ export default function PortfolioPage() {
       fetchWeeklyReport();
     }
   }, [weeklyReportYear]);
+
+  // Load asset class targets from API
+  useEffect(() => {
+    if (activeTab === 'targetAllocations') {
+      fetchAssetClassTargets(targetYear);
+    }
+  }, [targetYear, activeTab]);
+
+  const fetchAssetClassTargets = async (year: number) => {
+    try {
+      const response = await fetch(`/api/portfolio/target-allocations/asset-classes/year/${year}`);
+      const result = await response.json();
+      if (result.code === 0 && result.data?.targets) {
+        const targetsMap: Record<string, string> = {};
+        result.data.targets.forEach((t: any) => {
+          targetsMap[t.asset_class] = String(t.target_percentage);
+        });
+        setAssetClassTargets(targetsMap);
+      } else {
+        setAssetClassTargets({});
+      }
+    } catch (err) {
+      console.error('Failed to fetch asset class targets:', err);
+      setAssetClassTargets({});
+    }
+  };
+
+  const handleSaveAssetClassTargets = async () => {
+    try {
+      setSavingAssetClassTargets(true);
+      const payload = Object.entries(assetClassTargets)
+        .filter(([_, value]) => value && parseFloat(value) > 0)
+        .map(([asset_class, target_percentage]) => ({
+          year: targetYear,
+          asset_class,
+          target_percentage: parseFloat(target_percentage),
+        }));
+
+      const response = await fetch('/api/portfolio/target-allocations/asset-classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      if (result.code === 0) {
+        await fetchAssetClassTargets(targetYear);
+        alert(`${targetYear}년도 자산별 목표 %를 저장했습니다.`);
+      } else {
+        alert(result.message || '저장에 실패했습니다');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '저장에 실패했습니다');
+    } finally {
+      setSavingAssetClassTargets(false);
+    }
+  };
 
   const openInstitutionEdit = (institution: Institution) => {
     setEditingInstitution({
@@ -5296,6 +5356,87 @@ export default function PortfolioPage() {
                 )}
               </>
             )}
+          </div>
+
+          {/* 자산별 목표 % 입력 섹션 */}
+          <div style={{ marginTop: '48px', paddingTop: '32px', borderTop: '2px solid #ddd' }}>
+            <div className={styles.sectionHeader}>
+              <h3 style={{ margin: 0 }}>자산별 목표 비율</h3>
+              <button
+                onClick={handleSaveAssetClassTargets}
+                disabled={savingAssetClassTargets}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: savingAssetClassTargets ? '#ccc' : '#28a745',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: savingAssetClassTargets ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {savingAssetClassTargets ? '저장 중...' : '자산별 목표 % 일괄저장'}
+              </button>
+            </div>
+
+            <div className={styles.infoBox} style={{ marginTop: '16px' }}>
+              <p>{targetYear}년도 자산클래스별 목표 비율을 입력하세요.</p>
+              <p>입력한 값은 브라우저에 저장되며, 합계가 100%가 되도록 관리하세요.</p>
+            </div>
+
+            <div className={styles.tableWrapper} style={{ overflowX: 'auto', marginTop: '16px' }}>
+              <table className={styles.table} style={{ minWidth: '600px' }}>
+                <thead>
+                  <tr>
+                    <th>자산클래스</th>
+                    <th style={{ textAlign: 'right' }}>목표 비율 (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const assetClassOrder = ['주식', '채권', '금', '통화', '부동산', '가상자산'];
+                    const allAssetClasses = Array.from(new Set(products.map((p) => p.asset_class)));
+                    const sortedAssetClasses = [
+                      ...assetClassOrder.filter(ac => allAssetClasses.includes(ac)),
+                      ...allAssetClasses.filter(ac => !assetClassOrder.includes(ac)).sort()
+                    ];
+                    return sortedAssetClasses.map((assetClass) => (
+                      <tr key={assetClass}>
+                        <td>{assetClass}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            className={styles.amountInput}
+                            value={assetClassTargets[assetClass] || ''}
+                            onChange={(e) =>
+                              setAssetClassTargets((prev) => ({
+                                ...prev,
+                                [assetClass]: e.target.value,
+                              }))
+                            }
+                            placeholder="0.00"
+                            style={{ textAlign: 'right' }}
+                          />
+                        </td>
+                      </tr>
+                    ));
+                  })()}
+                  <tr style={{ fontWeight: 'bold', backgroundColor: '#e8f4f8' }}>
+                    <td>합계</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {Object.values(assetClassTargets)
+                        .reduce((sum, val) => sum + (parseFloat(val) || 0), 0)
+                        .toFixed(2)}
+                      %
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
