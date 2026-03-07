@@ -111,11 +111,36 @@ export default function Home() {
     <div className={styles.App}>
       <header className={styles['App-header']}>
         <h1>FastExit - User Management</h1>
-        <nav className={styles.nav}>
-          <a href="/" className={styles.navLink}>Users</a>
-          <a href="/portfolio" className={styles.navLink}>Portfolio</a>
-        </nav>
       </header>
+
+      <div className={styles.ribbon}>
+        {/* Group 0: Navigation */}
+        <div className={styles.ribbonGroup}>
+          <div className={styles.groupLabel}>네비게이션</div>
+          <div className={styles.groupButtons}>
+            <a href="/portfolio" style={{ textDecoration: 'none' }}>
+              <button
+                style={{
+                  padding: '0.5rem 1rem',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  color: '#333',
+                  borderBottom: '2px solid transparent',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.3s',
+                  width: '100%',
+                  textAlign: 'left',
+                }}
+              >
+                포트폴리오 관리
+              </button>
+            </a>
+          </div>
+        </div>
+      </div>
 
       <main className={styles['App-main']}>
         <div className={styles.controls}>

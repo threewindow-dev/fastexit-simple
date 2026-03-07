@@ -5,6 +5,13 @@ import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, LineChart, L
 import styles from './portfolio.module.css';
 import { filterSnapshotInputEligibleHoldings } from './snapshotInputPolicy';
 
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  full_name: string | null;
+}
+
 interface Institution {
   institution_id: number;
   name: string;
@@ -185,7 +192,16 @@ const getDataSourceLabel = (dataSource: string): string => {
 };
 
 export default function PortfolioPage() {
-  const [activeTab, setActiveTab] = useState<'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'weeklyReport' | 'annualReport' | 'snapshotAnalysis' | 'targetAllocations'>('institutions');
+  const [activeTab, setActiveTab] = useState<'users' | 'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'weeklyReport' | 'annualReport' | 'snapshotAnalysis' | 'targetAllocations'>('institutions');
+  
+  // User management states
+  const [users, setUsers] = useState<User[]>([]);
+  const [newUser, setNewUser] = useState({
+    username: '',
+    email: '',
+    full_name: ''
+  });
+  const [showUserForm, setShowUserForm] = useState(false);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -803,7 +819,9 @@ export default function PortfolioPage() {
   const isSelectedSnapshotLocked = selectedSnapshot?.status === 'locked';
 
   useEffect(() => {
-    if (activeTab === 'institutions') {
+    if (activeTab === 'users') {
+      fetchUsers();
+    } else if (activeTab === 'institutions') {
       fetchInstitutions();
     } else if (activeTab === 'products') {
       fetchProducts();
@@ -897,6 +915,68 @@ export default function PortfolioPage() {
       JSON.stringify(snapshotHoldingDrafts)
     );
   }, [selectedSnapshotId, snapshotHoldingDrafts]);
+
+  // User management functions
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/users`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch users');
+      }
+      const result = await response.json();
+      const usersList = result.data?.items || [];
+      setUsers(usersList);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`${API_BASE_URL}/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newUser),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create user');
+      }
+
+      setNewUser({ username: '', email: '', full_name: '' });
+      setShowUserForm(false);
+      fetchUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to create user');
+    }
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    if (!window.confirm('Are you sure you want to delete this user?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete user');
+      }
+
+      fetchUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete user');
+    }
+  };
 
   const fetchInstitutions = async () => {
     try {
@@ -2131,88 +2211,198 @@ export default function PortfolioPage() {
     <div className={styles.container}>
       <header className={styles.header}>
         <h1>포트폴리오 관리</h1>
-        <nav className={styles.nav}>
-          <a href="/" className={styles.navLink}>Users</a>
-          <a href="/portfolio" className={styles.navLink}>Portfolio</a>
-        </nav>
       </header>
 
-      <div className={styles.tabs}>
-        <button
-          className={activeTab === 'institutions' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('institutions')}
-        >
-          금융기관
-        </button>
-        <button
-          className={activeTab === 'accounts' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('accounts')}
-        >
-          계좌
-        </button>
-        <button
-          className={activeTab === 'accountGroups' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('accountGroups')}
-        >
-          계좌그룹
-        </button>
-        <button
-          className={activeTab === 'holdings' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('holdings')}
-        >
-          보유자산
-        </button>
-        <button
-          className={activeTab === 'products' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('products')}
-        >
-          상품
-        </button>
-        <button
-          className={activeTab === 'snapshots' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('snapshots')}
-        >
-          일일 스냅샷
-        </button>
-        <button
-          className={activeTab === 'weeklySnapshots' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('weeklySnapshots')}
-        >
-          주간 스냅샷
-        </button>
-        <button
-          className={activeTab === 'annualSnapshots' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('annualSnapshots')}
-        >
-          연간 스냅샷
-        </button>
-        <button
-          className={activeTab === 'weeklyReport' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('weeklyReport')}
-        >
-          주간 보고서
-        </button>
-        <button
-          className={activeTab === 'annualReport' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('annualReport')}
-        >
-          연간 보고서
-        </button>
-        <button
-          className={activeTab === 'snapshotAnalysis' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('snapshotAnalysis')}
-        >
-          스냅샷 분석
-        </button>
-        <button
-          className={activeTab === 'targetAllocations' ? styles.activeTab : ''}
-          onClick={() => setActiveTab('targetAllocations')}
-        >
-          목표 자산배분
-        </button>
+      <div className={styles.ribbon}>
+        {/* Group 0: Users */}
+        <div className={styles.ribbonGroup}>
+          <div className={styles.groupLabel}>사용자</div>
+          <div className={styles.groupButtons}>
+            <button
+              className={activeTab === 'users' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('users')}
+            >
+              사용자 관리
+            </button>
+          </div>
+        </div>
+
+        {/* Group 1: Basic Data */}
+        <div className={styles.ribbonGroup}>
+          <div className={styles.groupLabel}>데이터 관리</div>
+          <div className={styles.groupButtons}>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className={activeTab === 'institutions' ? styles.activeTab : ''}
+                onClick={() => setActiveTab('institutions')}
+                style={{ flex: 1 }}
+              >
+                금융기관
+              </button>
+              <button
+                className={activeTab === 'accounts' ? styles.activeTab : ''}
+                onClick={() => setActiveTab('accounts')}
+                style={{ flex: 1 }}
+              >
+                계좌
+              </button>
+            </div>
+            <button
+              className={activeTab === 'accountGroups' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('accountGroups')}
+            >
+              계좌그룹
+            </button>
+            <button
+              className={activeTab === 'holdings' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('holdings')}
+            >
+              보유자산
+            </button>
+            <button
+              className={activeTab === 'products' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('products')}
+            >
+              상품
+            </button>
+          </div>
+        </div>
+
+        {/* Group 2: Snapshots */}
+        <div className={styles.ribbonGroup}>
+          <div className={styles.groupLabel}>스냅샷</div>
+          <div className={styles.groupButtons}>
+            <button
+              className={activeTab === 'snapshots' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('snapshots')}
+            >
+              일일 스냅샷
+            </button>
+            <button
+              className={activeTab === 'weeklySnapshots' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('weeklySnapshots')}
+            >
+              주간 스냅샷
+            </button>
+            <button
+              className={activeTab === 'annualSnapshots' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('annualSnapshots')}
+            >
+              연간 스냅샷
+            </button>
+          </div>
+        </div>
+
+        {/* Group 3: Reports & Analysis */}
+        <div className={styles.ribbonGroup}>
+          <div className={styles.groupLabel}>분석</div>
+          <div className={styles.groupButtons}>
+            <button
+              className={activeTab === 'weeklyReport' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('weeklyReport')}
+            >
+              주간 보고서
+            </button>
+            <button
+              className={activeTab === 'annualReport' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('annualReport')}
+            >
+              연간 보고서
+            </button>
+            <button
+              className={activeTab === 'snapshotAnalysis' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('snapshotAnalysis')}
+            >
+              스냅샷 분석
+            </button>
+            <button
+              className={activeTab === 'targetAllocations' ? styles.activeTab : ''}
+              onClick={() => setActiveTab('targetAllocations')}
+            >
+              목표 자산배분
+            </button>
+          </div>
+        </div>
       </div>
 
       {error && <div className={styles.error}>{error}</div>}
+
+      {/* Users Tab */}
+      {activeTab === 'users' && (
+        <div className={styles.tabContent}>
+          <div className={styles.sectionHeader}>
+            <h2>사용자 목록 ({users.length})</h2>
+            <div className={styles.actionButtons}>
+              <button onClick={() => setShowUserForm(!showUserForm)}>
+                {showUserForm ? '취소' : '+ 사용자 추가'}
+              </button>
+              <button onClick={fetchUsers}>새로고침</button>
+            </div>
+          </div>
+
+          {showUserForm && (
+            <form onSubmit={handleCreateUser} className={styles.form}>
+              <input
+                type="text"
+                placeholder="사용자명 *"
+                value={newUser.username}
+                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                required
+              />
+              <input
+                type="email"
+                placeholder="이메일 *"
+                value={newUser.email}
+                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                required
+              />
+              <input
+                type="text"
+                placeholder="전체 이름"
+                value={newUser.full_name}
+                onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
+              />
+              <button type="submit">생성</button>
+            </form>
+          )}
+
+          {users.length === 0 ? (
+            <div className={styles.infoBox}>
+              <p>등록된 사용자가 없습니다.</p>
+            </div>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>사용자명</th>
+                  <th>이메일</th>
+                  <th>전체 이름</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td>{user.id}</td>
+                    <td>{user.username}</td>
+                    <td>{user.email}</td>
+                    <td>{user.full_name || '-'}</td>
+                    <td>
+                      <button
+                        onClick={() => handleDeleteUser(user.id)}
+                        className={styles.deleteButton}
+                      >
+                        삭제
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* Institutions Tab */}
       {activeTab === 'institutions' && (
@@ -3093,7 +3283,7 @@ export default function PortfolioPage() {
                   <th>기준일</th>
                   <th>상태</th>
                   <th>생성일</th>
-                  <th>원본 스냅샷</th>
+                  <th>작업</th>
                 </tr>
               </thead>
               <tbody>
@@ -3103,7 +3293,13 @@ export default function PortfolioPage() {
                     <td>{snap.reference_date}</td>
                     <td>{snap.status === 'locked' ? '🔒 잠금' : '✏️ 편집 가능'}</td>
                     <td>{new Date(snap.created_at).toLocaleString()}</td>
-                    <td>{snap.source_snapshot_id}</td>
+                    <td>
+                      <div className={styles.actionButtons}>
+                        <button onClick={() => openSnapshotHoldings(snap.source_snapshot_id)}>
+                          보유자산 보기
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -3129,7 +3325,6 @@ export default function PortfolioPage() {
                   <th>기준일</th>
                   <th>상태</th>
                   <th>생성일</th>
-                  <th>원본 스냅샷</th>
                   <th>작업</th>
                 </tr>
               </thead>
@@ -3140,7 +3335,6 @@ export default function PortfolioPage() {
                     <td>{snap.reference_date}</td>
                     <td>{snap.status === 'locked' ? '🔒 잠금' : '✏️ 편집 가능'}</td>
                     <td>{new Date(snap.created_at).toLocaleString()}</td>
-                    <td>{snap.source_snapshot_id}</td>
                     <td>
                       <div className={styles.actionButtons}>
                         <button onClick={() => openAnnualSnapshotHoldings(snap.annual_snapshot_id)}>
@@ -3540,15 +3734,6 @@ export default function PortfolioPage() {
                 </option>
               ))}
             </select>
-            <select
-              value={snapshotHoldingDataSource}
-              onChange={(e) => setSnapshotHoldingDataSource(e.target.value)}
-              disabled={!selectedSnapshotId || isSelectedSnapshotLocked}
-            >
-              <option value="manual">수동입력</option>
-              <option value="auto">API연동</option>
-              <option value="missing">엑셀업로드</option>
-            </select>
           </div>
 
           {!selectedSnapshotId ? (
@@ -3602,7 +3787,20 @@ export default function PortfolioPage() {
                   });
               }
 
-              const views = filterSnapshotInputEligibleHoldings(holdings, products)
+              const views = holdings
+                .filter((holding) => {
+                  // 삭제된 항목은 제외
+                  if (holding.deleted_at) {
+                    return false;
+                  }
+                  // 이미 값이 입력되어 있으면 표시
+                  if (holdingMap.has(holding.holding_id)) {
+                    return true;
+                  }
+                  // allow_snapshot_input이 true인 경우만 표시
+                  const product = products.find((p) => p.product_id === holding.product_id);
+                  return product?.allow_snapshot_input !== false;
+                })
                 .map((holding) => {
                   const account = accounts.find((a) => a.account_id === holding.account_id) || null;
                   const institution = institutions.find((i) => i.institution_id === account?.institution_id) || null;
