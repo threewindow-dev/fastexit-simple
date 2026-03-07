@@ -169,6 +169,28 @@ class PsycopgInstitutionRepository(_BaseRepo, InstitutionRepository):
             )
         return len(order_list)
 
+    @use_transaction()
+    async def delete(self, conn: Connection, institution_id: int) -> None:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM institutions WHERE institution_id = %s",
+                (institution_id,),
+            )
+
+    @use_transaction()
+    async def count_referencing_accounts(
+        self, conn: Connection, institution_id: int
+    ) -> int:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) AS cnt FROM accounts WHERE institution_id = %s",
+                (institution_id,),
+            )
+            row = await cur.fetchone()
+        return int(row["cnt"] if row else 0)
+
 
 # ---------------------------------------------------------------------------
 # Product
@@ -359,6 +381,28 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             )
         return len(order_list)
 
+    @use_transaction()
+    async def delete(self, conn: Connection, product_id: int) -> None:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM products WHERE product_id = %s",
+                (product_id,),
+            )
+
+    @use_transaction()
+    async def count_referencing_holdings(
+        self, conn: Connection, product_id: int
+    ) -> int:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) AS cnt FROM holdings WHERE product_id = %s",
+                (product_id,),
+            )
+            row = await cur.fetchone()
+        return int(row["cnt"] if row else 0)
+
 
 # ---------------------------------------------------------------------------
 # Account
@@ -516,6 +560,52 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
                 ],
             )
         return len(order_list)
+
+    @use_transaction()
+    async def delete(self, conn: Connection, account_id: int) -> None:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "SELECT account_group_id FROM account_group_accounts WHERE account_id = %s",
+                (account_id,),
+            )
+            impacted_rows = await cur.fetchall()
+            impacted_group_ids = {
+                int(row["account_group_id"])
+                for row in impacted_rows
+                if row.get("account_group_id") is not None
+            }
+
+            await cur.execute(
+                "DELETE FROM accounts WHERE account_id = %s",
+                (account_id,),
+            )
+
+            for account_group_id in impacted_group_ids:
+                await cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM account_group_accounts WHERE account_group_id = %s",
+                    (account_group_id,),
+                )
+                count_row = await cur.fetchone()
+                mapped_count = int(count_row["cnt"] if count_row else 0)
+                if mapped_count == 0:
+                    await cur.execute(
+                        "DELETE FROM account_groups WHERE account_group_id = %s",
+                        (account_group_id,),
+                    )
+
+    @use_transaction()
+    async def count_referencing_holdings(
+        self, conn: Connection, account_id: int
+    ) -> int:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) AS cnt FROM holdings WHERE account_id = %s",
+                (account_id,),
+            )
+            row = await cur.fetchone()
+        return int(row["cnt"] if row else 0)
 
 
 # ---------------------------------------------------------------------------
@@ -798,6 +888,19 @@ class PsycopgHoldingRepository(_BaseRepo, HoldingRepository):
             await cur.execute(
                 "DELETE FROM holdings WHERE holding_id = %s", (holding_id,)
             )
+
+    @use_transaction()
+    async def count_referencing_snapshot_holdings(
+        self, conn: Connection, holding_id: int
+    ) -> int:
+        connection = self._require_conn(conn)
+        async with connection.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) AS cnt FROM snapshot_holdings WHERE holding_id = %s",
+                (holding_id,),
+            )
+            row = await cur.fetchone()
+        return int(row["cnt"] if row else 0)
 
     @use_transaction()
     async def get_all(self, conn: Connection) -> list[Holding]:

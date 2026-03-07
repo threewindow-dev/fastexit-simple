@@ -12,14 +12,17 @@ from shared.schemas import ApiResponse
 from subdomains.portfolio.application.dtos import (
     CreateInstitutionCommand,
     UpdateInstitutionCommand,
+    DeleteInstitutionCommand,
     UpdateInstitutionDisplayOrdersCommand,
     InstitutionDisplayOrderItem,
     CreateProductCommand,
     UpdateProductCommand,
+    DeleteProductCommand,
     UpdateProductDisplayOrdersCommand,
     ProductDisplayOrderItem,
     CreateAccountCommand,
     UpdateAccountCommand,
+    DeleteAccountCommand,
     UpdateAccountDisplayOrdersCommand,
     AccountDisplayOrderItem,
     CreateAccountGroupCommand,
@@ -52,16 +55,19 @@ from subdomains.portfolio.interface.schemas import (
     InstitutionResponseData,
     InstitutionsResponse,
     InstitutionsResponseData,
+    DeleteInstitutionResponse,
     DisplayOrderUpdateResponse,
     DisplayOrderUpdateResponseData,
     CreateProductRequest,
     UpdateProductRequest,
     ProductResponse,
     ProductResponseData,
+    DeleteProductResponse,
     UpdateProductDisplayOrderRequest,
     CreateAccountRequest,
     AccountResponse,
     AccountResponseData,
+    DeleteAccountResponse,
     UpdateAccountRequest,
     UpdateAccountDisplayOrderRequest,
     CreateAccountGroupRequest,
@@ -268,6 +274,22 @@ async def update_institution_display_order(
     return DisplayOrderUpdateResponse(code=0, message="success", data=data)
 
 
+@router.delete(
+    "/institutions/{institution_id}",
+    response_model=DeleteInstitutionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="기관 삭제",
+    responses={**common_responses},
+)
+async def delete_institution(
+    institution_id: int = Path(..., description="기관 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DeleteInstitutionResponse:
+    cmd = DeleteInstitutionCommand(institution_id=institution_id)
+    await service.delete_institution(cmd)
+    return DeleteInstitutionResponse(code=0, message="success", data=None)
+
+
 # ---------------------------------------------------------------------------
 # Products
 # ---------------------------------------------------------------------------
@@ -406,6 +428,22 @@ async def update_product_display_order(
     return DisplayOrderUpdateResponse(code=0, message="success", data=data)
 
 
+@router.delete(
+    "/products/{product_id}",
+    response_model=DeleteProductResponse,
+    status_code=status.HTTP_200_OK,
+    summary="상품 삭제",
+    responses={**common_responses},
+)
+async def delete_product(
+    product_id: int = Path(..., description="상품 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DeleteProductResponse:
+    cmd = DeleteProductCommand(product_id=product_id)
+    await service.delete_product(cmd)
+    return DeleteProductResponse(code=0, message="success", data=None)
+
+
 # ---------------------------------------------------------------------------
 # Accounts
 # ---------------------------------------------------------------------------
@@ -517,6 +555,22 @@ async def update_account_display_order(
     updated_count = await service.update_account_display_orders(cmd)
     data = DisplayOrderUpdateResponseData(updated_count=updated_count)
     return DisplayOrderUpdateResponse(code=0, message="success", data=data)
+
+
+@router.delete(
+    "/accounts/{account_id}",
+    response_model=DeleteAccountResponse,
+    status_code=status.HTTP_200_OK,
+    summary="계좌 삭제",
+    responses={**common_responses},
+)
+async def delete_account(
+    account_id: int = Path(..., description="계좌 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> DeleteAccountResponse:
+    cmd = DeleteAccountCommand(account_id=account_id)
+    await service.delete_account(cmd)
+    return DeleteAccountResponse(code=0, message="success", data=None)
 
 
 # ---------------------------------------------------------------------------

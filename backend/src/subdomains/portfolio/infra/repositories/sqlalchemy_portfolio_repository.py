@@ -5,7 +5,17 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Iterable
 
-from sqlalchemy import select, insert, update, delete, text, bindparam, Date, Integer
+from sqlalchemy import (
+    select,
+    insert,
+    update,
+    delete,
+    text,
+    bindparam,
+    Date,
+    Integer,
+    func,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.decorators import use_transaction
@@ -175,6 +185,27 @@ class SQLAlchemyInstitutionRepository(_BaseRepo, InstitutionRepository):
             updated += 1
         return updated
 
+    @use_transaction()
+    async def delete(self, conn: Connection, institution_id: int) -> None:
+        session = self._require_session(conn)
+        await session.execute(
+            delete(InstitutionEntity).where(
+                InstitutionEntity.institution_id == institution_id
+            )
+        )
+
+    @use_transaction()
+    async def count_referencing_accounts(
+        self, conn: Connection, institution_id: int
+    ) -> int:
+        session = self._require_session(conn)
+        result = await session.execute(
+            select(func.count(AccountEntity.account_id)).where(
+                AccountEntity.institution_id == institution_id
+            )
+        )
+        return int(result.scalar_one() or 0)
+
 
 # ---------------------------------------------------------------------------
 # Product
@@ -319,6 +350,25 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             updated += 1
         return updated
 
+    @use_transaction()
+    async def delete(self, conn: Connection, product_id: int) -> None:
+        session = self._require_session(conn)
+        await session.execute(
+            delete(ProductEntity).where(ProductEntity.product_id == product_id)
+        )
+
+    @use_transaction()
+    async def count_referencing_holdings(
+        self, conn: Connection, product_id: int
+    ) -> int:
+        session = self._require_session(conn)
+        result = await session.execute(
+            select(func.count(HoldingEntity.holding_id)).where(
+                HoldingEntity.product_id == product_id
+            )
+        )
+        return int(result.scalar_one() or 0)
+
 
 # ---------------------------------------------------------------------------
 # Account
@@ -458,6 +508,49 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             )
             updated += 1
         return updated
+
+    @use_transaction()
+    async def delete(self, conn: Connection, account_id: int) -> None:
+        session = self._require_session(conn)
+        impacted_group_rows = await session.execute(
+            select(AccountGroupAccountEntity.account_group_id).where(
+                AccountGroupAccountEntity.account_id == account_id
+            )
+        )
+        impacted_group_ids = {
+            int(row[0]) for row in impacted_group_rows.all() if row[0] is not None
+        }
+
+        await session.execute(
+            delete(AccountEntity).where(AccountEntity.account_id == account_id)
+        )
+
+        # Delete only groups that were linked to this account and became empty.
+        for account_group_id in impacted_group_ids:
+            mapped_count_result = await session.execute(
+                select(func.count(AccountGroupAccountEntity.account_id)).where(
+                    AccountGroupAccountEntity.account_group_id == account_group_id
+                )
+            )
+            mapped_count = int(mapped_count_result.scalar_one() or 0)
+            if mapped_count == 0:
+                await session.execute(
+                    delete(AccountGroupEntity).where(
+                        AccountGroupEntity.account_group_id == account_group_id
+                    )
+                )
+
+    @use_transaction()
+    async def count_referencing_holdings(
+        self, conn: Connection, account_id: int
+    ) -> int:
+        session = self._require_session(conn)
+        result = await session.execute(
+            select(func.count(HoldingEntity.holding_id)).where(
+                HoldingEntity.account_id == account_id
+            )
+        )
+        return int(result.scalar_one() or 0)
 
 
 # ---------------------------------------------------------------------------
@@ -719,6 +812,18 @@ class SQLAlchemyHoldingRepository(_BaseRepo, HoldingRepository):
         entity = await session.get(HoldingEntity, holding_id)
         if entity:
             await session.delete(entity)
+
+    @use_transaction()
+    async def count_referencing_snapshot_holdings(
+        self, conn: Connection, holding_id: int
+    ) -> int:
+        session = self._require_session(conn)
+        result = await session.execute(
+            select(func.count(SnapshotHoldingEntity.snapshot_holding_id)).where(
+                SnapshotHoldingEntity.holding_id == holding_id
+            )
+        )
+        return int(result.scalar_one() or 0)
 
     @use_transaction()
     async def get_all(self, conn: Connection) -> list[Holding]:

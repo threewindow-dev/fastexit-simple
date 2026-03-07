@@ -37,6 +37,11 @@ class UpdateInstitutionCommand:
 
 
 @dataclass
+class DeleteInstitutionCommand:
+    institution_id: int
+
+
+@dataclass
 class InstitutionDisplayOrderItem:
     institution_id: int
     display_order: int
@@ -66,6 +71,11 @@ class UpdateProductCommand:
     characteristics: list[str] | None
     risk_level: str
     allow_snapshot_input: bool = True
+
+
+@dataclass
+class DeleteProductCommand:
+    product_id: int
 
 
 @dataclass
@@ -100,6 +110,11 @@ class UpdateAccountCommand:
     name: str
     type: str
     display_order: int = 0
+
+
+@dataclass
+class DeleteAccountCommand:
+    account_id: int
 
 
 @dataclass

@@ -167,6 +167,8 @@ async def test_db_pool(postgres_container):
                 CREATE TABLE IF NOT EXISTS account_groups (
                     account_group_id SERIAL PRIMARY KEY,
                     name VARCHAR(255) NOT NULL UNIQUE,
+                    include_in_report BOOLEAN NOT NULL DEFAULT FALSE,
+                    display_order INTEGER NOT NULL DEFAULT 0,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             """
@@ -721,6 +723,98 @@ class TestCreateAccountGroup:
 
         # Assert
         assert response.status_code == 400
+
+
+class TestDeleteAccountAndAccountGroup:
+    """계좌/계좌그룹 삭제 연동 동작 테스트"""
+
+    async def test_delete_account_removes_only_impacted_empty_group(
+        self, client, clean_db
+    ):
+        """계좌 삭제 시 해당 계좌와 연결된 그룹 중 빈 그룹만 자동 삭제되어야 함"""
+        inst_response = await client.post(
+            "/api/portfolio/institutions", json={"name": "KB증권", "type": "증권사"}
+        )
+        institution_id = inst_response.json()["data"]["institution_id"]
+
+        acc1_response = await client.post(
+            "/api/portfolio/accounts",
+            json={
+                "institution_id": institution_id,
+                "name": "계좌1",
+                "type": "위탁계좌",
+            },
+        )
+        acc2_response = await client.post(
+            "/api/portfolio/accounts",
+            json={
+                "institution_id": institution_id,
+                "name": "계좌2",
+                "type": "연금계좌",
+            },
+        )
+        account_1_id = acc1_response.json()["data"]["account_id"]
+        account_2_id = acc2_response.json()["data"]["account_id"]
+
+        await client.post(
+            "/api/portfolio/account-groups",
+            json={"name": "그룹A", "account_ids": [account_1_id]},
+        )
+        await client.post(
+            "/api/portfolio/account-groups",
+            json={"name": "그룹B", "account_ids": [account_2_id]},
+        )
+        await client.post(
+            "/api/portfolio/account-groups",
+            json={"name": "그룹C", "account_ids": [account_1_id, account_2_id]},
+        )
+
+        delete_response = await client.delete(f"/api/portfolio/accounts/{account_1_id}")
+        assert delete_response.status_code == 200
+
+        list_response = await client.get("/api/portfolio/account-groups")
+        assert list_response.status_code == 200
+        groups = list_response.json()
+
+        names = {group["name"] for group in groups}
+        assert "그룹A" not in names
+        assert "그룹B" in names
+        assert "그룹C" in names
+
+        group_c = next(group for group in groups if group["name"] == "그룹C")
+        assert group_c["account_ids"] == [account_2_id]
+
+    async def test_delete_empty_account_group_success(
+        self, client, clean_db, postgres_container
+    ):
+        """계좌가 없는 계좌그룹도 삭제 API로 삭제할 수 있어야 함"""
+        conn_str = _get_plain_conn_str(postgres_container)
+        async with await psycopg.AsyncConnection.connect(
+            conn_str, autocommit=True, row_factory=psycopg.rows.dict_row
+        ) as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    INSERT INTO account_groups (name, created_at)
+                    VALUES (%s, CURRENT_TIMESTAMP)
+                    RETURNING account_group_id
+                    """,
+                    ("빈계좌그룹",),
+                )
+                row = await cur.fetchone()
+                account_group_id = row["account_group_id"]
+
+        delete_response = await client.delete(
+            f"/api/portfolio/account-groups/{account_group_id}"
+        )
+        assert delete_response.status_code == 200
+        delete_data = delete_response.json()
+        assert delete_data["code"] == 0
+
+        list_response = await client.get("/api/portfolio/account-groups")
+        assert list_response.status_code == 200
+        groups = list_response.json()
+        assert all(group["account_group_id"] != account_group_id for group in groups)
 
 
 # ===========================================================================

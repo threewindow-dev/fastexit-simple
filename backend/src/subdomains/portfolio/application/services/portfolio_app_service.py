@@ -5,12 +5,15 @@ from datetime import date, datetime, time, timedelta
 from subdomains.portfolio.application.dtos import (
     CreateInstitutionCommand,
     UpdateInstitutionCommand,
+    DeleteInstitutionCommand,
     UpdateInstitutionDisplayOrdersCommand,
     CreateProductCommand,
     UpdateProductCommand,
+    DeleteProductCommand,
     UpdateProductDisplayOrdersCommand,
     CreateAccountCommand,
     UpdateAccountCommand,
+    DeleteAccountCommand,
     UpdateAccountDisplayOrdersCommand,
     CreateHoldingCommand,
     DeleteHoldingCommand,
@@ -60,6 +63,7 @@ from subdomains.portfolio.domain import (
     NotFoundError,
     SnapshotLockedError,
     InvalidStateError,
+    DeletionConflictError,
 )
 from subdomains.portfolio.domain.protocols import (
     InstitutionRepository,
@@ -149,6 +153,23 @@ class PortfolioAppService:
         orders = [(item.institution_id, item.display_order) for item in command.items]
         return await self._institution_repo.update_display_orders(orders)
 
+    @transactional(mode="writable")
+    async def delete_institution(self, command: DeleteInstitutionCommand) -> None:
+        existing = await self._institution_repo.find_by_id(command.institution_id)
+        if existing is None:
+            raise NotFoundError("institution", command.institution_id)
+
+        reference_count = await self._institution_repo.count_referencing_accounts(
+            command.institution_id
+        )
+        if reference_count > 0:
+            raise DeletionConflictError(
+                "institution",
+                f"institution '{command.institution_id}' is referenced by {reference_count} accounts",
+            )
+
+        await self._institution_repo.delete(command.institution_id)
+
     # ------------------------------------------------------------------
     # Products
     # ------------------------------------------------------------------
@@ -217,6 +238,23 @@ class PortfolioAppService:
         saved = await self._product_repo.update(product)
         return ProductResult.from_domain(saved)
 
+    @transactional(mode="writable")
+    async def delete_product(self, command: DeleteProductCommand) -> None:
+        existing = await self._product_repo.find_by_id(command.product_id)
+        if existing is None:
+            raise NotFoundError("product", command.product_id)
+
+        reference_count = await self._product_repo.count_referencing_holdings(
+            command.product_id
+        )
+        if reference_count > 0:
+            raise DeletionConflictError(
+                "product",
+                f"product '{command.product_id}' is referenced by {reference_count} holdings",
+            )
+
+        await self._product_repo.delete(command.product_id)
+
     # ------------------------------------------------------------------
     # Accounts
     # ------------------------------------------------------------------
@@ -262,6 +300,23 @@ class PortfolioAppService:
     ) -> int:
         orders = [(item.account_id, item.display_order) for item in command.items]
         return await self._account_repo.update_display_orders(orders)
+
+    @transactional(mode="writable")
+    async def delete_account(self, command: DeleteAccountCommand) -> None:
+        existing = await self._account_repo.find_by_id(command.account_id)
+        if existing is None:
+            raise NotFoundError("account", command.account_id)
+
+        reference_count = await self._account_repo.count_referencing_holdings(
+            command.account_id
+        )
+        if reference_count > 0:
+            raise DeletionConflictError(
+                "account",
+                f"account '{command.account_id}' is referenced by {reference_count} holdings",
+            )
+
+        await self._account_repo.delete(command.account_id)
 
     # ------------------------------------------------------------------
     # Account Groups
@@ -315,7 +370,17 @@ class PortfolioAppService:
 
     @transactional(mode="writable")
     async def delete_account_group(self, command: DeleteAccountGroupCommand) -> None:
-        existing = await self._account_group_repo.find_by_id(command.account_group_id)
+        try:
+            existing = await self._account_group_repo.find_by_id(
+                command.account_group_id
+            )
+        except InvalidStateError as exc:
+            # Some legacy/corrupted rows may have no linked account.
+            # Allow deletion flow to proceed for these rows.
+            if "at least one account is required" in str(exc):
+                existing = True
+            else:
+                raise
         if existing is None:
             raise NotFoundError("account_group", command.account_group_id)
         await self._account_group_repo.delete(command.account_group_id)
@@ -364,6 +429,16 @@ class PortfolioAppService:
             saved = await self._holding_repo.hide(holding, command.reason)
             return HoldingResult.from_domain(saved)
         if action == "hard_delete":
+            reference_count = (
+                await self._holding_repo.count_referencing_snapshot_holdings(
+                    command.holding_id
+                )
+            )
+            if reference_count > 0:
+                raise DeletionConflictError(
+                    "holding",
+                    f"holding '{command.holding_id}' is referenced by {reference_count} snapshot holdings",
+                )
             await self._holding_repo.hard_delete(command.holding_id)
             return None
         raise ValueError("Unsupported action for delete_holding")

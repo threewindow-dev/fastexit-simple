@@ -631,6 +631,34 @@ export default function PortfolioPage() {
   });
 
   const sortedAccounts = getSortedAccounts();
+  const accountReferenceCountByInstitutionId = new Map<number, number>();
+  accounts.forEach((account) => {
+    accountReferenceCountByInstitutionId.set(
+      account.institution_id,
+      (accountReferenceCountByInstitutionId.get(account.institution_id) ?? 0) + 1
+    );
+  });
+
+  const holdingReferenceCountByAccountId = new Map<number, number>();
+  const holdingReferenceCountByProductId = new Map<number, number>();
+  holdings.forEach((holding) => {
+    holdingReferenceCountByAccountId.set(
+      holding.account_id,
+      (holdingReferenceCountByAccountId.get(holding.account_id) ?? 0) + 1
+    );
+    holdingReferenceCountByProductId.set(
+      holding.product_id,
+      (holdingReferenceCountByProductId.get(holding.product_id) ?? 0) + 1
+    );
+  });
+
+  const snapshotHoldingReferenceCountByHoldingId = new Map<number, number>();
+  snapshotHoldings.forEach((snapshotHolding) => {
+    snapshotHoldingReferenceCountByHoldingId.set(
+      snapshotHolding.holding_id,
+      (snapshotHoldingReferenceCountByHoldingId.get(snapshotHolding.holding_id) ?? 0) + 1
+    );
+  });
 
   const reportYears = annualReportData
     ? annualReportData.weeks.map((item) => new Date(item.reference_date).getFullYear())
@@ -825,12 +853,15 @@ export default function PortfolioPage() {
       fetchUsers();
     } else if (activeTab === 'institutions') {
       fetchInstitutions();
+      fetchAccounts();
     } else if (activeTab === 'products') {
       fetchProducts();
       fetchInstitutions();
+      fetchHoldings();
     } else if (activeTab === 'accounts') {
       fetchAccounts();
       fetchInstitutions(); // For dropdown
+      fetchHoldings();
     } else if (activeTab === 'accountGroups') {
       fetchAccountGroups();
       fetchAccounts();
@@ -846,6 +877,7 @@ export default function PortfolioPage() {
       fetchAnnualSnapshotHoldings();
     } else if (activeTab === 'holdings') {
       fetchHoldings();
+      fetchSnapshotHoldings();
       fetchAccounts(); // For dropdown
       fetchProducts(); // For dropdown
       fetchInstitutions(); // For institution labels
@@ -1532,6 +1564,31 @@ export default function PortfolioPage() {
     }
   };
 
+  const handleDeleteInstitution = async (institutionId: number) => {
+    if (!window.confirm('금융기관을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/portfolio/institutions/${institutionId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete institution');
+      }
+
+      if (editingInstitution?.institution_id === institutionId) {
+        cancelInstitutionEdit();
+      }
+      await fetchInstitutions();
+      await fetchAccounts();
+      alert('금융기관이 삭제되었습니다.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete institution');
+    }
+  };
+
   const handleSaveProductOrder = async () => {
     const ordered = getSortedProducts().map((item, index) => ({
       ...item,
@@ -1596,6 +1653,31 @@ export default function PortfolioPage() {
       fetchProducts();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to create product');
+    }
+  };
+
+  const handleDeleteProduct = async (productId: number) => {
+    if (!window.confirm('상품을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/portfolio/products/${productId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete product');
+      }
+
+      if (editingProduct?.product_id === productId) {
+        cancelProductEdit();
+      }
+      await fetchProducts();
+      await fetchHoldings();
+      alert('상품이 삭제되었습니다.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete product');
     }
   };
 
@@ -1766,6 +1848,32 @@ export default function PortfolioPage() {
       fetchAccounts();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update account');
+    }
+  };
+
+  const handleDeleteAccount = async (accountId: number) => {
+    if (!window.confirm('계좌를 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/portfolio/accounts/${accountId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete account');
+      }
+
+      if (editingAccount?.account_id === accountId) {
+        cancelAccountEdit();
+      }
+      await fetchAccounts();
+      await fetchAccountGroups();
+      await fetchHoldings();
+      alert('계좌가 삭제되었습니다.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete account');
     }
   };
 
@@ -1977,6 +2085,30 @@ export default function PortfolioPage() {
       fetchHoldings();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to create holding');
+    }
+  };
+
+  const handleDeleteHolding = async (holdingId: number) => {
+    if (!window.confirm('보유자산을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/portfolio/holdings/${holdingId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'hard_delete' }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete holding');
+      }
+
+      await fetchHoldings();
+      await fetchSnapshotHoldings();
+      alert('보유자산이 삭제되었습니다.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete holding');
     }
   };
 
@@ -2574,6 +2706,14 @@ export default function PortfolioPage() {
                     <td>
                       <div className={styles.actionButtons}>
                         <button onClick={() => openInstitutionEdit(inst)}>수정</button>
+                        {(accountReferenceCountByInstitutionId.get(inst.institution_id) ?? 0) === 0 && (
+                          <button
+                            onClick={() => handleDeleteInstitution(inst.institution_id)}
+                            className={styles.deleteButton}
+                          >
+                            삭제
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -2832,6 +2972,14 @@ export default function PortfolioPage() {
                     <td>
                       <div className={styles.actionButtons}>
                         <button onClick={() => openProductEdit(prod)}>수정</button>
+                        {(holdingReferenceCountByProductId.get(prod.product_id) ?? 0) === 0 && (
+                          <button
+                            onClick={() => handleDeleteProduct(prod.product_id)}
+                            className={styles.deleteButton}
+                          >
+                            삭제
+                          </button>
+                        )}
                         <button onClick={() => openHoldingsForProduct(prod.product_id)}>
                           보유자산 보기
                         </button>
@@ -2988,6 +3136,14 @@ export default function PortfolioPage() {
                       <td>
                         <div className={styles.actionButtons}>
                           <button onClick={() => openAccountEdit(acc)}>수정</button>
+                          {(holdingReferenceCountByAccountId.get(acc.account_id) ?? 0) === 0 && (
+                            <button
+                              onClick={() => handleDeleteAccount(acc.account_id)}
+                              className={styles.deleteButton}
+                            >
+                              삭제
+                            </button>
+                          )}
                           <button onClick={() => openHoldingsForAccount(acc.account_id)}>
                             보유자산 보기
                           </button>
@@ -3211,8 +3367,15 @@ export default function PortfolioPage() {
                       <td>{new Date(group.created_at).toLocaleDateString()}</td>
                       <td>
                         <div className={styles.actionButtons}>
-                          <button onClick={() => openAccountGroupEdit(group)}>수정</button>
-                          <button onClick={() => handleDeleteAccountGroup(group.account_group_id)}>삭제</button>
+                          <button type="button" onClick={() => openAccountGroupEdit(group)}>
+                            수정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAccountGroup(group.account_group_id)}
+                          >
+                            삭제
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -3699,6 +3862,7 @@ export default function PortfolioPage() {
                   <th>계좌이름</th>
                   <th>상품이름</th>
                   <th>생성일</th>
+                  <th>작업</th>
                 </tr>
               </thead>
               <tbody>
@@ -3751,6 +3915,16 @@ export default function PortfolioPage() {
                         <td>{account?.name || holding.account_id}</td>
                         <td>{product?.product_name || holding.product_id}</td>
                         <td>{new Date(holding.created_at).toLocaleDateString()}</td>
+                        <td>
+                          {(snapshotHoldingReferenceCountByHoldingId.get(holding.holding_id) ?? 0) === 0 && (
+                            <button
+                              onClick={() => handleDeleteHolding(holding.holding_id)}
+                              className={styles.deleteButton}
+                            >
+                              삭제
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

@@ -49,6 +49,10 @@ class InstitutionsResponse(ApiResponse[InstitutionsResponseData]):
     pass
 
 
+class DeleteInstitutionResponse(ApiResponse[dict[str, Any] | None]):
+    pass
+
+
 class InstitutionDisplayOrderItem(BaseModel):
     institution_id: int = Field(..., description="기관 ID", examples=[1])
     display_order: int = Field(..., description="표시 순서", examples=[1])
@@ -124,6 +128,10 @@ class ProductResponse(ApiResponse[ProductResponseData]):
     pass
 
 
+class DeleteProductResponse(ApiResponse[dict[str, Any] | None]):
+    pass
+
+
 class ProductDisplayOrderItem(BaseModel):
     product_id: int = Field(..., description="상품 ID", examples=[10])
     display_order: int = Field(..., description="표시 순서", examples=[1])
@@ -185,6 +193,10 @@ class AccountResponseData(BaseModel):
 
 
 class AccountResponse(ApiResponse[AccountResponseData]):
+    pass
+
+
+class DeleteAccountResponse(ApiResponse[dict[str, Any] | None]):
     pass
 
 

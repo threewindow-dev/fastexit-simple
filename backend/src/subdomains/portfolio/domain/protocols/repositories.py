@@ -43,6 +43,14 @@ class InstitutionRepository(ABC):
         self, conn: Connection, orders: Iterable[tuple[int, int]]
     ) -> int: ...
 
+    @abstractmethod
+    async def delete(self, conn: Connection, institution_id: int) -> None: ...
+
+    @abstractmethod
+    async def count_referencing_accounts(
+        self, conn: Connection, institution_id: int
+    ) -> int: ...
+
 
 class ProductRepository(ABC):
     @abstractmethod
@@ -74,6 +82,14 @@ class ProductRepository(ABC):
         self, conn: Connection, orders: Iterable[tuple[int, int]]
     ) -> int: ...
 
+    @abstractmethod
+    async def delete(self, conn: Connection, product_id: int) -> None: ...
+
+    @abstractmethod
+    async def count_referencing_holdings(
+        self, conn: Connection, product_id: int
+    ) -> int: ...
+
 
 class AccountRepository(ABC):
     @abstractmethod
@@ -101,6 +117,14 @@ class AccountRepository(ABC):
     @abstractmethod
     async def update_display_orders(
         self, conn: Connection, orders: Iterable[tuple[int, int]]
+    ) -> int: ...
+
+    @abstractmethod
+    async def delete(self, conn: Connection, account_id: int) -> None: ...
+
+    @abstractmethod
+    async def count_referencing_holdings(
+        self, conn: Connection, account_id: int
     ) -> int: ...
 
 
@@ -145,6 +169,11 @@ class HoldingRepository(ABC):
 
     @abstractmethod
     async def hard_delete(self, conn: Connection, holding_id: int) -> None: ...
+
+    @abstractmethod
+    async def count_referencing_snapshot_holdings(
+        self, conn: Connection, holding_id: int
+    ) -> int: ...
 
     @abstractmethod
     async def get_all(self, conn: Connection) -> list[Holding]: ...
