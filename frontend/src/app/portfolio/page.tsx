@@ -215,6 +215,7 @@ export default function PortfolioPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [weeklyReportData, setWeeklyReportData] = useState<WeeklyPivotReportData | null>(null);
   const [weeklyReportYear, setWeeklyReportYear] = useState<number>(new Date().getFullYear());
+  const [showMonthEndOnly, setShowMonthEndOnly] = useState(false);
   const [annualReportData, setAnnualReportData] = useState<WeeklyPivotReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1422,7 +1423,7 @@ export default function PortfolioPage() {
       const scrollWidth = weeklyReportBottomScrollRef.current.scrollWidth;
       setWeeklyReportScrollWidth(scrollWidth);
     }
-  }, [weeklyReportData]);
+  }, [weeklyReportData, showMonthEndOnly]);
 
   useEffect(() => {
     if (annualReportBottomScrollRef.current && annualReportData) {
@@ -4285,42 +4286,103 @@ export default function PortfolioPage() {
         <div className={styles.tabContent}>
           <div className={styles.sectionHeader}>
             <h2>주간 보고서 (Pivot)</h2>
-            <div>
-              <label style={{ marginRight: '10px' }}>연도:</label>
-              <select
-                value={weeklyReportYear}
-                onChange={(e) => setWeeklyReportYear(Number(e.target.value))}
-                style={{ padding: '5px 10px', fontSize: '13px' }}
-              >
-                {[2024, 2025, 2026, 2027, 2028].map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={showMonthEndOnly}
+                  onChange={(e) => setShowMonthEndOnly(e.target.checked)}
+                  style={{ marginRight: '8px', cursor: 'pointer', width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '13px', fontWeight: 'normal' }}>월말만 보기</span>
+              </label>
+              <div>
+                <label style={{ marginRight: '10px' }}>연도:</label>
+                <select
+                  value={weeklyReportYear}
+                  onChange={(e) => setWeeklyReportYear(Number(e.target.value))}
+                  style={{ padding: '5px 10px', fontSize: '13px' }}
+                >
+                  {[2024, 2025, 2026, 2027, 2028].map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
           {loading ? (
             <div className={styles.loading}>로딩 중...</div>
           ) : weeklyReportData && weeklyReportData.weeks.length > 0 ? (
-            <>
-              {/* 상단 스크롤바 */}
-              <div
-                ref={weeklyReportTopScrollRef}
-                style={{
-                  overflowX: 'auto',
-                  overflowY: 'hidden',
-                  marginBottom: '10px',
-                }}
-                onScroll={(e) => {
-                  if (weeklyReportBottomScrollRef.current) {
-                    weeklyReportBottomScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
-                  }
-                }}
-              >
-                <div style={{ width: `${weeklyReportScrollWidth}px`, height: '1px' }} />
-              </div>
+            (() => {
+              // 필터링 로직: 월말 또는 현재 주 스냅샷만 표시
+              const filteredWeeks = showMonthEndOnly
+                ? weeklyReportData.weeks.filter((week, weekIdx, allWeeks) => {
+                    const currentDate = new Date(week.reference_date);
+                    const now = new Date();
+                    
+                    // 현재 주인지 확인 (ISO week 기준으로 현재 주 포함)
+                    const isCurrentWeek = (() => {
+                      const weekStart = new Date(currentDate);
+                      weekStart.setDate(currentDate.getDate() - currentDate.getDay()); // 주의 시작 (일요일)
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekStart.getDate() + 6); // 주의 끝 (토요일)
+                      return now >= weekStart && now <= weekEnd;
+                    })();
+                    
+                    // 월말인지 확인
+                    const currentYearMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+                    const isMonthEnd = weekIdx === allWeeks.length - 1 || 
+                      (() => {
+                        const nextDate = new Date(allWeeks[weekIdx + 1].reference_date);
+                        const nextYearMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+                        return currentYearMonth !== nextYearMonth;
+                      })();
+                    
+                    return isMonthEnd || isCurrentWeek;
+                  })
+                : weeklyReportData.weeks;
+              
+              // 필터링된 데이터로 account_groups와 accounts의 valuations도 필터링
+              const filteredData = {
+                ...weeklyReportData,
+                weeks: filteredWeeks,
+                account_groups: weeklyReportData.account_groups.map(group => ({
+                  ...group,
+                  valuations: group.valuations.filter((_, idx) => {
+                    if (!showMonthEndOnly) return true;
+                    return filteredWeeks.some(w => w.weekly_snapshot_id === weeklyReportData.weeks[idx].weekly_snapshot_id);
+                  })
+                })),
+                accounts: weeklyReportData.accounts.map(account => ({
+                  ...account,
+                  valuations: account.valuations.filter((_, idx) => {
+                    if (!showMonthEndOnly) return true;
+                    return filteredWeeks.some(w => w.weekly_snapshot_id === weeklyReportData.weeks[idx].weekly_snapshot_id);
+                  })
+                }))
+              };
+              
+              return (
+                <>
+                  {/* 상단 스크롤바 */}
+                  <div
+                    ref={weeklyReportTopScrollRef}
+                    style={{
+                      overflowX: 'auto',
+                      overflowY: 'hidden',
+                      marginBottom: '10px',
+                    }}
+                    onScroll={(e) => {
+                      if (weeklyReportBottomScrollRef.current) {
+                        weeklyReportBottomScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                      }
+                    }}
+                  >
+                    <div style={{ width: `${weeklyReportScrollWidth}px`, height: '1px' }} />
+                  </div>
 
               {/* 메인 테이블 */}
               <div
@@ -4341,7 +4403,7 @@ export default function PortfolioPage() {
                     <th style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 11, width: '200px', minWidth: '200px' }}>
                       계좌
                     </th>
-                    {weeklyReportData.weeks.map((week) => (
+                    {filteredData.weeks.map((week) => (
                       <th key={week.weekly_snapshot_id} style={{ backgroundColor: '#fff', minWidth: '100px', fontSize: '11px', padding: '6px 4px', textAlign: 'center' }}>
                         {week.reference_date} (W{week.week_number})
                       </th>
@@ -4350,14 +4412,14 @@ export default function PortfolioPage() {
                 </thead>
                 <tbody>
                   {/* 계좌그룹 섹션 (상단) */}
-                  {weeklyReportData.account_groups && weeklyReportData.account_groups.length > 0 && (
+                  {filteredData.account_groups && filteredData.account_groups.length > 0 && (
                     <>
                       <tr style={{ borderBottom: '2px solid #ccc' }}>
-                        <td colSpan={weeklyReportData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                        <td colSpan={filteredData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
                           계좌 그룹
                         </td>
                       </tr>
-                      {[...weeklyReportData.account_groups].sort((a, b) => a.display_order - b.display_order).map((group) => (
+                      {[...filteredData.account_groups].sort((a, b) => a.display_order - b.display_order).map((group) => (
                         <tr key={group.account_group_id} style={{ backgroundColor: '#fffacd' }}>
                           <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold', width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                             {group.account_group_name}
@@ -4384,32 +4446,55 @@ export default function PortfolioPage() {
                         </td>
                         <td style={{ position: 'sticky', left: '160px', backgroundColor: '#ffeb99', zIndex: 1, width: '200px', minWidth: '200px' }}>
                         </td>
-                        {weeklyReportData.weeks.map((week, weekIdx) => {
-                          const total = weeklyReportData.accounts.reduce((sum, account) => {
-                            const val = account.valuations[weekIdx];
-                            return sum + (val ? val.amount : 0);
-                          }, 0);
-                          return (
-                            <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
-                              {total > 0
-                                ? total.toLocaleString('ko-KR', {
-                                    minimumFractionDigits: 0,
-                                    maximumFractionDigits: 0,
-                                  })
-                                : '-'}
-                            </td>
-                          );
-                        })}
+                        {(() => {
+                          // 모든 주차의 총액 계산
+                          const totals = filteredData.weeks.map((week, weekIdx) => {
+                            return filteredData.accounts.reduce((sum, account) => {
+                              const val = account.valuations[weekIdx];
+                              return sum + (val ? val.amount : 0);
+                            }, 0);
+                          });
+                          
+                          // 최대값과 최소값 찾기 (0보다 큰 값들 중에서)
+                          const validTotals = totals.filter(t => t > 0);
+                          const maxTotal = validTotals.length > 0 ? Math.max(...validTotals) : 0;
+                          const minTotal = validTotals.length > 0 ? Math.min(...validTotals) : 0;
+                          
+                          return filteredData.weeks.map((week, weekIdx) => {
+                            const total = totals[weekIdx];
+                            let color = 'black';
+                            
+                            // 최대값과 최소값이 다르고, 현재 값이 0보다 클 때만 색상 적용
+                            if (total > 0 && maxTotal !== minTotal) {
+                              if (total === maxTotal) {
+                                color = '#d32f2f'; // Red for max
+                              } else if (total === minTotal) {
+                                color = '#1976d2'; // Blue for min
+                              }
+                            }
+                            
+                            return (
+                              <td key={week.weekly_snapshot_id} style={{ textAlign: 'right', color: color, fontWeight: (total === maxTotal || total === minTotal) && total > 0 && maxTotal !== minTotal ? 'bold' : 'bold' }}>
+                                {total > 0
+                                  ? total.toLocaleString('ko-KR', {
+                                      minimumFractionDigits: 0,
+                                      maximumFractionDigits: 0,
+                                    })
+                                  : '-'}
+                              </td>
+                            );
+                          });
+                        })()}
                       </tr>
                       <tr style={{ borderTop: '2px solid #ccc', borderBottom: '2px solid #ccc' }}>
-                        <td colSpan={weeklyReportData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                        <td colSpan={filteredData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
                           전체 계좌
                         </td>
                       </tr>
                     </>
                   )}
 
-                  {weeklyReportData.accounts.map((account) => (
+                  {filteredData.accounts.map((account) => (
                     <tr key={account.account_id}>
                       <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                         {account.institution_name}
@@ -4430,58 +4515,292 @@ export default function PortfolioPage() {
                     </tr>
                   ))}
                   {/* 합계 행 */}
-                  {weeklyReportData.accounts.length > 0 && (
+                  {filteredData.accounts.length > 0 && (
                     <>
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
                         <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1, width: '360px', minWidth: '360px' }}>
                           총합
                         </td>
-                        {weeklyReportData.weeks.map((week, weekIdx) => {
-                          const total = weeklyReportData.accounts.reduce((sum, account) => {
+                        {(() => {
+                          // 모든 주차의 총액 계산
+                          const totals = filteredData.weeks.map((week, weekIdx) => {
+                            return filteredData.accounts.reduce((sum, account) => {
+                              const val = account.valuations[weekIdx];
+                              return sum + (val ? val.amount : 0);
+                            }, 0);
+                          });
+                          
+                          // 최대값과 최소값 찾기 (0보다 큰 값들 중에서)
+                          const validTotals = totals.filter(t => t > 0);
+                          const maxTotal = validTotals.length > 0 ? Math.max(...validTotals) : 0;
+                          const minTotal = validTotals.length > 0 ? Math.min(...validTotals) : 0;
+                          
+                          return filteredData.weeks.map((week, weekIdx) => {
+                            const total = totals[weekIdx];
+                            let color = 'black';
+                            
+                            // 최대값과 최소값이 다르고, 현재 값이 0보다 클 때만 색상 적용
+                            if (total > 0 && maxTotal !== minTotal) {
+                              if (total === maxTotal) {
+                                color = '#d32f2f'; // Red for max
+                              } else if (total === minTotal) {
+                                color = '#1976d2'; // Blue for min
+                              }
+                            }
+                            
+                            return (
+                              <td key={week.weekly_snapshot_id} style={{ textAlign: 'right', color: color }}>
+                                {total > 0
+                                  ? total.toLocaleString('ko-KR', {
+                                      minimumFractionDigits: 0,
+                                      maximumFractionDigits: 0,
+                                    })
+                                  : '-'}
+                              </td>
+                            );
+                          });
+                        })()}
+                      </tr>
+                      {/* 전주 대비 변화 행들 - 월말만 보기 시 숨김 */}
+                      {!showMonthEndOnly && (
+                        <>
+                          {/* 전주 대비 변화 (금액) 행 */}
+                          <tr style={{ fontWeight: 'bold', backgroundColor: '#fff5f5' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                              전주 대비 변화 (금액)
+                            </td>
+                            {filteredData.weeks.map((week, weekIdx) => {
+                              const currentTotal = filteredData.accounts.reduce((sum, account) => {
+                                const val = account.valuations[weekIdx];
+                                return sum + (val ? val.amount : 0);
+                              }, 0);
+
+                              let changeAmount = 0;
+                              let changeColor = 'black';
+
+                              if (weekIdx > 0) {
+                                const prevTotal = filteredData.accounts.reduce((sum, account) => {
+                                  const val = account.valuations[weekIdx - 1];
+                                  return sum + (val ? val.amount : 0);
+                                }, 0);
+
+                                changeAmount = currentTotal - prevTotal;
+
+                                if (changeAmount >= 0) {
+                                  changeColor = '#d32f2f'; // Red for positive
+                                } else {
+                                  changeColor = '#1976d2'; // Blue for negative
+                                }
+                              }
+
+                              return (
+                                <td
+                                  key={week.weekly_snapshot_id}
+                                  style={{
+                                    textAlign: 'right',
+                                    color: changeColor,
+                                  }}
+                                >
+                                  {weekIdx > 0
+                                    ? `${changeAmount >= 0 ? '+' : ''}${changeAmount.toLocaleString('ko-KR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                                    : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                          {/* 전주 대비 변화 (%) 행 */}
+                          <tr style={{ fontWeight: 'bold', backgroundColor: '#ffebee' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#ffebee', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                              전주 대비 변화 (%)
+                            </td>
+                            {filteredData.weeks.map((week, weekIdx) => {
+                              const currentTotal = filteredData.accounts.reduce((sum, account) => {
+                                const val = account.valuations[weekIdx];
+                                return sum + (val ? val.amount : 0);
+                              }, 0);
+
+                              let changePercent = 0;
+                              let changeColor = 'black';
+
+                              if (weekIdx > 0) {
+                                const prevTotal = filteredData.accounts.reduce((sum, account) => {
+                                  const val = account.valuations[weekIdx - 1];
+                                  return sum + (val ? val.amount : 0);
+                                }, 0);
+
+                                if (prevTotal > 0) {
+                                  changePercent = ((currentTotal - prevTotal) / prevTotal) * 100;
+
+                                  if (changePercent >= 1) {
+                                    changeColor = '#d32f2f'; // Red
+                                  } else if (changePercent <= -1) {
+                                    changeColor = '#1976d2'; // Blue
+                                  }
+                                }
+                              }
+
+                              return (
+                                <td
+                                  key={week.weekly_snapshot_id}
+                                  style={{
+                                    textAlign: 'right',
+                                    color: changeColor,
+                                  }}
+                                >
+                                  {weekIdx > 0
+                                    ? `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`
+                                    : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </>
+                      )}
+                      {/* 전월 대비 변화 (금액) 행 */}
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#e3f2fd' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#e3f2fd', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                          전월 대비 변화 (금액)
+                        </td>
+                        {filteredData.weeks.map((week, weekIdx) => {
+                          const currentDate = new Date(week.reference_date);
+                          const currentYearMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+                          
+                          // 다음 주가 있는지 확인하고, 다른 월인지 판단
+                          const isMonthEnd = weekIdx === filteredData.weeks.length - 1 || 
+                            (() => {
+                              const nextDate = new Date(filteredData.weeks[weekIdx + 1].reference_date);
+                              const nextYearMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+                              return currentYearMonth !== nextYearMonth;
+                            })();
+
+                          if (!isMonthEnd) {
+                            return (
+                              <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                                -
+                              </td>
+                            );
+                          }
+
+                          // 현재 월의 총액
+                          const currentTotal = filteredData.accounts.reduce((sum, account) => {
                             const val = account.valuations[weekIdx];
                             return sum + (val ? val.amount : 0);
                           }, 0);
+
+                          // 전월 마지막 주 찾기
+                          let prevMonthEndIdx = -1;
+                          for (let i = weekIdx - 1; i >= 0; i--) {
+                            const prevDate = new Date(filteredData.weeks[i].reference_date);
+                            const prevYearMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+                            
+                            if (prevYearMonth !== currentYearMonth) {
+                              prevMonthEndIdx = i;
+                              break;
+                            }
+                          }
+
+                          if (prevMonthEndIdx === -1) {
+                            return (
+                              <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                                -
+                              </td>
+                            );
+                          }
+
+                          // 전월 마지막 주의 총액
+                          const prevMonthTotal = filteredData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[prevMonthEndIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
+
+                          const changeAmount = currentTotal - prevMonthTotal;
+                          const changeColor = changeAmount >= 0 ? '#d32f2f' : '#1976d2';
+
                           return (
-                            <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
-                              {total > 0
-                                ? total.toLocaleString('ko-KR', {
-                                    minimumFractionDigits: 0,
-                                    maximumFractionDigits: 0,
-                                  })
-                                : '-'}
+                            <td
+                              key={week.weekly_snapshot_id}
+                              style={{
+                                textAlign: 'right',
+                                color: changeColor,
+                              }}
+                            >
+                              {changeAmount >= 0 ? '+' : ''}{changeAmount.toLocaleString('ko-KR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                             </td>
                           );
                         })}
                       </tr>
-                      {/* 전주 대비 변화 행 */}
-                      <tr style={{ fontWeight: 'bold', backgroundColor: '#fff5f5' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1, width: '360px', minWidth: '360px' }}>
-                          전주 대비 변화
+                      {/* 전월 대비 변화 (%) 행 */}
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#bbdefb', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                          전월 대비 변화 (%)
                         </td>
-                        {weeklyReportData.weeks.map((week, weekIdx) => {
-                          const currentTotal = weeklyReportData.accounts.reduce((sum, account) => {
+                        {filteredData.weeks.map((week, weekIdx) => {
+                          const currentDate = new Date(week.reference_date);
+                          const currentYearMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+                          
+                          // 다음 주가 있는지 확인하고, 다른 월인지 판단
+                          const isMonthEnd = weekIdx === filteredData.weeks.length - 1 || 
+                            (() => {
+                              const nextDate = new Date(filteredData.weeks[weekIdx + 1].reference_date);
+                              const nextYearMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+                              return currentYearMonth !== nextYearMonth;
+                            })();
+
+                          if (!isMonthEnd) {
+                            return (
+                              <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                                -
+                              </td>
+                            );
+                          }
+
+                          // 현재 월의 총액
+                          const currentTotal = filteredData.accounts.reduce((sum, account) => {
                             const val = account.valuations[weekIdx];
                             return sum + (val ? val.amount : 0);
                           }, 0);
 
-                          let changePercent = 0;
-                          let changeColor = 'black';
-
-                          if (weekIdx > 0) {
-                            const prevTotal = weeklyReportData.accounts.reduce((sum, account) => {
-                              const val = account.valuations[weekIdx - 1];
-                              return sum + (val ? val.amount : 0);
-                            }, 0);
-
-                            if (prevTotal > 0) {
-                              changePercent = ((currentTotal - prevTotal) / prevTotal) * 100;
-
-                              if (changePercent >= 1) {
-                                changeColor = '#d32f2f'; // Red
-                              } else if (changePercent <= -1) {
-                                changeColor = '#1976d2'; // Blue
-                              }
+                          // 전월 마지막 주 찾기
+                          let prevMonthEndIdx = -1;
+                          for (let i = weekIdx - 1; i >= 0; i--) {
+                            const prevDate = new Date(filteredData.weeks[i].reference_date);
+                            const prevYearMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+                            
+                            if (prevYearMonth !== currentYearMonth) {
+                              prevMonthEndIdx = i;
+                              break;
                             }
+                          }
+
+                          if (prevMonthEndIdx === -1) {
+                            return (
+                              <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                                -
+                              </td>
+                            );
+                          }
+
+                          // 전월 마지막 주의 총액
+                          const prevMonthTotal = filteredData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[prevMonthEndIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
+
+                          if (prevMonthTotal === 0) {
+                            return (
+                              <td key={week.weekly_snapshot_id} style={{ textAlign: 'right' }}>
+                                -
+                              </td>
+                            );
+                          }
+
+                          const changePercent = ((currentTotal - prevMonthTotal) / prevMonthTotal) * 100;
+                          let changeColor = 'black';
+                          
+                          if (changePercent >= 1) {
+                            changeColor = '#d32f2f'; // Red
+                          } else if (changePercent <= -1) {
+                            changeColor = '#1976d2'; // Blue
                           }
 
                           return (
@@ -4492,9 +4811,7 @@ export default function PortfolioPage() {
                                 color: changeColor,
                               }}
                             >
-                              {weekIdx > 0
-                                ? changePercent.toFixed(2) + '%'
-                                : '-'}
+                              {changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%
                             </td>
                           );
                         })}
@@ -4505,6 +4822,8 @@ export default function PortfolioPage() {
               </table>
             </div>
             </>
+              );
+            })()
           ) : (
             <div className={styles.infoBox}>
               <p>{weeklyReportYear}년의 주간 스냅샷이 없습니다.</p>

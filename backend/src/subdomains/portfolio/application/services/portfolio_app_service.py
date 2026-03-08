@@ -633,12 +633,26 @@ class PortfolioAppService:
         ]
         year_snapshots.sort(key=lambda x: x.reference_date)
 
+        # 3. 전년도 12월 마지막 주 스냅샷 추가 (전주/전월 대비 계산용)
+        prev_year = query.year - 1
+        prev_december_snapshots = [
+            snap
+            for snap in weekly_snapshots
+            if snap.reference_date.year == prev_year and snap.reference_date.month == 12
+        ]
+        if prev_december_snapshots:
+            # 12월의 마지막 스냅샷 찾기
+            prev_december_snapshots.sort(key=lambda x: x.reference_date)
+            last_prev_december = prev_december_snapshots[-1]
+            # year_snapshots 맨 앞에 추가
+            year_snapshots.insert(0, last_prev_december)
+
         if not year_snapshots:
             return WeeklyPivotReportResult(
                 year=query.year, weeks=[], account_groups=[], accounts=[]
             )
 
-        # 3. 주차 정보 생성
+        # 4. 주차 정보 생성
         weeks = [
             WeeklyPivotWeekInfo(
                 weekly_snapshot_id=snap.weekly_snapshot_id,
@@ -648,19 +662,19 @@ class PortfolioAppService:
             for snap in year_snapshots
         ]
 
-        # 4. 각 주간 스냅샷의 보유자산 데이터 조회
+        # 5. 각 주간 스냅샷의 보유자산 데이터 조회
         # @use_transaction() 데코레이터가 context_var에서 conn을 자동으로 가져와 주입
         weekly_holdings_data = await self._report_repo.get_weekly_snapshot_holdings(
             [snap.weekly_snapshot_id for snap in year_snapshots]
         )
 
-        # 4-1. Institution의 display_order 정보 조회 (정렬용)
+        # 5-1. Institution의 display_order 정보 조회 (정렬용)
         institutions = await self._institution_repo.get_all()
         inst_display_orders = {
             inst.institution_id: inst.display_order for inst in institutions
         }
 
-        # 5. 계좌별로 그룹화
+        # 6. 계좌별로 그룹화
         account_map = {}
         for row in weekly_holdings_data:
             account_id = row.get("account_id")
@@ -681,7 +695,7 @@ class PortfolioAppService:
                 account_map[account_id]["valuations"][weekly_snapshot_id] = 0
             account_map[account_id]["valuations"][weekly_snapshot_id] += amount
 
-        # 6. 계좌별 행 데이터 생성 및 정렬 (institution의 display_order, account의 display_order 순서로)
+        # 7. 계좌별 행 데이터 생성 및 정렬 (institution의 display_order, account의 display_order 순서로)
         accounts = []
         for account_data in sorted(
             account_map.values(),
@@ -707,7 +721,7 @@ class PortfolioAppService:
                 )
             )
 
-        # 7. 계좌그룹 행 데이터 생성 (include_in_report=True인 그룹들)
+        # 8. 계좌그룹 행 데이터 생성 (include_in_report=True인 그룹들)
         account_group_rows = []
         account_groups = await self._account_group_repo.get_all()
         for group in account_groups:
