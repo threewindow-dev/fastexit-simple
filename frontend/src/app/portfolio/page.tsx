@@ -678,17 +678,20 @@ export default function PortfolioPage() {
     new Set([targetYear, ...reportYears, new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1])
   ).sort((a, b) => a - b);
 
+  // 같은 연도의 여러 스냅샷이 있다면 가장 최신(마지막)을 사용
   const annualReportYearIndex = annualReportData
-    ? annualReportData.weeks.findIndex(
-        (item) => new Date(item.reference_date).getFullYear() === targetYear
-      )
+    ? annualReportData.weeks.reduce((lastIdx, item, idx) => {
+        return new Date(item.reference_date).getFullYear() === targetYear ? idx : lastIdx;
+      }, -1)
     : -1;
 
-  // 전년도 평가금액을 시작일 평가금액으로 사용
+  // 전년도 평가금액을 기준으로 사용
+  // 같은 연도의 여러 스냅샷이 있다면 가장 최신(마지막)을 사용
+  // targetYear의 스냅샷이 targetYear-1년 확정 데이터를 담고 있음
   const previousYearIndex = annualReportData
-    ? annualReportData.weeks.findIndex(
-        (item) => new Date(item.reference_date).getFullYear() === targetYear - 1
-      )
+    ? annualReportData.weeks.reduce((lastIdx, item, idx) => {
+        return new Date(item.reference_date).getFullYear() === targetYear ? idx : lastIdx;
+      }, -1)
     : -1;
 
   const currentYear = new Date().getFullYear();
@@ -756,11 +759,19 @@ export default function PortfolioPage() {
           actualAmountMap.set(groupId, (actualAmountMap.get(groupId) ?? 0) + amount);
         });
       });
-  } else if (annualReportData && annualReportYearIndex >= 0) {
-    annualReportData.account_groups.forEach((group) => {
-      const value = group.valuations[annualReportYearIndex]?.amount ?? 0;
-      actualAmountMap.set(group.account_group_id, value);
-    });
+  } else if (annualReportData) {
+    // targetYear가 과거 연도일 때는 targetYear + 1 스냅샷(확정된 연도 데이터)에서 가져옴
+    const actualYearForSnapshot = targetYear < currentYear ? targetYear + 1 : targetYear;
+    const actualYearIndex = annualReportData.weeks.reduce((lastIdx, item, idx) => {
+        return new Date(item.reference_date).getFullYear() === actualYearForSnapshot ? idx : lastIdx;
+      }, -1);
+    
+    if (actualYearIndex >= 0) {
+        annualReportData.account_groups.forEach((group) => {
+          const value = group.valuations[actualYearIndex]?.amount ?? 0;
+          actualAmountMap.set(group.account_group_id, value);
+        });
+    }
   }
 
   // 전년도 평가금액 맵 생성 (시작일 평가금액)
