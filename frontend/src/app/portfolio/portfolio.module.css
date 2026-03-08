@@ -229,6 +229,12 @@
   overflow-y: auto;
 }
 
+.tableWrapperAuto {
+  overflow: hidden;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
 .table thead {
   background-color: #f8f9fa;
 }

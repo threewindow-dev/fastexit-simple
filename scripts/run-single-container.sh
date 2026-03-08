@@ -24,6 +24,7 @@ fi
 # 컨테이너 실행
 docker run -d \
     --name $CONTAINER_NAME \
+    --restart unless-stopped \
     -p 3010:3000 \
     -p 8010:8000 \
     -p 5442:5432 \

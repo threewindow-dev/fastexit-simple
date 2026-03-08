@@ -336,6 +336,16 @@ export default function PortfolioPage() {
   const [savingAccountGroupOrder, setSavingAccountGroupOrder] = useState(false);
   const [savingProductOrder, setSavingProductOrder] = useState(false);
 
+  // 주간보고서 스크롤 동기화용 ref
+  const weeklyReportTopScrollRef = useRef<HTMLDivElement>(null);
+  const weeklyReportBottomScrollRef = useRef<HTMLDivElement>(null);
+  const [weeklyReportScrollWidth, setWeeklyReportScrollWidth] = useState(0);
+
+  // 연간보고서 스크롤 동기화용 ref
+  const annualReportTopScrollRef = useRef<HTMLDivElement>(null);
+  const annualReportBottomScrollRef = useRef<HTMLDivElement>(null);
+  const [annualReportScrollWidth, setAnnualReportScrollWidth] = useState(0);
+
   const snapshotDraftStorageKey = (snapshotId: number) => `snapshot-holdings-draft:${snapshotId}`;
   const buildSnapshotDrafts = (snapshotId: number, useStored: boolean) => {
     let storedDrafts: Record<number, string> = {};
@@ -1406,12 +1416,35 @@ export default function PortfolioPage() {
     }
   }, [weeklyReportYear]);
 
+  // 주간/연간 보고서 테이블 렌더링 후 scrollWidth 측정
+  useEffect(() => {
+    if (weeklyReportBottomScrollRef.current && weeklyReportData) {
+      const scrollWidth = weeklyReportBottomScrollRef.current.scrollWidth;
+      setWeeklyReportScrollWidth(scrollWidth);
+    }
+  }, [weeklyReportData]);
+
+  useEffect(() => {
+    if (annualReportBottomScrollRef.current && annualReportData) {
+      const scrollWidth = annualReportBottomScrollRef.current.scrollWidth;
+      setAnnualReportScrollWidth(scrollWidth);
+    }
+  }, [annualReportData]);
+
   // Load asset class targets from API
   useEffect(() => {
     if (activeTab === 'targetAllocations') {
       fetchAssetClassTargets(targetYear);
+    } else if (activeTab === 'snapshotAnalysis') {
+      // 스냅샷 분석 탭일 때, 가장 최근 스냅샷의 연도 기준 목표 데이터 가져오기
+      const latestSnapshot = snapshots
+        .sort((a, b) => new Date(b.reference_date).getTime() - new Date(a.reference_date).getTime())[0];
+      if (latestSnapshot) {
+        const year = new Date(latestSnapshot.reference_date).getFullYear();
+        fetchAssetClassTargets(year);
+      }
     }
-  }, [targetYear, activeTab]);
+  }, [targetYear, activeTab, snapshots]);
 
   const fetchAssetClassTargets = async (year: number) => {
     try {
@@ -4271,8 +4304,35 @@ export default function PortfolioPage() {
           {loading ? (
             <div className={styles.loading}>로딩 중...</div>
           ) : weeklyReportData && weeklyReportData.weeks.length > 0 ? (
-            <div className={styles.tableWrapper} style={{ overflowX: 'auto' }}>
-              <table className={styles.table} style={{ minWidth: '800px' }}>
+            <>
+              {/* 상단 스크롤바 */}
+              <div
+                ref={weeklyReportTopScrollRef}
+                style={{
+                  overflowX: 'auto',
+                  overflowY: 'hidden',
+                  marginBottom: '10px',
+                }}
+                onScroll={(e) => {
+                  if (weeklyReportBottomScrollRef.current) {
+                    weeklyReportBottomScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                  }
+                }}
+              >
+                <div style={{ width: `${weeklyReportScrollWidth}px`, height: '1px' }} />
+              </div>
+
+              {/* 메인 테이블 */}
+              <div
+                 ref={weeklyReportBottomScrollRef}
+                 className={styles.tableWrapperAuto}
+                onScroll={(e) => {
+                  if (weeklyReportTopScrollRef.current) {
+                    weeklyReportTopScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                  }
+                }}
+              >
+                <table className={styles.table} style={{ minWidth: '800px' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#fff' }}>
                   <tr>
                     <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 11, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
@@ -4444,6 +4504,7 @@ export default function PortfolioPage() {
                 </tbody>
               </table>
             </div>
+            </>
           ) : (
             <div className={styles.infoBox}>
               <p>{weeklyReportYear}년의 주간 스냅샷이 없습니다.</p>
@@ -4462,8 +4523,35 @@ export default function PortfolioPage() {
           {loading ? (
             <div className={styles.loading}>로딩 중...</div>
           ) : annualReportData && annualReportData.weeks.length > 0 ? (
-            <div className={styles.tableWrapper} style={{ overflowX: 'auto' }}>
-              <table className={styles.table} style={{ minWidth: '800px' }}>
+            <>
+              {/* 상단 스크롤바 */}
+              <div
+                ref={annualReportTopScrollRef}
+                style={{
+                  overflowX: 'auto',
+                  overflowY: 'hidden',
+                  marginBottom: '10px',
+                }}
+                onScroll={(e) => {
+                  if (annualReportBottomScrollRef.current) {
+                    annualReportBottomScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                  }
+                }}
+              >
+                <div style={{ width: `${annualReportScrollWidth}px`, height: '1px' }} />
+              </div>
+
+              {/* 메인 테이블 */}
+              <div
+                ref={annualReportBottomScrollRef}
+                className={styles.tableWrapperAuto}
+                onScroll={(e) => {
+                  if (annualReportTopScrollRef.current) {
+                    annualReportTopScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                  }
+                }}
+              >
+                <table className={styles.table} style={{ minWidth: '800px' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#fff' }}>
                   <tr>
                     <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 11, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
@@ -4630,6 +4718,7 @@ export default function PortfolioPage() {
                 </tbody>
               </table>
             </div>
+            </>
           ) : (
             <div className={styles.infoBox}>
               <p>연간 스냅샷 데이터가 없습니다.</p>
@@ -4758,35 +4847,58 @@ export default function PortfolioPage() {
                   {/* 자산 유형별 상세 표 */}
                   <div style={{ flex: '1', minWidth: '300px' }}>
                     <h3>자산 유형별 상세</h3>
-                    <table className={styles.table}>
-                      <thead>
-                        <tr>
-                          <th>자산 유형</th>
-                          <th style={{ textAlign: 'right' }}>금액</th>
-                          <th style={{ textAlign: 'right' }}>비중</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {chartData.map((item, idx) => (
-                          <tr key={idx}>
-                            <td>{item.name}</td>
-                            <td style={{ textAlign: 'right' }}>
-                              {item.value.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              {((item.value / totalValue) * 100).toFixed(2)}%
-                            </td>
-                          </tr>
-                        ))}
-                        <tr style={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
-                          <td>합계</td>
-                          <td style={{ textAlign: 'right' }}>
-                            {totalValue.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
-                          </td>
-                          <td style={{ textAlign: 'right' }}>100.00%</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                    {(() => {
+                      const snapshotYear = new Date(latestSnapshot.reference_date).getFullYear();
+                      const targetsByAssetClass = assetClassTargets; // targetAllocations에서 가져온 데이터
+
+                      return (
+                        <table className={styles.table}>
+                          <thead>
+                            <tr>
+                              <th>자산 유형</th>
+                              <th style={{ textAlign: 'right' }}>금액</th>
+                              <th style={{ textAlign: 'right' }}>비중</th>
+                              <th style={{ textAlign: 'right' }}>목표</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chartData.map((item, idx) => {
+                              const targetPercentage = targetsByAssetClass[item.name];
+                              const currentPercentage = ((item.value / totalValue) * 100).toFixed(2);
+                              return (
+                                <tr key={idx}>
+                                  <td>{item.name}</td>
+                                  <td style={{ textAlign: 'right' }}>
+                                    {item.value.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
+                                  </td>
+                                  <td style={{ textAlign: 'right' }}>
+                                    {currentPercentage}%
+                                  </td>
+                                  <td style={{ textAlign: 'right' }}>
+                                    {targetPercentage ? `${targetPercentage}%` : '-'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            <tr style={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
+                              <td>합계</td>
+                              <td style={{ textAlign: 'right' }}>
+                                {totalValue.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
+                              </td>
+                              <td style={{ textAlign: 'right' }}>100.00%</td>
+                              <td style={{ textAlign: 'right' }}>
+                                {(() => {
+                                  const totalTarget = Object.values(targetsByAssetClass)
+                                    .filter(v => v)
+                                    .reduce((sum, v) => sum + parseFloat(v), 0);
+                                  return totalTarget > 0 ? `${totalTarget.toFixed(2)}%` : '-';
+                                })()}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
