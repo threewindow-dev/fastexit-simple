@@ -383,6 +383,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             institution_id=account.institution_id,
             name=account.name,
             type=account.type,
+            allow_snapshot_input=account.allow_snapshot_input,
             display_order=account.display_order,
         )
         session.add(entity)
@@ -392,6 +393,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             institution_id=entity.institution_id,
             name=entity.name,
             type=entity.type,
+            allow_snapshot_input=entity.allow_snapshot_input,
             display_order=entity.display_order,
             created_at=entity.created_at,
         )
@@ -410,6 +412,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             institution_id=entity.institution_id,
             name=entity.name,
             type=entity.type,
+            allow_snapshot_input=entity.allow_snapshot_input,
             display_order=entity.display_order,
             created_at=entity.created_at,
         )
@@ -436,6 +439,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             .values(
                 name=account.name,
                 type=account.type,
+                allow_snapshot_input=account.allow_snapshot_input,
                 display_order=account.display_order,
             )
         )
@@ -458,6 +462,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
                 institution_id=e.institution_id,
                 name=e.name,
                 type=e.type,
+                allow_snapshot_input=e.allow_snapshot_input,
                 display_order=e.display_order,
                 created_at=e.created_at,
             )
@@ -473,6 +478,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
                    a.institution_id,
                    a.name,
                    a.type,
+                   a.allow_snapshot_input,
                    a.display_order,
                    a.created_at
             FROM accounts a
@@ -488,6 +494,7 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
                 institution_id=row["institution_id"],
                 name=row["name"],
                 type=row["type"],
+                allow_snapshot_input=row["allow_snapshot_input"],
                 display_order=row["display_order"],
                 created_at=row["created_at"],
             )

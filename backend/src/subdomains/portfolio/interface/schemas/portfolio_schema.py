@@ -162,6 +162,11 @@ class CreateAccountRequest(BaseModel):
             "기타계좌",
         ],
     )
+    allow_snapshot_input: bool = Field(
+        True,
+        description="일일 스냅샷 평가금액 입력 허용 여부",
+        examples=[True, False],
+    )
     display_order: int = Field(0, description="표시 순서", examples=[0])
 
 
@@ -180,6 +185,11 @@ class UpdateAccountRequest(BaseModel):
             "기타계좌",
         ],
     )
+    allow_snapshot_input: bool = Field(
+        True,
+        description="일일 스냅샷 평가금액 입력 허용 여부",
+        examples=[True, False],
+    )
     display_order: int = Field(0, description="표시 순서", examples=[0])
 
 
@@ -188,6 +198,9 @@ class AccountResponseData(BaseModel):
     institution_id: int = Field(..., description="기관 ID", examples=[1])
     name: str = Field(..., description="계좌명")
     type: str = Field(..., description="계좌유형")
+    allow_snapshot_input: bool = Field(
+        ..., description="일일 스냅샷 평가금액 입력 허용 여부"
+    )
     display_order: int = Field(0, description="표시 순서", examples=[0])
     created_at: str = Field(..., description="생성 시각")
 

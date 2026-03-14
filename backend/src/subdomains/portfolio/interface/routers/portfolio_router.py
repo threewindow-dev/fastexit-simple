@@ -466,6 +466,7 @@ async def list_accounts(
             institution_id=r.institution_id,
             name=r.name,
             type=r.type,
+            allow_snapshot_input=r.allow_snapshot_input,
             display_order=r.display_order,
             created_at=_iso(r.created_at),
         )
@@ -488,6 +489,7 @@ async def create_account(
         institution_id=request.institution_id,
         name=request.name,
         type=request.type,
+        allow_snapshot_input=request.allow_snapshot_input,
         display_order=request.display_order,
     )
     result = await service.create_account(cmd)
@@ -496,6 +498,7 @@ async def create_account(
         institution_id=result.institution_id,
         name=result.name,
         type=result.type,
+        allow_snapshot_input=result.allow_snapshot_input,
         display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
@@ -518,6 +521,7 @@ async def update_account(
         account_id=account_id,
         name=request.name,
         type=request.type,
+        allow_snapshot_input=request.allow_snapshot_input,
         display_order=request.display_order,
     )
     result = await service.update_account(cmd)
@@ -526,6 +530,7 @@ async def update_account(
         institution_id=result.institution_id,
         name=result.name,
         type=result.type,
+        allow_snapshot_input=result.allow_snapshot_input,
         display_order=result.display_order,
         created_at=_iso(result.created_at),
     )

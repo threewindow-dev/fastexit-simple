@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   filterSnapshotInputEligibleHoldings,
+  isAccountAllowedForSnapshotInput,
   isProductAllowedForSnapshotInput,
 } from './snapshotInputPolicy';
 
@@ -10,19 +11,28 @@ describe('snapshotInputPolicy', () => {
     expect(isProductAllowedForSnapshotInput(undefined)).toBe(true);
   });
 
-  it('filters out deleted holdings and products with snapshot input disabled', () => {
+  it('treats missing account policy as allowed for backward compatibility', () => {
+    expect(isAccountAllowedForSnapshotInput(undefined)).toBe(true);
+  });
+
+  it('filters out deleted holdings and products/accounts with snapshot input disabled', () => {
     const products = [
       { product_id: 1, allow_snapshot_input: true },
       { product_id: 2, allow_snapshot_input: false },
     ];
+    const accounts = [
+      { account_id: 101, allow_snapshot_input: true },
+      { account_id: 102, allow_snapshot_input: false },
+    ];
     const holdings = [
-      { holding_id: 10, product_id: 1, deleted_at: null },
-      { holding_id: 11, product_id: 2, deleted_at: null },
-      { holding_id: 12, product_id: 1, deleted_at: '2026-01-01T00:00:00' },
+      { holding_id: 10, account_id: 101, product_id: 1, deleted_at: null },
+      { holding_id: 11, account_id: 101, product_id: 2, deleted_at: null },
+      { holding_id: 12, account_id: 101, product_id: 1, deleted_at: '2026-01-01T00:00:00' },
+      { holding_id: 13, account_id: 102, product_id: 1, deleted_at: null },
     ];
 
-    const result = filterSnapshotInputEligibleHoldings(holdings, products);
+    const result = filterSnapshotInputEligibleHoldings(holdings, products, accounts);
 
-    expect(result).toEqual([{ holding_id: 10, product_id: 1, deleted_at: null }]);
+    expect(result).toEqual([{ holding_id: 10, account_id: 101, product_id: 1, deleted_at: null }]);
   });
 });

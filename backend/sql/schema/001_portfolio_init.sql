@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     institution_id INTEGER      NOT NULL REFERENCES institutions(institution_id) ON DELETE CASCADE,
     name           VARCHAR(255) NOT NULL,
     type           VARCHAR(100) NOT NULL,
+    allow_snapshot_input BOOLEAN NOT NULL DEFAULT TRUE,
     display_order  INTEGER      NOT NULL DEFAULT 0,
     created_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     UNIQUE (institution_id, name)

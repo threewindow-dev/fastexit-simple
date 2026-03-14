@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI):
         if engine:
             async with engine.begin() as conn:
                 await conn.run_sync(lambda sync_conn: _create_all_tables(sync_conn))
-                await _ensure_display_order_columns(conn)
+                await _ensure_portfolio_columns(conn)
 
     logger.info(
         f"Database initialized successfully (repository_type={config.repository_type})"
@@ -96,8 +96,8 @@ def _create_all_tables(sync_conn):
     Base.metadata.create_all(sync_conn)
 
 
-async def _ensure_display_order_columns(conn):
-    """Ensure display_order columns exist for institutions and accounts."""
+async def _ensure_portfolio_columns(conn):
+    """Ensure required portfolio columns exist on existing databases."""
     await conn.execute(
         text(
             "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0"
@@ -106,6 +106,11 @@ async def _ensure_display_order_columns(conn):
     await conn.execute(
         text(
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0"
+        )
+    )
+    await conn.execute(
+        text(
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS allow_snapshot_input BOOLEAN NOT NULL DEFAULT TRUE"
         )
     )
 

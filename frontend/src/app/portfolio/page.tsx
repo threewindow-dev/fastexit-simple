@@ -39,6 +39,7 @@ interface Account {
   institution_id: number;
   name: string;
   type: string;
+  allow_snapshot_input: boolean;
   display_order: number;
   created_at: string;
 }
@@ -273,6 +274,7 @@ export default function PortfolioPage() {
     institution_id: '',
     name: '',
     type: '위탁계좌',
+    allow_snapshot_input: true,
     display_order: '0',
   });
   const [showAccountForm, setShowAccountForm] = useState(false);
@@ -281,6 +283,7 @@ export default function PortfolioPage() {
     institution_id: number;
     name: string;
     type: string;
+    allow_snapshot_input: boolean;
     display_order: string;
   } | null>(null);
   const [showAccountEditForm, setShowAccountEditForm] = useState(false);
@@ -362,7 +365,7 @@ export default function PortfolioPage() {
     }
 
     const draftMap: Record<number, string> = {};
-    filterSnapshotInputEligibleHoldings(holdings, products)
+    filterSnapshotInputEligibleHoldings(holdings, products, accounts)
       .forEach((holding) => {
         const existing = snapshotHoldings.find(
           (item) => item.snapshot_id === snapshotId && item.holding_id === holding.holding_id
@@ -960,7 +963,7 @@ export default function PortfolioPage() {
 
     const snapshotId = parseInt(selectedSnapshotId, 10);
     setSnapshotHoldingDrafts(buildSnapshotDrafts(snapshotId, true));
-  }, [selectedSnapshotId, holdings, products, snapshotHoldings]);
+  }, [selectedSnapshotId, holdings, products, accounts, snapshotHoldings]);
 
   useEffect(() => {
     if (!selectedSnapshotId || typeof window === 'undefined') {
@@ -1793,6 +1796,7 @@ export default function PortfolioPage() {
         institution_id: institutionId,
         name: newAccount.name,
         type: newAccount.type,
+        allow_snapshot_input: newAccount.allow_snapshot_input,
         display_order: nextOrder,
       };
       const response = await fetch(`${API_BASE_URL}/portfolio/accounts`, {
@@ -1802,7 +1806,13 @@ export default function PortfolioPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to create account');
-      setNewAccount({ institution_id: '', name: '', type: '위탁계좌', display_order: '0' });
+      setNewAccount({
+        institution_id: '',
+        name: '',
+        type: '위탁계좌',
+        allow_snapshot_input: true,
+        display_order: '0',
+      });
       setShowAccountForm(false);
       fetchAccounts();
     } catch (err) {
@@ -1859,6 +1869,7 @@ export default function PortfolioPage() {
       institution_id: account.institution_id,
       name: account.name,
       type: account.type,
+      allow_snapshot_input: account.allow_snapshot_input,
       display_order: String(account.display_order ?? 0),
     });
     setShowAccountEditForm(true);
@@ -1877,6 +1888,7 @@ export default function PortfolioPage() {
       const payload = {
         name: editingAccount.name,
         type: editingAccount.type,
+        allow_snapshot_input: editingAccount.allow_snapshot_input,
         display_order: parseInt(editingAccount.display_order, 10) || 0,
       };
       const response = await fetch(
@@ -2171,7 +2183,7 @@ export default function PortfolioPage() {
         existingByHoldingId.set(item.holding_id, item);
       });
 
-    const targets = filterSnapshotInputEligibleHoldings(holdings, products)
+    const targets = filterSnapshotInputEligibleHoldings(holdings, products, accounts)
       .map((holding) => ({
         holding,
         amount: snapshotHoldingDrafts[holding.holding_id] ?? '',
@@ -3093,6 +3105,20 @@ export default function PortfolioPage() {
                   </option>
                 ))}
               </select>
+              <label style={{ display: 'block', margin: '10px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={newAccount.allow_snapshot_input}
+                  onChange={(e) =>
+                    setNewAccount({
+                      ...newAccount,
+                      allow_snapshot_input: e.target.checked,
+                    })
+                  }
+                  style={{ marginRight: '8px' }}
+                />
+                스냅샷 평가금액 입력 허용
+              </label>
               <button type="submit">생성</button>
             </form>
           )}
@@ -3133,6 +3159,20 @@ export default function PortfolioPage() {
                   </option>
                 ))}
               </select>
+              <label style={{ display: 'block', margin: '10px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={editingAccount.allow_snapshot_input}
+                  onChange={(e) =>
+                    setEditingAccount({
+                      ...editingAccount,
+                      allow_snapshot_input: e.target.checked,
+                    })
+                  }
+                  style={{ marginRight: '8px' }}
+                />
+                스냅샷 평가금액 입력 허용
+              </label>
               <button type="submit">저장</button>
               <button type="button" onClick={cancelAccountEdit}>
                 취소
@@ -3151,6 +3191,7 @@ export default function PortfolioPage() {
                   <th>금융기관</th>
                   <th>계좌명</th>
                   <th>유형</th>
+                  <th>스냅샷 입력</th>
                   <th>생성일</th>
                   <th>작업</th>
                 </tr>
@@ -3177,6 +3218,7 @@ export default function PortfolioPage() {
                       <td>{inst?.name || acc.institution_id}</td>
                       <td>{acc.name}</td>
                       <td>{acc.type}</td>
+                      <td>{acc.allow_snapshot_input ? '허용' : '제외'}</td>
                       <td>{new Date(acc.created_at).toLocaleDateString()}</td>
                       <td>
                         <div className={styles.actionButtons}>
@@ -4066,20 +4108,7 @@ export default function PortfolioPage() {
                   });
               }
 
-              const views = holdings
-                .filter((holding) => {
-                  // 삭제된 항목은 제외
-                  if (holding.deleted_at) {
-                    return false;
-                  }
-                  // 이미 값이 입력되어 있으면 표시
-                  if (holdingMap.has(holding.holding_id)) {
-                    return true;
-                  }
-                  // allow_snapshot_input이 true인 경우만 표시
-                  const product = products.find((p) => p.product_id === holding.product_id);
-                  return product?.allow_snapshot_input !== false;
-                })
+              const views = filterSnapshotInputEligibleHoldings(holdings, products, accounts)
                 .map((holding) => {
                   const account = accounts.find((a) => a.account_id === holding.account_id) || null;
                   const institution = institutions.find((i) => i.institution_id === account?.institution_id) || null;

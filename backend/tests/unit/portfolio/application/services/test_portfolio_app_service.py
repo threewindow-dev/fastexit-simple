@@ -183,6 +183,12 @@ class TestPortfolioSnapshotHoldingService:
         snapshot.snapshot_id = 10
         holding = Holding.create(account_id=1, product_id=2)
         holding.holding_id = 100
+        account = Account.create(
+            institution_id=1,
+            name="테스트계좌",
+            type="위탁계좌",
+        )
+        account.account_id = 1
         product = Product.create(
             product_name="평가금액 보정",
             asset_class="기타자산",
@@ -197,6 +203,7 @@ class TestPortfolioSnapshotHoldingService:
 
         mock_snapshot_repo.find_by_id.return_value = snapshot
         mock_holding_repo.find_by_id.return_value = holding
+        mock_account_repo.find_by_id.return_value = account
         mock_product_repo.find_by_id.return_value = product
 
         service = PortfolioAppService(
@@ -238,6 +245,12 @@ class TestPortfolioSnapshotHoldingService:
         snapshot.snapshot_id = 10
         holding = Holding.create(account_id=1, product_id=2)
         holding.holding_id = 100
+        account = Account.create(
+            institution_id=1,
+            name="테스트계좌",
+            type="위탁계좌",
+        )
+        account.account_id = 1
         product = Product.create(
             product_name="삼성전자",
             asset_class="주식",
@@ -256,6 +269,7 @@ class TestPortfolioSnapshotHoldingService:
 
         mock_snapshot_repo.find_by_id.return_value = snapshot
         mock_holding_repo.find_by_id.return_value = holding
+        mock_account_repo.find_by_id.return_value = account
         mock_product_repo.find_by_id.return_value = product
         mock_snapshot_repo.save_holding.return_value = saved
 
@@ -282,6 +296,68 @@ class TestPortfolioSnapshotHoldingService:
         assert result.holding_id == 100
         assert result.valuation_amount == 12345.0
         mock_snapshot_repo.save_holding.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_upsert_snapshot_holding_rejects_disallowed_account(
+        self, mock_transaction_manager
+    ):
+        mock_institution_repo = AsyncMock()
+        mock_product_repo = AsyncMock()
+        mock_account_repo = AsyncMock()
+        mock_account_group_repo = AsyncMock()
+        mock_holding_repo = AsyncMock()
+        mock_snapshot_repo = AsyncMock()
+        mock_report_repo = AsyncMock()
+
+        snapshot = Snapshot.create(user_id=1, reference_date=date(2025, 1, 22))
+        snapshot.snapshot_id = 10
+        holding = Holding.create(account_id=1, product_id=2)
+        holding.holding_id = 100
+        account = Account.create(
+            institution_id=1,
+            name="사용중단계좌",
+            type="예금계좌",
+            allow_snapshot_input=False,
+        )
+        account.account_id = 1
+        product = Product.create(
+            product_name="삼성전자",
+            asset_class="주식",
+            region="대한민국",
+            currency="KRW",
+            investment_type="직접",
+            characteristics=None,
+            risk_level="위험",
+        )
+        product.product_id = 2
+
+        mock_snapshot_repo.find_by_id.return_value = snapshot
+        mock_holding_repo.find_by_id.return_value = holding
+        mock_account_repo.find_by_id.return_value = account
+        mock_product_repo.find_by_id.return_value = product
+
+        service = PortfolioAppService(
+            mock_institution_repo,
+            mock_product_repo,
+            mock_account_repo,
+            mock_account_group_repo,
+            mock_holding_repo,
+            mock_snapshot_repo,
+            mock_report_repo,
+            mock_transaction_manager,
+        )
+
+        command = UpsertSnapshotHoldingCommand(
+            snapshot_id=10,
+            holding_id=100,
+            valuation_amount=12345.0,
+            data_source="manual",
+        )
+
+        with pytest.raises(InvalidStateError):
+            await service.upsert_snapshot_holding(command)
+
+        mock_snapshot_repo.save_holding.assert_not_called()
 
 
 class TestPortfolioDeleteService:

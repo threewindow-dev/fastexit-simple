@@ -14,6 +14,7 @@ class Account:
     type: str
     display_order: int
     created_at: datetime
+    allow_snapshot_input: bool = True
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -25,7 +26,12 @@ class Account:
 
     @classmethod
     def create(
-        cls, institution_id: int, name: str, type: str, display_order: int = 0
+        cls,
+        institution_id: int,
+        name: str,
+        type: str,
+        display_order: int = 0,
+        allow_snapshot_input: bool = True,
     ) -> "Account":
         return cls(
             account_id=None,
@@ -34,6 +40,7 @@ class Account:
             type=type,
             display_order=display_order,
             created_at=datetime.utcnow(),
+            allow_snapshot_input=allow_snapshot_input,
         )
 
     def to_dict(self) -> dict:
@@ -44,9 +51,16 @@ class Account:
             "type": self.type,
             "display_order": self.display_order,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "allow_snapshot_input": self.allow_snapshot_input,
         }
 
-    def update(self, name: str, type: str, display_order: int) -> None:
+    def update(
+        self,
+        name: str,
+        type: str,
+        display_order: int,
+        allow_snapshot_input: bool,
+    ) -> None:
         if not name:
             raise InvalidStateError("account", "name is required")
         if not type:
@@ -56,3 +70,4 @@ class Account:
         self.name = name
         self.type = type
         self.display_order = display_order
+        self.allow_snapshot_input = allow_snapshot_input

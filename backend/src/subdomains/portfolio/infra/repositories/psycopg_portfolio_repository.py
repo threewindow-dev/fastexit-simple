@@ -416,14 +416,18 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
         async with connection.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO accounts (institution_id, name, type, display_order, created_at)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING account_id, institution_id, name, type, display_order, created_at
+                INSERT INTO accounts (
+                    institution_id, name, type, allow_snapshot_input, display_order, created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING account_id, institution_id, name, type,
+                          allow_snapshot_input, display_order, created_at
                 """,
                 (
                     account.institution_id,
                     account.name,
                     account.type,
+                    account.allow_snapshot_input,
                     account.display_order,
                     _utc_now_naive(),
                 ),
@@ -434,6 +438,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
             institution_id=row["institution_id"],
             name=row["name"],
             type=row["type"],
+            allow_snapshot_input=row["allow_snapshot_input"],
             display_order=row["display_order"],
             created_at=row["created_at"],
         )
@@ -443,7 +448,12 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "SELECT account_id, institution_id, name, type, display_order, created_at FROM accounts WHERE account_id = %s",
+                """
+                SELECT account_id, institution_id, name, type,
+                       allow_snapshot_input, display_order, created_at
+                FROM accounts
+                WHERE account_id = %s
+                """,
                 (account_id,),
             )
             row = await cur.fetchone()
@@ -454,6 +464,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
             institution_id=row["institution_id"],
             name=row["name"],
             type=row["type"],
+            allow_snapshot_input=row["allow_snapshot_input"],
             display_order=row["display_order"],
             created_at=row["created_at"],
         )
@@ -480,10 +491,17 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
                 UPDATE accounts
                 SET name = %s,
                     type = %s,
+                    allow_snapshot_input = %s,
                     display_order = %s
                 WHERE account_id = %s
                 """,
-                (account.name, account.type, account.display_order, account.account_id),
+                (
+                    account.name,
+                    account.type,
+                    account.allow_snapshot_input,
+                    account.display_order,
+                    account.account_id,
+                ),
             )
         return account
 
@@ -497,7 +515,12 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
         connection = self._require_conn(conn)
         async with connection.cursor() as cur:
             await cur.execute(
-                "SELECT account_id, institution_id, name, type, display_order, created_at FROM accounts WHERE account_id = ANY(%s)",
+                """
+                SELECT account_id, institution_id, name, type,
+                       allow_snapshot_input, display_order, created_at
+                FROM accounts
+                WHERE account_id = ANY(%s)
+                """,
                 (ids,),
             )
             rows = await cur.fetchall()
@@ -507,6 +530,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
                 institution_id=row["institution_id"],
                 name=row["name"],
                 type=row["type"],
+                allow_snapshot_input=row["allow_snapshot_input"],
                 display_order=row["display_order"],
                 created_at=row["created_at"],
             )
@@ -523,6 +547,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
                        a.institution_id,
                        a.name,
                        a.type,
+                       a.allow_snapshot_input,
                        a.display_order,
                        a.created_at
                 FROM accounts a
@@ -537,6 +562,7 @@ class PsycopgAccountRepository(_BaseRepo, AccountRepository):
                 institution_id=row["institution_id"],
                 name=row["name"],
                 type=row["type"],
+                allow_snapshot_input=row["allow_snapshot_input"],
                 display_order=row["display_order"],
                 created_at=row["created_at"],
             )

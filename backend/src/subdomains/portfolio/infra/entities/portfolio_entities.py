@@ -94,6 +94,7 @@ class AccountEntity(Base):
     )
     name = Column(String(255), nullable=False)
     type = Column(String(100), nullable=False)
+    allow_snapshot_input = Column(Boolean, nullable=False, default=True)
     display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
 

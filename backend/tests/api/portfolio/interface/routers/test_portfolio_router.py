@@ -154,6 +154,7 @@ async def test_db_pool(postgres_container):
                     institution_id INTEGER NOT NULL REFERENCES institutions(institution_id) ON DELETE CASCADE,
                     name VARCHAR(255) NOT NULL,
                     type VARCHAR(100) NOT NULL,
+                    allow_snapshot_input BOOLEAN NOT NULL DEFAULT TRUE,
                     display_order INTEGER NOT NULL DEFAULT 0,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE (institution_id, name)
@@ -530,7 +531,29 @@ class TestCreateAccount:
         assert data["message"] == "success"
         assert data["data"]["name"] == "주식계좌"
         assert data["data"]["type"] == "ISA"
+        assert data["data"]["allow_snapshot_input"] is True
         assert data["data"]["account_id"] is not None
+
+    async def test_create_account_with_snapshot_input_disabled(self, client, clean_db):
+        """Should create account with allow_snapshot_input=false"""
+        inst_payload = {"name": "신한은행", "type": "은행"}
+        inst_response = await client.post(
+            "/api/portfolio/institutions", json=inst_payload
+        )
+        institution_id = inst_response.json()["data"]["institution_id"]
+
+        payload = {
+            "institution_id": institution_id,
+            "name": "신한쏠편한적금",
+            "type": "예금계좌",
+            "allow_snapshot_input": False,
+        }
+
+        response = await client.post("/api/portfolio/accounts", json=payload)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["data"]["allow_snapshot_input"] is False
 
     async def test_create_account_invalid_institution_returns_400(
         self, client, clean_db
@@ -915,6 +938,61 @@ class TestSnapshotHoldings:
                 "institution_id": institution_id,
                 "name": "계좌1",
                 "type": "위탁계좌",
+            },
+        )
+        account_id = acc_response.json()["data"]["account_id"]
+
+        holding_response = await client.post(
+            "/api/portfolio/holdings",
+            json={"account_id": account_id, "product_id": product_id},
+        )
+        holding_id = holding_response.json()["data"]["holding_id"]
+
+        snapshot_response = await client.post(
+            "/api/portfolio/snapshots",
+            json={"user_id": 1, "reference_date": "2025-01-22"},
+        )
+        snapshot_id = snapshot_response.json()["data"]["snapshot_id"]
+
+        response = await client.post(
+            f"/api/portfolio/snapshots/{snapshot_id}/holdings/{holding_id}",
+            json={"valuation_amount": 1000000.0, "data_source": "manual"},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert data["code"] == "SNAPSHOT_HOLDING_INVALID_STATE"
+
+    async def test_upsert_snapshot_holding_rejects_disallowed_account(
+        self, client, clean_db
+    ):
+        """Should reject snapshot holding input when account disallows snapshot input"""
+        inst_response = await client.post(
+            "/api/portfolio/institutions", json={"name": "우리은행", "type": "은행"}
+        )
+        institution_id = inst_response.json()["data"]["institution_id"]
+
+        prod_response = await client.post(
+            "/api/portfolio/products",
+            json={
+                "product_name": "정기예금",
+                "asset_class": "통화",
+                "region": "대한민국",
+                "currency": "KRW",
+                "investment_type": "직접",
+                "risk_level": "안전",
+                "allow_snapshot_input": True,
+            },
+        )
+        product_id = prod_response.json()["data"]["product_id"]
+
+        acc_response = await client.post(
+            "/api/portfolio/accounts",
+            json={
+                "institution_id": institution_id,
+                "name": "우리은행 정기예금",
+                "type": "예금계좌",
+                "allow_snapshot_input": False,
             },
         )
         account_id = acc_response.json()["data"]["account_id"]

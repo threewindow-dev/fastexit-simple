@@ -89,6 +89,7 @@ class CreateAccountCommand:
     institution_id: int
     name: str
     type: str
+    allow_snapshot_input: bool = True
     display_order: int = 0
 
 
@@ -109,6 +110,7 @@ class UpdateAccountCommand:
     account_id: int
     name: str
     type: str
+    allow_snapshot_input: bool = True
     display_order: int = 0
 
 
@@ -312,6 +314,7 @@ class AccountResult:
     institution_id: int
     name: str
     type: str
+    allow_snapshot_input: bool
     display_order: int
     created_at: datetime
 
@@ -322,6 +325,7 @@ class AccountResult:
             institution_id=model.institution_id,
             name=model.name,
             type=model.type,
+            allow_snapshot_input=model.allow_snapshot_input,
             display_order=model.display_order,
             created_at=model.created_at,
         )

@@ -272,6 +272,7 @@ class PortfolioAppService:
             institution_id=command.institution_id,
             name=command.name,
             type=command.type,
+            allow_snapshot_input=command.allow_snapshot_input,
             display_order=command.display_order,
         )
         saved = await self._account_repo.add(model)
@@ -290,6 +291,7 @@ class PortfolioAppService:
             name=command.name,
             type=command.type,
             display_order=command.display_order,
+            allow_snapshot_input=command.allow_snapshot_input,
         )
         saved = await self._account_repo.update(account)
         return AccountResult.from_domain(saved)
@@ -475,10 +477,19 @@ class PortfolioAppService:
         product = await self._product_repo.find_by_id(holding.product_id)
         if product is None:
             raise NotFoundError("product", holding.product_id)
+
+        account = await self._account_repo.find_by_id(holding.account_id)
+        if account is None:
+            raise NotFoundError("account", holding.account_id)
         if not product.allow_snapshot_input:
             raise InvalidStateError(
                 "snapshot_holding",
                 f"snapshot input is disabled for product '{product.product_name}'",
+            )
+        if not account.allow_snapshot_input:
+            raise InvalidStateError(
+                "snapshot_holding",
+                f"snapshot input is disabled for account '{account.name}'",
             )
 
         snapshot.upsert_holding(
@@ -937,6 +948,7 @@ class PortfolioAppService:
                 institution_id=acc.institution_id,
                 name=acc.name,
                 type=acc.type,
+                allow_snapshot_input=acc.allow_snapshot_input,
                 display_order=acc.display_order,
                 created_at=acc.created_at,
             )
