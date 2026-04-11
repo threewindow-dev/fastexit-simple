@@ -187,6 +187,33 @@ const ACCOUNT_TYPES = [
   '기타계좌',
 ];
 
+const ASSET_CLASS_COLORS: Record<string, string> = {
+  주식: '#ef4444',
+  채권: '#3b82f6',
+  통화: '#14b8a6',
+  금: '#f59e0b',
+  부동산: '#8b5cf6',
+  가상자산: '#111827',
+  기타자산: '#6b7280',
+};
+
+const ASSET_CLASS_ORDER = [
+  '주식',
+  '채권',
+  '통화',
+  '금',
+  '부동산',
+  '가상자산',
+  '기타자산',
+];
+
+const getAssetClassColor = (assetClass: string | null | undefined): string => {
+  if (!assetClass) {
+    return ASSET_CLASS_COLORS['기타자산'];
+  }
+  return ASSET_CLASS_COLORS[assetClass] || ASSET_CLASS_COLORS['기타자산'];
+};
+
 const getDataSourceLabel = (dataSource: string): string => {
   const labels: { [key: string]: string } = {
     manual: '수동입력',
@@ -4196,6 +4223,19 @@ export default function PortfolioPage() {
             </select>
           </div>
 
+          <div className={styles.assetClassLegend} aria-label="자산군 색상 범례">
+            {ASSET_CLASS_ORDER.map((assetClass) => (
+              <span key={assetClass} className={styles.assetClassLegendItem}>
+                <span
+                  className={styles.assetClassIcon}
+                  style={{ backgroundColor: getAssetClassColor(assetClass) }}
+                  aria-hidden="true"
+                />
+                <span>{assetClass}</span>
+              </span>
+            ))}
+          </div>
+
           {!selectedSnapshotId ? (
             <div className={styles.loading}>스냅샷을 선택해주세요.</div>
           ) : loading ? (
@@ -4356,7 +4396,19 @@ export default function PortfolioPage() {
                       <td>{globalIndex}</td>
                       <td>{truncateText(view.institution?.name || '-')}</td>
                       <td>{truncateText(view.account?.name || '-')}</td>
-                      <td>{truncateText(view.product?.product_name || '-')}</td>
+                      <td>
+                        <div className={styles.productNameCell}>
+                          <span
+                            className={styles.assetClassIcon}
+                            style={{ backgroundColor: getAssetClassColor(view.product?.asset_class) }}
+                            title={view.product?.asset_class || '기타자산'}
+                            aria-label={`자산종류: ${view.product?.asset_class || '기타자산'}`}
+                          />
+                          <span title={view.product?.product_name || '-'}>
+                            {truncateText(view.product?.product_name || '-')}
+                          </span>
+                        </div>
+                      </td>
                       <td className={styles.amountCell}>
                         {previousAmount != null && previousAmount > 0 ? formatAmount(previousAmount) : '-'}
                       </td>

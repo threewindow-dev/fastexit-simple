@@ -390,3 +390,38 @@
 .amountCell {
   text-align: right;
 }
+
+.assetClassLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: -0.75rem 0 1rem;
+}
+
+.assetClassLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.55rem;
+  background-color: #f8f9fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.assetClassIcon {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  min-width: 0.9rem;
+  border-radius: 0.2rem;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  box-sizing: border-box;
+}
+
+.productNameCell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
