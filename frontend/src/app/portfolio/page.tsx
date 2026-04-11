@@ -3,7 +3,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, ComposedChart, Bar, BarChart } from 'recharts';
 import styles from './portfolio.module.css';
-import { filterSnapshotInputEligibleHoldings } from './snapshotInputPolicy';
+import {
+  filterSnapshotInputEligibleHoldings,
+  filterSnapshotInputVisibleHoldings,
+  isAccountAllowedForSnapshotInput,
+  isProductAllowedForSnapshotInput,
+} from './snapshotInputPolicy';
 
 interface User {
   id: number;
@@ -4287,17 +4292,26 @@ export default function PortfolioPage() {
                   });
               }
 
-              const views = filterSnapshotInputEligibleHoldings(holdings, products, accounts)
+              const views = filterSnapshotInputVisibleHoldings(holdings, products, accounts, {
+                currentValueHoldingIds: holdingMap.keys(),
+                previousValueHoldingIds: previousAmountsByHolding.keys(),
+              })
                 .map((holding) => {
                   const account = accounts.find((a) => a.account_id === holding.account_id) || null;
                   const institution = institutions.find((i) => i.institution_id === account?.institution_id) || null;
                   const product = products.find((p) => p.product_id === holding.product_id) || null;
+                  const isInputAllowed = (
+                    isProductAllowedForSnapshotInput(product)
+                    && isAccountAllowedForSnapshotInput(account)
+                  );
                   return {
                     holding,
                     account,
                     institution,
                     product,
                     existing: holdingMap.get(holding.holding_id) || null,
+                    isInputAllowed,
+                    isReadOnly: isSnapshotLocked || !isInputAllowed,
                   };
                 })
                 .sort((a, b) => {
@@ -4350,7 +4364,7 @@ export default function PortfolioPage() {
 
               const totalSum = views.reduce((sum, view) => {
                 const draftValue = snapshotHoldingDrafts[view.holding.holding_id];
-                const effectiveValue = isSnapshotLocked 
+                const effectiveValue = view.isReadOnly
                   ? (view.existing?.valuation_amount ?? '')
                   : (draftValue !== undefined ? draftValue : (view.existing?.valuation_amount ?? ''));
                 return sum + parseAmount(effectiveValue);
@@ -4381,7 +4395,7 @@ export default function PortfolioPage() {
 
                 accountViews.forEach((view) => {
                   const draftValue = snapshotHoldingDrafts[view.holding.holding_id];
-                  const effectiveValue = isSnapshotLocked 
+                  const effectiveValue = view.isReadOnly
                     ? (view.existing?.valuation_amount ?? '')
                     : (draftValue !== undefined ? draftValue : (view.existing?.valuation_amount ?? ''));
                   const amount = parseAmount(effectiveValue);
@@ -4415,10 +4429,11 @@ export default function PortfolioPage() {
                       <td>
                         {(() => {
                           const draftValue = snapshotHoldingDrafts[view.holding.holding_id];
-                          const displayValue = isSnapshotLocked 
+                          const displayValue = view.isReadOnly
                             ? (view.existing?.valuation_amount ?? '')
                             : (draftValue !== undefined ? draftValue : (view.existing?.valuation_amount ?? ''));
-                          const isDirty = isDraftDifferent(displayValue, view.existing?.valuation_amount);
+                          const isDirty = !view.isReadOnly
+                            && isDraftDifferent(displayValue, view.existing?.valuation_amount);
                           return (
                             <input
                               type="text"
@@ -4427,7 +4442,12 @@ export default function PortfolioPage() {
                               data-index={globalIndex - 1}
                               data-holding-id={view.holding.holding_id}
                               value={displayValue}
+                              readOnly={view.isReadOnly}
                               disabled={isSnapshotLocked}
+                              placeholder={view.isInputAllowed ? undefined : '조회 전용'}
+                              title={view.isInputAllowed
+                                ? undefined
+                                : '입력 제외 상태입니다. 수정이 필요하면 입력 허용으로 변경한 뒤 다시 제외해 주세요.'}
                               onChange={(e) =>
                                 setSnapshotHoldingDrafts((prev) => ({
                                   ...prev,
@@ -4451,7 +4471,11 @@ export default function PortfolioPage() {
                       <td className={styles.amountCell}>
                         {formatRatio(totalSum > 0 ? (amount / totalSum) * 100 : 0)}
                       </td>
-                      <td>{getDataSourceLabel(view.existing?.data_source || snapshotHoldingDataSource)}</td>
+                      <td>
+                        {view.isInputAllowed
+                          ? getDataSourceLabel(view.existing?.data_source || snapshotHoldingDataSource)
+                          : `조회 전용${view.existing?.data_source ? ` · ${getDataSourceLabel(view.existing.data_source)}` : ''}`}
+                      </td>
                     </tr>
                   );
                 });
