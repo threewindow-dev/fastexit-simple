@@ -113,6 +113,26 @@ async def _ensure_portfolio_columns(conn):
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS allow_snapshot_input BOOLEAN NOT NULL DEFAULT TRUE"
         )
     )
+    await conn.execute(
+        text(
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS domestic_beta NUMERIC(12,6) NULL"
+        )
+    )
+    await conn.execute(
+        text(
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS global_beta NUMERIC(12,6) NULL"
+        )
+    )
+    await conn.execute(
+        text(
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS beta_collected_at TIMESTAMP WITHOUT TIME ZONE NULL"
+        )
+    )
+    await conn.execute(
+        text(
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS ticker VARCHAR(32) NULL"
+        )
+    )
 
 
 async def _initialize_schema_from_sql(db_pool):

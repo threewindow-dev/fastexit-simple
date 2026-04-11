@@ -30,6 +30,10 @@ interface Product {
   characteristics?: string[];
   risk_level: string;
   allow_snapshot_input: boolean;
+  ticker?: string | null;
+  domestic_beta?: number | null;
+  global_beta?: number | null;
+  beta_collected_at?: string | null;
   display_order: number;
   created_at: string;
 }
@@ -192,6 +196,20 @@ const getDataSourceLabel = (dataSource: string): string => {
   return labels[dataSource] || dataSource;
 };
 
+const formatBeta = (value: number | null | undefined): string => {
+  if (value == null || Number.isNaN(value)) {
+    return '-';
+  }
+  return value.toFixed(3);
+};
+
+const formatCollectedDate = (value: string | null | undefined): string => {
+  if (!value) {
+    return '-';
+  }
+  return new Date(value).toLocaleString();
+};
+
 export default function PortfolioPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'weeklyReport' | 'annualReport' | 'snapshotAnalysis' | 'targetAllocations'>('institutions');
   
@@ -253,6 +271,7 @@ export default function PortfolioPage() {
     investment_type: '직접',
     risk_level: '위험',
     allow_snapshot_input: true,
+    ticker: '',
     characteristics: '',
   });
   const [showProductForm, setShowProductForm] = useState(false);
@@ -265,6 +284,7 @@ export default function PortfolioPage() {
     investment_type: string;
     risk_level: string;
     allow_snapshot_input: boolean;
+    ticker: string;
     characteristics: string;
   } | null>(null);
   const [showProductEditForm, setShowProductEditForm] = useState(false);
@@ -339,6 +359,10 @@ export default function PortfolioPage() {
   const [savingAccountOrder, setSavingAccountOrder] = useState(false);
   const [savingAccountGroupOrder, setSavingAccountGroupOrder] = useState(false);
   const [savingProductOrder, setSavingProductOrder] = useState(false);
+  const [showProductBetaView, setShowProductBetaView] = useState(false);
+  const [collectingAllProductBeta, setCollectingAllProductBeta] = useState(false);
+  const [collectingProductBetaIds, setCollectingProductBetaIds] = useState<number[]>([]);
+  const [resolvingProductTickerIds, setResolvingProductTickerIds] = useState<number[]>([]);
 
   // 주간보고서 스크롤 동기화용 ref
   const weeklyReportTopScrollRef = useRef<HTMLDivElement>(null);
@@ -1673,6 +1697,7 @@ export default function PortfolioPage() {
       const nextOrder = Math.max(0, ...products.map((item) => item.display_order ?? 0)) + 1;
       const payload = {
         ...newProduct,
+        ticker: newProduct.ticker ? newProduct.ticker.trim().toUpperCase() : null,
         characteristics: newProduct.characteristics
           ? newProduct.characteristics.split(',').map((s) => s.trim())
           : undefined,
@@ -1693,6 +1718,7 @@ export default function PortfolioPage() {
         investment_type: '직접',
         risk_level: '위험',
         allow_snapshot_input: true,
+        ticker: '',
         characteristics: '',
       });
       setShowProductForm(false);
@@ -1739,6 +1765,7 @@ export default function PortfolioPage() {
       investment_type: product.investment_type,
       risk_level: product.risk_level,
       allow_snapshot_input: product.allow_snapshot_input,
+      ticker: product.ticker ?? '',
       characteristics: product.characteristics?.join(', ') || '',
     });
     setShowProductEditForm(true);
@@ -1762,6 +1789,7 @@ export default function PortfolioPage() {
         investment_type: editingProduct.investment_type,
         risk_level: editingProduct.risk_level,
         allow_snapshot_input: editingProduct.allow_snapshot_input,
+        ticker: editingProduct.ticker ? editingProduct.ticker.trim().toUpperCase() : null,
         characteristics: editingProduct.characteristics
           ? editingProduct.characteristics.split(',').map((s) => s.trim())
           : undefined,
@@ -1781,6 +1809,76 @@ export default function PortfolioPage() {
       fetchProducts();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update product');
+    }
+  };
+
+  const handleCollectProductBeta = async (productId: number) => {
+    try {
+      setCollectingProductBetaIds((prev) => [...prev, productId]);
+      const response = await fetch(`${API_BASE_URL}/portfolio/products/${productId}/beta:collect`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to collect product beta');
+      }
+      await fetchProducts();
+      const item = data?.data?.items?.[0];
+      if (item?.updated) {
+        alert('상품 베타를 실측 수집했습니다.');
+      } else {
+        alert(`실측 수집 실패: ${item?.message ?? 'unknown_error'}`);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to collect product beta');
+    } finally {
+      setCollectingProductBetaIds((prev) => prev.filter((id) => id !== productId));
+    }
+  };
+
+  const handleCollectAllProductBetas = async () => {
+    try {
+      setCollectingAllProductBeta(true);
+      const response = await fetch(`${API_BASE_URL}/portfolio/products/beta:collect`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to collect all product betas');
+      }
+      await fetchProducts();
+      const updatedCount = data?.data?.updated_count ?? 0;
+      const items = data?.data?.items ?? [];
+      const failedCount = items.filter((item: { updated?: boolean }) => !item.updated).length;
+      alert(`전체 베타 수집 완료: 실측 성공 ${updatedCount}건, 실패 ${failedCount}건`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to collect all product betas');
+    } finally {
+      setCollectingAllProductBeta(false);
+    }
+  };
+
+  const handleResolveProductTicker = async (productId: number) => {
+    try {
+      setResolvingProductTickerIds((prev) => [...prev, productId]);
+      const response = await fetch(`${API_BASE_URL}/portfolio/products/${productId}/ticker:resolve`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to resolve product ticker');
+      }
+      await fetchProducts();
+      const result = data?.data;
+      if (result?.updated) {
+        alert(`티커가 변경되었습니다: ${result.old_ticker ?? '-'} -> ${result.new_ticker ?? '-'}`);
+      } else {
+        alert(`티커 변경 없음: ${result?.message ?? 'unknown_error'}`);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to resolve product ticker');
+    } finally {
+      setResolvingProductTickerIds((prev) => prev.filter((id) => id !== productId));
     }
   };
 
@@ -2788,11 +2886,18 @@ export default function PortfolioPage() {
             <h2>상품 목록</h2>
             <div className={styles.actionButtons}>
               <button
-                onClick={handleSaveProductOrder}
-                disabled={savingProductOrder}
+                onClick={() => setShowProductBetaView((prev) => !prev)}
               >
-                {savingProductOrder ? '저장 중...' : '표시순서 저장'}
+                {showProductBetaView ? '일반 보기' : '베타 보기'}
               </button>
+              {showProductBetaView && (
+                <button
+                  onClick={handleCollectAllProductBetas}
+                  disabled={collectingAllProductBeta}
+                >
+                  {collectingAllProductBeta ? '수집 중...' : '전체 베타 수집'}
+                </button>
+              )}
               <button
                 onClick={() => {
                   setShowProductForm(!showProductForm);
@@ -2864,6 +2969,12 @@ export default function PortfolioPage() {
                 />
                 스냅샷 평가금액 입력 허용
               </label>
+              <input
+                type="text"
+                placeholder="티커 (예: FNGU, QLD, 005930.KS)"
+                value={newProduct.ticker}
+                onChange={(e) => setNewProduct({ ...newProduct, ticker: e.target.value })}
+              />
               <input
                 type="text"
                 placeholder="특성 (쉼표로 구분, 선택사항)"
@@ -2968,6 +3079,17 @@ export default function PortfolioPage() {
               </label>
               <input
                 type="text"
+                placeholder="티커 (예: FNGU, QLD, 005930.KS)"
+                value={editingProduct.ticker}
+                onChange={(e) =>
+                  setEditingProduct({
+                    ...editingProduct,
+                    ticker: e.target.value,
+                  })
+                }
+              />
+              <input
+                type="text"
                 placeholder="특성 (쉼표로 구분, 선택사항)"
                 value={editingProduct.characteristics}
                 onChange={(e) =>
@@ -2990,56 +3112,73 @@ export default function PortfolioPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>정렬</th>
                   <th>번호</th>
                   <th>상품명</th>
                   <th>자산군</th>
-                  <th>지역</th>
-                  <th>통화</th>
-                  <th>투자유형</th>
-                  <th>위험도</th>
-                  <th>스냅샷 입력</th>
+                  {!showProductBetaView && <th>지역</th>}
+                  {!showProductBetaView && <th>통화</th>}
+                  {!showProductBetaView && <th>투자유형</th>}
+                  {!showProductBetaView && <th>위험도</th>}
+                  {!showProductBetaView && <th>스냅샷 입력</th>}
+                  {showProductBetaView && <th>티커</th>}
+                  {showProductBetaView && <th>국내베타</th>}
+                  {showProductBetaView && <th>국제베타</th>}
+                  {showProductBetaView && <th>수집일</th>}
                   <th>작업</th>
                 </tr>
               </thead>
               <tbody>
                 {getSortedProducts().map((prod, index) => (
-                  <tr
-                    key={prod.product_id}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => handleProductDrop(prod.product_id)}
-                  >
-                    <td
-                      className={styles.dragHandle}
-                      draggable
-                      onDragStart={() => handleProductDragStart(prod.product_id)}
-                      onDragEnd={() => setDraggingProductId(null)}
-                      title="드래그하여 순서 변경"
-                    >
-                      ::
-                    </td>
+                  <tr key={prod.product_id}>
                     <td>{index + 1}</td>
                     <td>{prod.product_name}</td>
                     <td>{prod.asset_class}</td>
-                    <td>{prod.region}</td>
-                    <td>{prod.currency}</td>
-                    <td>{prod.investment_type}</td>
-                    <td>{prod.risk_level}</td>
-                    <td>{prod.allow_snapshot_input ? '허용' : '제외'}</td>
+                    {!showProductBetaView && <td>{prod.region}</td>}
+                    {!showProductBetaView && <td>{prod.currency}</td>}
+                    {!showProductBetaView && <td>{prod.investment_type}</td>}
+                    {!showProductBetaView && <td>{prod.risk_level}</td>}
+                    {!showProductBetaView && <td>{prod.allow_snapshot_input ? '허용' : '제외'}</td>}
+                    {showProductBetaView && <td>{prod.ticker ?? '-'}</td>}
+                    {showProductBetaView && <td>{formatBeta(prod.domestic_beta)}</td>}
+                    {showProductBetaView && <td>{formatBeta(prod.global_beta)}</td>}
+                    {showProductBetaView && <td>{formatCollectedDate(prod.beta_collected_at)}</td>}
                     <td>
                       <div className={styles.actionButtons}>
-                        <button onClick={() => openProductEdit(prod)}>수정</button>
-                        {(holdingReferenceCountByProductId.get(prod.product_id) ?? 0) === 0 && (
-                          <button
-                            onClick={() => handleDeleteProduct(prod.product_id)}
-                            className={styles.deleteButton}
-                          >
-                            삭제
-                          </button>
+                        {showProductBetaView ? (
+                          <>
+                            <button
+                              onClick={() => handleResolveProductTicker(prod.product_id)}
+                              disabled={resolvingProductTickerIds.includes(prod.product_id)}
+                            >
+                              {resolvingProductTickerIds.includes(prod.product_id)
+                                ? '변경 중...'
+                                : '티커변경'}
+                            </button>
+                            <button
+                              onClick={() => handleCollectProductBeta(prod.product_id)}
+                              disabled={collectingProductBetaIds.includes(prod.product_id)}
+                            >
+                              {collectingProductBetaIds.includes(prod.product_id)
+                                ? '수집 중...'
+                                : '베타 수집'}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => openProductEdit(prod)}>수정</button>
+                            {(holdingReferenceCountByProductId.get(prod.product_id) ?? 0) === 0 && (
+                              <button
+                                onClick={() => handleDeleteProduct(prod.product_id)}
+                                className={styles.deleteButton}
+                              >
+                                삭제
+                              </button>
+                            )}
+                            <button onClick={() => openHoldingsForProduct(prod.product_id)}>
+                              보유자산 보기
+                            </button>
+                          </>
                         )}
-                        <button onClick={() => openHoldingsForProduct(prod.product_id)}>
-                          보유자산 보기
-                        </button>
                       </div>
                     </td>
                   </tr>

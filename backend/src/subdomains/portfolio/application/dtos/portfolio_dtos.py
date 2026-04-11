@@ -57,6 +57,7 @@ class CreateProductCommand:
     characteristics: list[str] | None
     risk_level: str
     allow_snapshot_input: bool = True
+    ticker: str | None = None
     display_order: int = 0
 
 
@@ -71,6 +72,7 @@ class UpdateProductCommand:
     characteristics: list[str] | None
     risk_level: str
     allow_snapshot_input: bool = True
+    ticker: str | None = None
 
 
 @dataclass
@@ -288,8 +290,12 @@ class ProductResult:
     characteristics: list[str] | None
     risk_level: str
     allow_snapshot_input: bool
+    ticker: str | None
     display_order: int
     created_at: datetime
+    domestic_beta: float | None = None
+    global_beta: float | None = None
+    beta_collected_at: datetime | None = None
 
     @classmethod
     def from_domain(cls, model: Product) -> "ProductResult":
@@ -303,9 +309,39 @@ class ProductResult:
             characteristics=model.characteristics,
             risk_level=model.risk_level,
             allow_snapshot_input=model.allow_snapshot_input,
+            ticker=model.ticker,
             display_order=model.display_order,
             created_at=model.created_at,
+            domestic_beta=model.domestic_beta,
+            global_beta=model.global_beta,
+            beta_collected_at=model.beta_collected_at,
         )
+
+
+@dataclass
+class ProductBetaCollectionItemResult:
+    product_id: int
+    product_name: str
+    domestic_beta: float | None
+    global_beta: float | None
+    beta_collected_at: datetime | None
+    message: str
+    updated: bool
+
+
+@dataclass
+class ProductBetaCollectionResult:
+    updated_count: int
+    items: list[ProductBetaCollectionItemResult]
+
+
+@dataclass
+class ProductTickerResolveResult:
+    product_id: int
+    old_ticker: str | None
+    new_ticker: str | None
+    message: str
+    updated: bool
 
 
 @dataclass

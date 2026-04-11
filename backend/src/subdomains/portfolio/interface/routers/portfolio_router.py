@@ -62,6 +62,11 @@ from subdomains.portfolio.interface.schemas import (
     UpdateProductRequest,
     ProductResponse,
     ProductResponseData,
+    ProductBetaCollectItem,
+    ProductBetaCollectResponse,
+    ProductBetaCollectResponseData,
+    ProductTickerResolveResponse,
+    ProductTickerResolveResponseData,
     DeleteProductResponse,
     UpdateProductDisplayOrderRequest,
     CreateAccountRequest,
@@ -317,6 +322,10 @@ async def list_products(
             risk_level=r.risk_level,
             characteristics=r.characteristics,
             allow_snapshot_input=r.allow_snapshot_input,
+            ticker=r.ticker,
+            domestic_beta=r.domestic_beta,
+            global_beta=r.global_beta,
+            beta_collected_at=_iso(r.beta_collected_at),
             display_order=r.display_order,
             created_at=_iso(r.created_at),
         )
@@ -344,6 +353,7 @@ async def create_product(
         characteristics=request.characteristics,
         risk_level=request.risk_level,
         allow_snapshot_input=request.allow_snapshot_input,
+        ticker=request.ticker,
         display_order=request.display_order,
     )
     result = await service.create_product(cmd)
@@ -357,6 +367,10 @@ async def create_product(
         characteristics=result.characteristics,
         risk_level=result.risk_level,
         allow_snapshot_input=result.allow_snapshot_input,
+        ticker=result.ticker,
+        domestic_beta=result.domestic_beta,
+        global_beta=result.global_beta,
+        beta_collected_at=_iso(result.beta_collected_at),
         display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
@@ -385,6 +399,7 @@ async def update_product(
         characteristics=request.characteristics,
         risk_level=request.risk_level,
         allow_snapshot_input=request.allow_snapshot_input,
+        ticker=request.ticker,
     )
     result = await service.update_product(cmd)
     data = ProductResponseData(
@@ -397,10 +412,94 @@ async def update_product(
         characteristics=result.characteristics,
         risk_level=result.risk_level,
         allow_snapshot_input=result.allow_snapshot_input,
+        ticker=result.ticker,
+        domestic_beta=result.domestic_beta,
+        global_beta=result.global_beta,
+        beta_collected_at=_iso(result.beta_collected_at),
         display_order=result.display_order,
         created_at=_iso(result.created_at),
     )
     return ProductResponse(code=0, message="success", data=data)
+
+
+@router.post(
+    "/products/{product_id}/beta:collect",
+    response_model=ProductBetaCollectResponse,
+    status_code=status.HTTP_200_OK,
+    summary="단일 상품 베타 수집",
+    responses={**common_responses},
+)
+async def collect_product_beta(
+    product_id: int = Path(..., description="상품 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> ProductBetaCollectResponse:
+    result = await service.collect_product_beta(product_id)
+    data = ProductBetaCollectResponseData(
+        updated_count=1 if result.updated else 0,
+        items=[
+            ProductBetaCollectItem(
+                product_id=result.product_id,
+                product_name=result.product_name,
+                domestic_beta=result.domestic_beta,
+                global_beta=result.global_beta,
+                beta_collected_at=_iso(result.beta_collected_at),
+                message=result.message,
+                updated=result.updated,
+            )
+        ],
+    )
+    return ProductBetaCollectResponse(code=0, message="success", data=data)
+
+
+@router.post(
+    "/products/beta:collect",
+    response_model=ProductBetaCollectResponse,
+    status_code=status.HTTP_200_OK,
+    summary="전체 상품 베타 일괄 수집",
+    responses={**common_responses},
+)
+async def collect_all_product_betas(
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> ProductBetaCollectResponse:
+    result = await service.collect_all_product_betas()
+    data = ProductBetaCollectResponseData(
+        updated_count=result.updated_count,
+        items=[
+            ProductBetaCollectItem(
+                product_id=item.product_id,
+                product_name=item.product_name,
+                domestic_beta=item.domestic_beta,
+                global_beta=item.global_beta,
+                beta_collected_at=_iso(item.beta_collected_at),
+                message=item.message,
+                updated=item.updated,
+            )
+            for item in result.items
+        ],
+    )
+    return ProductBetaCollectResponse(code=0, message="success", data=data)
+
+
+@router.post(
+    "/products/{product_id}/ticker:resolve",
+    response_model=ProductTickerResolveResponse,
+    status_code=status.HTTP_200_OK,
+    summary="단일 상품 티커 정정",
+    responses={**common_responses},
+)
+async def resolve_product_ticker(
+    product_id: int = Path(..., description="상품 ID"),
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> ProductTickerResolveResponse:
+    result = await service.resolve_product_ticker(product_id)
+    data = ProductTickerResolveResponseData(
+        product_id=result.product_id,
+        old_ticker=result.old_ticker,
+        new_ticker=result.new_ticker,
+        message=result.message,
+        updated=result.updated,
+    )
+    return ProductTickerResolveResponse(code=0, message="success", data=data)
 
 
 @router.post(

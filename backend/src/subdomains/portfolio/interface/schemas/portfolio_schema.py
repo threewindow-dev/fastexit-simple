@@ -90,6 +90,11 @@ class CreateProductRequest(BaseModel):
         description="일일 스냅샷 평가금액 입력 허용 여부",
         examples=[True, False],
     )
+    ticker: str | None = Field(
+        None,
+        description="시세 수집용 티커 (예: FNGU, QLD, 005930.KS)",
+        examples=["FNGU", "005930.KS"],
+    )
     display_order: int = Field(0, description="표시 순서", examples=[0])
 
 
@@ -106,6 +111,11 @@ class UpdateProductRequest(BaseModel):
         description="일일 스냅샷 평가금액 입력 허용 여부",
         examples=[True, False],
     )
+    ticker: str | None = Field(
+        None,
+        description="시세 수집용 티커 (예: FNGU, QLD, 005930.KS)",
+        examples=["FNGU", "005930.KS"],
+    )
 
 
 class ProductResponseData(BaseModel):
@@ -120,11 +130,46 @@ class ProductResponseData(BaseModel):
     allow_snapshot_input: bool = Field(
         ..., description="일일 스냅샷 평가금액 입력 허용 여부"
     )
+    ticker: str | None = Field(None, description="시세 수집용 티커")
+    domestic_beta: float | None = Field(None, description="국내 베타")
+    global_beta: float | None = Field(None, description="국제 베타")
+    beta_collected_at: str | None = Field(None, description="베타 수집 시각")
     display_order: int = Field(0, description="표시 순서")
     created_at: str = Field(..., description="생성 시각")
 
 
 class ProductResponse(ApiResponse[ProductResponseData]):
+    pass
+
+
+class ProductBetaCollectItem(BaseModel):
+    product_id: int = Field(..., description="상품 ID")
+    product_name: str = Field(..., description="상품명")
+    domestic_beta: float | None = Field(None, description="국내 베타")
+    global_beta: float | None = Field(None, description="국제 베타")
+    beta_collected_at: str | None = Field(None, description="베타 수집 시각")
+    message: str = Field(..., description="수집 결과 메시지", examples=["collected"])
+    updated: bool = Field(..., description="DB 업데이트 성공 여부")
+
+
+class ProductBetaCollectResponseData(BaseModel):
+    updated_count: int = Field(..., description="업데이트된 상품 수", examples=[3])
+    items: list[ProductBetaCollectItem] = Field(..., description="상품별 베타 수집 결과")
+
+
+class ProductBetaCollectResponse(ApiResponse[ProductBetaCollectResponseData]):
+    pass
+
+
+class ProductTickerResolveResponseData(BaseModel):
+    product_id: int = Field(..., description="상품 ID")
+    old_ticker: str | None = Field(None, description="변경 전 티커")
+    new_ticker: str | None = Field(None, description="변경 후 티커")
+    message: str = Field(..., description="티커 정정 결과 메시지")
+    updated: bool = Field(..., description="DB 업데이트 여부")
+
+
+class ProductTickerResolveResponse(ApiResponse[ProductTickerResolveResponseData]):
     pass
 
 

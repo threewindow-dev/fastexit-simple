@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import re
 
 from subdomains.portfolio.domain.errors import InvalidStateError
 
@@ -10,6 +11,7 @@ _REGIONS = {"대한민국", "미국"}
 _CURRENCIES = {"KRW", "USD"}
 _INVESTMENT_TYPES = {"직접", "ETF"}
 _RISK_LEVELS = {"안전", "위험"}
+_TICKER_RE = re.compile(r"^[A-Z0-9.^_-]{1,16}$")
 
 
 @dataclass
@@ -25,6 +27,10 @@ class Product:
     allow_snapshot_input: bool
     display_order: int
     created_at: datetime
+    ticker: str | None = None
+    domestic_beta: float | None = None
+    global_beta: float | None = None
+    beta_collected_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.product_name:
@@ -39,6 +45,8 @@ class Product:
             raise InvalidStateError("product", "invalid investment_type")
         if self.risk_level not in _RISK_LEVELS:
             raise InvalidStateError("product", "invalid risk_level")
+        if self.ticker and not _TICKER_RE.match(self.ticker):
+            raise InvalidStateError("product", "invalid ticker")
 
     @classmethod
     def create(
@@ -51,8 +59,10 @@ class Product:
         characteristics: list[str] | None,
         risk_level: str,
         allow_snapshot_input: bool = True,
+        ticker: str | None = None,
         display_order: int = 0,
     ) -> "Product":
+        normalized_ticker = ticker.strip().upper() if ticker and ticker.strip() else None
         return cls(
             product_id=None,
             product_name=product_name,
@@ -63,6 +73,7 @@ class Product:
             characteristics=characteristics,
             risk_level=risk_level,
             allow_snapshot_input=allow_snapshot_input,
+            ticker=normalized_ticker,
             display_order=display_order,
             created_at=datetime.utcnow(),
         )
@@ -78,8 +89,14 @@ class Product:
             "characteristics": self.characteristics,
             "risk_level": self.risk_level,
             "allow_snapshot_input": self.allow_snapshot_input,
+            "ticker": self.ticker,
             "display_order": self.display_order,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "domestic_beta": self.domestic_beta,
+            "global_beta": self.global_beta,
+            "beta_collected_at": self.beta_collected_at.isoformat()
+            if self.beta_collected_at
+            else None,
         }
 
     def update(
@@ -93,6 +110,7 @@ class Product:
         characteristics: list[str] | None,
         risk_level: str,
         allow_snapshot_input: bool,
+        ticker: str | None,
     ) -> None:
         self.product_name = product_name
         self.asset_class = asset_class
@@ -102,4 +120,5 @@ class Product:
         self.characteristics = characteristics
         self.risk_level = risk_level
         self.allow_snapshot_input = allow_snapshot_input
+        self.ticker = ticker.strip().upper() if ticker and ticker.strip() else None
         self.__post_init__()

@@ -3,6 +3,7 @@
 from datetime import date
 from datetime import datetime
 from unittest.mock import AsyncMock
+from urllib.error import HTTPError
 
 import pytest
 
@@ -358,6 +359,389 @@ class TestPortfolioSnapshotHoldingService:
             await service.upsert_snapshot_holding(command)
 
         mock_snapshot_repo.save_holding.assert_not_called()
+
+
+class TestPortfolioProductBetaService:
+    @pytest.mark.asyncio
+    async def test_fetch_close_series_with_fallback_uses_free_on_yahoo_429(
+        self, mock_transaction_manager
+    ):
+        service = PortfolioAppService(
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            mock_transaction_manager,
+        )
+
+        service._fetch_yahoo_close_series_with_retry = AsyncMock(
+            side_effect=HTTPError(
+                url="https://query1.finance.yahoo.com",
+                code=429,
+                msg="Too Many Requests",
+                hdrs=None,
+                fp=None,
+            )
+        )
+        service._fetch_free_close_series = lambda _symbol: {
+            "2026-03-10": 100.0,
+            "2026-03-11": 101.0,
+        }
+
+        series, provider = await service._fetch_close_series_with_fallback("FNGU")
+
+        assert provider == "free"
+        assert len(series) == 2
+
+    @pytest.mark.asyncio
+    async def test_resolve_product_ticker_success_krx_code(self, mock_transaction_manager):
+        mock_product_repo = AsyncMock()
+        product = Product(
+            product_id=11,
+            product_name="삼성전자",
+            asset_class="주식",
+            region="대한민국",
+            currency="KRW",
+            investment_type="직접",
+            characteristics=None,
+            risk_level="위험",
+            allow_snapshot_input=True,
+            ticker="A005930",
+            display_order=1,
+            created_at=datetime(2025, 1, 1, 0, 0, 0),
+        )
+        mock_product_repo.find_by_id.return_value = product
+        mock_product_repo.update.return_value = product
+
+        service = PortfolioAppService(
+            AsyncMock(),
+            mock_product_repo,
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            mock_transaction_manager,
+        )
+
+        service._get_krx_market_suffix_for_code = AsyncMock(return_value=".KS")
+
+        result = await service.resolve_product_ticker(11)
+
+        assert result.updated is True
+        assert result.old_ticker == "A005930"
+        assert result.new_ticker == "005930.KS"
+        assert result.message == "ticker_resolved"
+        assert product.ticker == "005930.KS"
+        mock_product_repo.update.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_resolve_product_ticker_not_krx_code(self, mock_transaction_manager):
+        mock_product_repo = AsyncMock()
+        product = Product(
+            product_id=12,
+            product_name="FNGU",
+            asset_class="주식",
+            region="미국",
+            currency="USD",
+            investment_type="ETF",
+            characteristics=None,
+            risk_level="위험",
+            allow_snapshot_input=True,
+            ticker="FNGU",
+            display_order=1,
+            created_at=datetime(2025, 1, 1, 0, 0, 0),
+        )
+        mock_product_repo.find_by_id.return_value = product
+
+        service = PortfolioAppService(
+            AsyncMock(),
+            mock_product_repo,
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            mock_transaction_manager,
+        )
+
+        result = await service.resolve_product_ticker(12)
+
+        assert result.updated is False
+        assert result.message == "ticker_not_krx_code"
+        mock_product_repo.update.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_resolve_product_ticker_fallback_default_ks(
+        self, mock_transaction_manager
+    ):
+        mock_product_repo = AsyncMock()
+        product = Product(
+            product_id=13,
+            product_name="TIGER 미국테크TOP10 INDXX",
+            asset_class="주식",
+            region="대한민국",
+            currency="KRW",
+            investment_type="ETF",
+            characteristics=None,
+            risk_level="위험",
+            allow_snapshot_input=True,
+            ticker="A381170",
+            display_order=1,
+            created_at=datetime(2025, 1, 1, 0, 0, 0),
+        )
+        mock_product_repo.find_by_id.return_value = product
+        mock_product_repo.update.return_value = product
+
+        service = PortfolioAppService(
+            AsyncMock(),
+            mock_product_repo,
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            mock_transaction_manager,
+        )
+        service._get_krx_market_suffix_for_code = AsyncMock(return_value=None)
+
+        result = await service.resolve_product_ticker(13)
+
+        assert result.updated is True
+        assert result.old_ticker == "A381170"
+        assert result.new_ticker == "381170.KS"
+        assert result.message == "ticker_resolved_default_ks"
+        assert product.ticker == "381170.KS"
+        mock_product_repo.update.assert_awaited_once()
+
+    def test_resolve_ticker_normalizes_krx_code_with_a_prefix(self):
+        product = Product(
+            product_id=1,
+            product_name="삼성전자",
+            asset_class="주식",
+            region="대한민국",
+            currency="KRW",
+            investment_type="직접",
+            characteristics=None,
+            risk_level="위험",
+            allow_snapshot_input=True,
+            ticker="A005930",
+            display_order=1,
+            created_at=datetime(2025, 1, 1, 0, 0, 0),
+        )
+
+        assert PortfolioAppService._resolve_ticker(product) == "A005930"
+
+    def test_resolve_ticker_normalizes_krx_code_without_prefix(self):
+        product = Product(
+            product_id=1,
+            product_name="삼성전자",
+            asset_class="주식",
+            region="대한민국",
+            currency="KRW",
+            investment_type="직접",
+            characteristics=None,
+            risk_level="위험",
+            allow_snapshot_input=True,
+            ticker="005930",
+            display_order=1,
+            created_at=datetime(2025, 1, 1, 0, 0, 0),
+        )
+
+        assert PortfolioAppService._resolve_ticker(product) == "005930"
+
+    @pytest.mark.asyncio
+    async def test_collect_product_beta_ticker_missing_defaults_zero(
+        self, mock_transaction_manager
+    ):
+        mock_product_repo = AsyncMock()
+        product = Product(
+            product_id=9,
+            product_name="현금성자산",
+            asset_class="통화",
+            region="대한민국",
+            currency="KRW",
+            investment_type="직접",
+            characteristics=None,
+            risk_level="안전",
+            allow_snapshot_input=True,
+            ticker=None,
+            display_order=1,
+            created_at=datetime(2025, 1, 1, 0, 0, 0),
+        )
+        mock_product_repo.find_by_id.return_value = product
+        mock_product_repo.update.return_value = product
+
+        service = PortfolioAppService(
+            AsyncMock(),
+            mock_product_repo,
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            mock_transaction_manager,
+        )
+
+        result = await service.collect_product_beta(9)
+
+        assert result.product_id == 9
+        assert result.updated is True
+        assert result.domestic_beta == 0.0
+        assert result.global_beta == 0.0
+        assert result.message == "ticker_missing_defaulted_zero"
+        assert result.beta_collected_at is not None
+        mock_product_repo.update.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_collect_product_beta_ticker_blank_defaults_zero(
+        self, mock_transaction_manager
+    ):
+        mock_product_repo = AsyncMock()
+        product = Product(
+            product_id=10,
+            product_name="달러예수금",
+            asset_class="통화",
+            region="미국",
+            currency="USD",
+            investment_type="직접",
+            characteristics=None,
+            risk_level="안전",
+            allow_snapshot_input=True,
+            ticker=None,
+            display_order=1,
+            created_at=datetime(2025, 1, 1, 0, 0, 0),
+        )
+        # 기존 데이터에 공백 ticker가 남아있는 경우를 가정
+        product.ticker = "   "
+        mock_product_repo.find_by_id.return_value = product
+        mock_product_repo.update.return_value = product
+
+        service = PortfolioAppService(
+            AsyncMock(),
+            mock_product_repo,
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            mock_transaction_manager,
+        )
+
+        result = await service.collect_product_beta(10)
+
+        assert result.product_id == 10
+        assert result.updated is True
+        assert result.domestic_beta == 0.0
+        assert result.global_beta == 0.0
+        assert result.message == "ticker_missing_defaulted_zero"
+        assert result.beta_collected_at is not None
+        mock_product_repo.update.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_collect_product_beta_success(self, mock_transaction_manager):
+        mock_product_repo = AsyncMock()
+        product = Product(
+            product_id=7,
+            product_name="KODEX 200",
+            asset_class="주식",
+            region="대한민국",
+            currency="KRW",
+            investment_type="ETF",
+            characteristics=["인덱스"],
+            risk_level="위험",
+            allow_snapshot_input=True,
+            ticker="KODEX200.KS",
+            display_order=1,
+            created_at=datetime(2025, 1, 1, 0, 0, 0),
+        )
+        mock_product_repo.find_by_id.return_value = product
+        mock_product_repo.update.return_value = product
+
+        service = PortfolioAppService(
+            AsyncMock(),
+            mock_product_repo,
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            mock_transaction_manager,
+        )
+        service._collect_product_beta_values = AsyncMock(
+            return_value=(1.2345, 2.3456, "collected")
+        )
+
+        result = await service.collect_product_beta(7)
+
+        assert result.product_id == 7
+        assert result.domestic_beta is not None
+        assert result.global_beta is not None
+        assert result.beta_collected_at is not None
+        mock_product_repo.update.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_collect_all_product_betas_success(self, mock_transaction_manager):
+        mock_product_repo = AsyncMock()
+        products = [
+            Product(
+                product_id=1,
+                product_name="삼성전자",
+                asset_class="주식",
+                region="대한민국",
+                currency="KRW",
+                investment_type="직접",
+                characteristics=None,
+                risk_level="위험",
+                allow_snapshot_input=True,
+                ticker="005930.KS",
+                display_order=1,
+                created_at=datetime(2025, 1, 1, 0, 0, 0),
+            ),
+            Product(
+                product_id=2,
+                product_name="GOOGL",
+                asset_class="주식",
+                region="미국",
+                currency="USD",
+                investment_type="직접",
+                characteristics=None,
+                risk_level="위험",
+                allow_snapshot_input=True,
+                ticker="GOOGL",
+                display_order=2,
+                created_at=datetime(2025, 1, 1, 0, 0, 0),
+            ),
+        ]
+        mock_product_repo.get_all.return_value = products
+        mock_product_repo.update.side_effect = products
+
+        service = PortfolioAppService(
+            AsyncMock(),
+            mock_product_repo,
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            AsyncMock(),
+            mock_transaction_manager,
+        )
+        service._collect_product_beta_values = AsyncMock(
+            side_effect=[
+                (0.9876, 1.8765, "collected"),
+                (0.1234, 2.4321, "collected"),
+            ]
+        )
+
+        result = await service.collect_all_product_betas()
+
+        assert result.updated_count == 2
+        assert len(result.items) == 2
+        assert all(item.beta_collected_at is not None for item in result.items)
+        assert mock_product_repo.update.await_count == 2
 
 
 class TestPortfolioDeleteService:

@@ -55,6 +55,10 @@ class ProductEntity(Base):
     characteristics = Column(ARRAY(String), nullable=True)
     risk_level = Column(String(20), nullable=False)
     allow_snapshot_input = Column(Boolean, nullable=False, default=True)
+    ticker = Column(String(32), nullable=True)
+    domestic_beta = Column(Numeric(12, 6), nullable=True)
+    global_beta = Column(Numeric(12, 6), nullable=True)
+    beta_collected_at = Column(DateTime, nullable=True)
     display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=_utc_now_naive)
 

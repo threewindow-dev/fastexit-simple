@@ -207,12 +207,14 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 INSERT INTO products (
                     product_name, asset_class, region, currency,
                     investment_type, characteristics, risk_level, allow_snapshot_input,
+                    ticker, domestic_beta, global_beta, beta_collected_at,
                     display_order, created_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING product_id, product_name, asset_class, region, currency,
                           investment_type, characteristics, risk_level,
-                          allow_snapshot_input, display_order, created_at
+                          allow_snapshot_input, ticker, domestic_beta, global_beta,
+                          beta_collected_at, display_order, created_at
                 """,
                 (
                     product.product_name,
@@ -223,6 +225,10 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                     product.characteristics,
                     product.risk_level,
                     product.allow_snapshot_input,
+                    product.ticker,
+                    product.domestic_beta,
+                    product.global_beta,
+                    product.beta_collected_at,
                     product.display_order,
                     _utc_now_naive(),
                 ),
@@ -238,8 +244,16 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             characteristics=row["characteristics"],
             risk_level=row["risk_level"],
             allow_snapshot_input=row["allow_snapshot_input"],
+            ticker=row.get("ticker"),
             display_order=row["display_order"],
             created_at=row["created_at"],
+            domestic_beta=float(row["domestic_beta"])
+            if row.get("domestic_beta") is not None
+            else None,
+            global_beta=float(row["global_beta"])
+            if row.get("global_beta") is not None
+            else None,
+            beta_collected_at=row.get("beta_collected_at"),
         )
 
     @use_transaction()
@@ -250,7 +264,8 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 """
                 SELECT product_id, product_name, asset_class, region, currency,
                         investment_type, characteristics, risk_level,
-                        allow_snapshot_input, display_order, created_at
+                    allow_snapshot_input, ticker, domestic_beta, global_beta,
+                    beta_collected_at, display_order, created_at
                 FROM products WHERE product_id = %s
                 """,
                 (product_id,),
@@ -268,8 +283,16 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             characteristics=row["characteristics"],
             risk_level=row["risk_level"],
             allow_snapshot_input=row["allow_snapshot_input"],
+            ticker=row.get("ticker"),
             display_order=row["display_order"],
             created_at=row["created_at"],
+            domestic_beta=float(row["domestic_beta"])
+            if row.get("domestic_beta") is not None
+            else None,
+            global_beta=float(row["global_beta"])
+            if row.get("global_beta") is not None
+            else None,
+            beta_collected_at=row.get("beta_collected_at"),
         )
 
     @use_transaction()
@@ -287,6 +310,10 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                     characteristics = %s,
                     risk_level = %s,
                     allow_snapshot_input = %s,
+                    ticker = %s,
+                    domestic_beta = %s,
+                    global_beta = %s,
+                    beta_collected_at = %s,
                     display_order = %s
                 WHERE product_id = %s
                 """,
@@ -299,6 +326,10 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                     product.characteristics,
                     product.risk_level,
                     product.allow_snapshot_input,
+                    product.ticker,
+                    product.domestic_beta,
+                    product.global_beta,
+                    product.beta_collected_at,
                     product.display_order,
                     product.product_id,
                 ),
@@ -341,7 +372,8 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 """
                 SELECT product_id, product_name, asset_class, region, currency,
                       investment_type, characteristics, risk_level,
-                      allow_snapshot_input, display_order, created_at
+                    allow_snapshot_input, ticker, domestic_beta, global_beta,
+                        beta_collected_at, display_order, created_at
                 FROM products ORDER BY display_order, product_id
                 """
             )
@@ -357,8 +389,16 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 characteristics=row["characteristics"],
                 risk_level=row["risk_level"],
                 allow_snapshot_input=row["allow_snapshot_input"],
+                ticker=row.get("ticker"),
                 display_order=row["display_order"],
                 created_at=row["created_at"],
+                domestic_beta=float(row["domestic_beta"])
+                if row.get("domestic_beta") is not None
+                else None,
+                global_beta=float(row["global_beta"])
+                if row.get("global_beta") is not None
+                else None,
+                beta_collected_at=row.get("beta_collected_at"),
             )
             for row in rows
         ]

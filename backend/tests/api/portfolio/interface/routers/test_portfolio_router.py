@@ -21,6 +21,7 @@ from dependencies import set_db_pool
 from core.exception_handlers import register_exception_handlers
 from shared.infra.database import create_sqlalchemy_pool
 from subdomains.portfolio.interface.routers import router as portfolio_router
+from subdomains.portfolio.application.services import PortfolioAppService
 
 
 def _set_test_config() -> None:
@@ -139,6 +140,10 @@ async def test_db_pool(postgres_container):
                     characteristics TEXT[] NULL,
                     risk_level VARCHAR(20) NOT NULL CHECK (risk_level IN ('안전', '위험')),
                     allow_snapshot_input BOOLEAN NOT NULL DEFAULT TRUE,
+                    ticker VARCHAR(32) NULL,
+                    domestic_beta NUMERIC(12,6) NULL,
+                    global_beta NUMERIC(12,6) NULL,
+                    beta_collected_at TIMESTAMP NULL,
                     display_order INTEGER NOT NULL DEFAULT 0,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE (product_name, asset_class, region, currency, investment_type)
@@ -499,6 +504,145 @@ class TestCreateProduct:
         assert response.status_code == 201
         data = response.json()
         assert data["data"]["allow_snapshot_input"] is False
+
+    async def test_collect_product_beta_single(self, client, clean_db):
+        """Should collect beta for a single product"""
+        payload = {
+            "product_name": "KODEX 200",
+            "asset_class": "주식",
+            "region": "대한민국",
+            "currency": "KRW",
+            "investment_type": "ETF",
+            "characteristics": ["인덱스"],
+            "risk_level": "위험",
+            "ticker": "KODEX200.KS",
+        }
+        create_res = await client.post("/api/portfolio/products", json=payload)
+        product_id = create_res.json()["data"]["product_id"]
+
+        response = await client.post(f"/api/portfolio/products/{product_id}/beta:collect")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["code"] == 0
+        assert data["data"]["updated_count"] in [0, 1]
+        item = data["data"]["items"][0]
+        assert item["product_id"] == product_id
+        assert item["message"] in [
+            "collected",
+            "collected_via_free_fallback",
+            "measured_failed_rate_limited_429",
+            "measured_failed_external_fetch",
+            "measured_failed_insufficient_overlap",
+        ]
+        if item["updated"]:
+            assert item["domestic_beta"] is not None
+            assert item["global_beta"] is not None
+            assert item["beta_collected_at"] is not None
+
+    async def test_collect_product_beta_all(self, client, clean_db):
+        """Should collect beta for all products"""
+        payloads = [
+            {
+                "product_name": "삼성전자",
+                "asset_class": "주식",
+                "region": "대한민국",
+                "currency": "KRW",
+                "investment_type": "직접",
+                "characteristics": None,
+                "risk_level": "위험",
+                "ticker": "005930.KS",
+            },
+            {
+                "product_name": "GOOGL",
+                "asset_class": "주식",
+                "region": "미국",
+                "currency": "USD",
+                "investment_type": "직접",
+                "characteristics": None,
+                "risk_level": "위험",
+                "ticker": "GOOGL",
+            },
+        ]
+        for payload in payloads:
+            await client.post("/api/portfolio/products", json=payload)
+
+        response = await client.post("/api/portfolio/products/beta:collect")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["code"] == 0
+        assert data["data"]["updated_count"] in [0, 1, 2]
+        assert len(data["data"]["items"]) == 2
+
+    async def test_collect_product_beta_single_without_ticker_defaults_zero(
+        self, client, clean_db
+    ):
+        """Should set beta to zero when ticker is missing"""
+        payload = {
+            "product_name": "원화예수금",
+            "asset_class": "통화",
+            "region": "대한민국",
+            "currency": "KRW",
+            "investment_type": "직접",
+            "characteristics": ["예수금"],
+            "risk_level": "안전",
+            "ticker": "   ",
+        }
+        create_res = await client.post("/api/portfolio/products", json=payload)
+        product_id = create_res.json()["data"]["product_id"]
+
+        response = await client.post(f"/api/portfolio/products/{product_id}/beta:collect")
+
+        assert response.status_code == 200
+        data = response.json()
+        item = data["data"]["items"][0]
+        assert item["product_id"] == product_id
+        assert item["updated"] is True
+        assert item["message"] == "ticker_missing_defaulted_zero"
+        assert item["domestic_beta"] == 0.0
+        assert item["global_beta"] == 0.0
+        assert item["beta_collected_at"] is not None
+
+    async def test_resolve_product_ticker_single(self, client, clean_db, monkeypatch):
+        """Should resolve KRX code ticker with fallback when market map misses"""
+
+        async def fake_suffix(self, code: str):
+            if code == "005930":
+                return ".KS"
+            return None
+
+        monkeypatch.setattr(
+            PortfolioAppService,
+            "_get_krx_market_suffix_for_code",
+            fake_suffix,
+        )
+
+        payload = {
+            "product_name": "TIGER 미국테크TOP10 INDXX",
+            "asset_class": "주식",
+            "region": "대한민국",
+            "currency": "KRW",
+            "investment_type": "ETF",
+            "characteristics": None,
+            "risk_level": "위험",
+            "ticker": "A381170",
+        }
+        create_res = await client.post("/api/portfolio/products", json=payload)
+        product_id = create_res.json()["data"]["product_id"]
+
+        response = await client.post(
+            f"/api/portfolio/products/{product_id}/ticker:resolve"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["code"] == 0
+        assert data["data"]["product_id"] == product_id
+        assert data["data"]["old_ticker"] == "A381170"
+        assert data["data"]["new_ticker"] == "381170.KS"
+        assert data["data"]["message"] == "ticker_resolved_default_ks"
+        assert data["data"]["updated"] is True
 
 
 # ============================================================================

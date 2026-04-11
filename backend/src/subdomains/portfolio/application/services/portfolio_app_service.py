@@ -1,6 +1,14 @@
 """Portfolio application service implementing admin/report use cases."""
 
+import asyncio
+import html
+import json
+import random
+import re
 from datetime import date, datetime, time, timedelta
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 from subdomains.portfolio.application.dtos import (
     CreateInstitutionCommand,
@@ -36,6 +44,9 @@ from subdomains.portfolio.application.dtos import (
     AnnualPivotReportQuery,
     InstitutionResult,
     ProductResult,
+    ProductBetaCollectionItemResult,
+    ProductBetaCollectionResult,
+    ProductTickerResolveResult,
     AccountResult,
     AccountGroupResult,
     HoldingResult,
@@ -83,6 +94,11 @@ from shared.protocols.transaction import TransactionManager
 
 class PortfolioAppService:
     """Application service for portfolio domain."""
+
+    _krx_market_cache: dict[str, str] | None = None
+    _krx_market_cache_expires_at: datetime | None = None
+    _krx_market_cache_ttl = timedelta(hours=12)
+    _krx_market_cache_lock: asyncio.Lock | None = None
 
     def __init__(
         self,
@@ -174,6 +190,413 @@ class PortfolioAppService:
     # Products
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _resolve_ticker(product: Product) -> str | None:
+        if product.ticker:
+            normalized = product.ticker.strip().upper()
+            if normalized:
+                return normalized
+        return None
+
+    @staticmethod
+    def _extract_krx_code(ticker: str) -> str | None:
+        if len(ticker) == 7 and ticker.startswith("A") and ticker[1:].isdigit():
+            return ticker[1:]
+        if len(ticker) == 6 and ticker.isdigit():
+            return ticker
+        return None
+
+    @staticmethod
+    def _download_krx_master_html(market_type: str) -> str:
+        url = (
+            "https://kind.krx.co.kr/corpgeneral/corpList.do"
+            f"?method=download&marketType={market_type}"
+        )
+        req = Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+                )
+            },
+        )
+        with urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+        try:
+            return raw.decode("euc-kr", errors="ignore")
+        except LookupError:
+            return raw.decode("utf-8", errors="ignore")
+
+    @staticmethod
+    def _extract_krx_codes_from_html(document: str) -> set[str]:
+        unescaped = html.unescape(document)
+        matches = re.findall(
+            r"mso-number-format:'@';text-align:center;\">\s*([A-Z0-9]+)\s*<",
+            unescaped,
+        )
+        return {code for code in matches if len(code) == 6 and code.isdigit()}
+
+    def _load_krx_market_map(self) -> dict[str, str]:
+        stock_html = self._download_krx_master_html("stockMkt")
+        kosdaq_html = self._download_krx_master_html("kosdaqMkt")
+
+        stock_codes = self._extract_krx_codes_from_html(stock_html)
+        kosdaq_codes = self._extract_krx_codes_from_html(kosdaq_html)
+
+        market_map: dict[str, str] = {}
+        for code in stock_codes:
+            market_map[code] = ".KS"
+        for code in kosdaq_codes:
+            # 코스피 우선 매핑을 유지하고, 미매핑 코드만 코스닥으로 채움
+            market_map.setdefault(code, ".KQ")
+        return market_map
+
+    async def _get_krx_market_map_cached(self) -> dict[str, str]:
+        now = datetime.utcnow()
+        cache = self.__class__._krx_market_cache
+        expires_at = self.__class__._krx_market_cache_expires_at
+        if cache is not None and expires_at is not None and now < expires_at:
+            return cache
+
+        if self.__class__._krx_market_cache_lock is None:
+            self.__class__._krx_market_cache_lock = asyncio.Lock()
+
+        async with self.__class__._krx_market_cache_lock:
+            now = datetime.utcnow()
+            cache = self.__class__._krx_market_cache
+            expires_at = self.__class__._krx_market_cache_expires_at
+            if cache is not None and expires_at is not None and now < expires_at:
+                return cache
+
+            loaded = await asyncio.to_thread(self._load_krx_market_map)
+            self.__class__._krx_market_cache = loaded
+            self.__class__._krx_market_cache_expires_at = (
+                now + self.__class__._krx_market_cache_ttl
+            )
+            return loaded
+
+    async def _get_krx_market_suffix_for_code(self, code: str) -> str | None:
+        market_map = await self._get_krx_market_map_cached()
+        return market_map.get(code)
+
+    @staticmethod
+    def _estimate_product_beta_fallback(
+        product: Product,
+    ) -> tuple[float | None, float | None]:
+        base_by_asset_class = {
+            "주식": 1.00,
+            "채권": 0.25,
+            "통화": 0.10,
+            "금": -0.15,
+            "부동산": 0.60,
+            "가상자산": 1.80,
+            "기타자산": 0.30,
+        }
+        risk_multiplier = {"안전": 0.70, "위험": 1.20}
+        investment_multiplier = {"직접": 1.00, "ETF": 0.95}
+
+        base = base_by_asset_class.get(product.asset_class, 0.30)
+        risk = risk_multiplier.get(product.risk_level, 1.00)
+        inv = investment_multiplier.get(product.investment_type, 1.00)
+        beta = base * risk * inv
+
+        if product.asset_class in {"통화", "채권", "기타자산"}:
+            beta = max(min(beta, 0.8), -0.3)
+
+        if product.region == "대한민국":
+            domestic_beta = round(beta, 4)
+            global_beta = round(beta * 0.55, 4)
+        else:
+            global_beta = round(beta, 4)
+            domestic_beta = round(beta * 0.45, 4)
+
+        return domestic_beta, global_beta
+
+    @staticmethod
+    def _fetch_yahoo_close_series(symbol: str, period: str = "2y") -> dict[str, float]:
+        url = (
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+            f"?interval=1d&range={period}&includePrePost=false&events=history"
+        )
+        req = Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+                )
+            },
+        )
+        with urlopen(req, timeout=15) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+
+        result = (payload.get("chart", {}) or {}).get("result") or []
+        if not result:
+            return {}
+
+        frame = result[0]
+        timestamps = frame.get("timestamp") or []
+        quote = ((frame.get("indicators") or {}).get("quote") or [{}])[0]
+        closes = quote.get("close") or []
+        if not timestamps or not closes:
+            return {}
+
+        series: dict[str, float] = {}
+        for ts, close in zip(timestamps, closes):
+            if close is None:
+                continue
+            d = datetime.utcfromtimestamp(ts).date().isoformat()
+            series[d] = float(close)
+        return series
+
+    async def _fetch_yahoo_close_series_with_retry(
+        self,
+        symbol: str,
+        period: str = "2y",
+        max_attempts: int = 4,
+        base_delay_sec: float = 1.0,
+    ) -> dict[str, float]:
+        """Yahoo API 호출에 429/일시 오류 재시도 적용.
+
+        - 429: Retry-After 우선, 없으면 지수 백오프
+        - 네트워크 일시 오류: 지수 백오프
+        """
+        last_error: Exception | None = None
+        for attempt in range(max_attempts):
+            try:
+                return await asyncio.to_thread(
+                    self._fetch_yahoo_close_series, symbol, period
+                )
+            except HTTPError as exc:
+                last_error = exc
+                is_retryable = exc.code == 429 or 500 <= exc.code < 600
+                if not is_retryable or attempt == max_attempts - 1:
+                    raise
+
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                if retry_after and retry_after.isdigit():
+                    delay = float(retry_after)
+                else:
+                    delay = base_delay_sec * (2**attempt)
+            except (URLError, TimeoutError) as exc:
+                last_error = exc
+                if attempt == max_attempts - 1:
+                    raise
+                delay = base_delay_sec * (2**attempt)
+
+            # 동일 시점 대량 요청 버스트 완화를 위해 소폭 지터 적용
+            jitter = random.uniform(0.0, 0.35)
+            await asyncio.sleep(min(delay + jitter, 20.0))
+
+        if last_error:
+            raise last_error
+        return {}
+
+    @staticmethod
+    def _fetch_naver_close_series(symbol: str, count: int = 600) -> dict[str, float]:
+        url = (
+            "https://fchart.stock.naver.com/sise.nhn"
+            f"?symbol={quote(symbol)}&timeframe=day&count={count}&requestType=0"
+        )
+        req = Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+                )
+            },
+        )
+        with urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+
+        text = raw.decode("euc-kr", errors="ignore")
+        items = re.findall(r'<item\s+data="([^"]+)"\s*/>', text)
+        series: dict[str, float] = {}
+        for row in items:
+            parts = row.split("|")
+            if len(parts) < 5:
+                continue
+            ymd = parts[0]
+            close = parts[4]
+            if len(ymd) != 8:
+                continue
+            try:
+                close_val = float(close)
+            except ValueError:
+                continue
+            d = f"{ymd[0:4]}-{ymd[4:6]}-{ymd[6:8]}"
+            series[d] = close_val
+        return series
+
+    @staticmethod
+    def _fetch_stooq_close_series(symbol: str) -> dict[str, float]:
+        url = f"https://stooq.com/q/d/l/?s={quote(symbol)}&i=d"
+        req = Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+                )
+            },
+        )
+        with urlopen(req, timeout=15) as resp:
+            text = resp.read().decode("utf-8", errors="ignore")
+
+        if text.strip().lower().startswith("no data"):
+            return {}
+
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if len(lines) < 2:
+            return {}
+
+        series: dict[str, float] = {}
+        for line in lines[1:]:
+            parts = line.split(",")
+            if len(parts) < 5:
+                continue
+            d = parts[0]
+            close = parts[4]
+            try:
+                series[d] = float(close)
+            except ValueError:
+                continue
+        return series
+
+    @staticmethod
+    def _map_symbol_for_stooq(symbol: str) -> str | None:
+        normalized = symbol.strip().upper()
+        if normalized == "^GSPC":
+            return "^spx"
+        if normalized == "^KS11":
+            return "^kospi"
+        if normalized.endswith(".KS") or normalized.endswith(".KQ"):
+            return None
+        if normalized.startswith("^"):
+            return normalized.lower()
+        if normalized.endswith(".US"):
+            return normalized.lower()
+        if "." in normalized:
+            return normalized.lower()
+        return f"{normalized.lower()}.us"
+
+    def _fetch_free_close_series(self, symbol: str) -> dict[str, float]:
+        normalized = symbol.strip().upper()
+
+        # 국내 종목/국내 지수는 네이버 차트 우선
+        if normalized == "^KS11":
+            return self._fetch_naver_close_series("KOSPI")
+        if normalized.endswith(".KS") or normalized.endswith(".KQ"):
+            code = normalized.split(".", 1)[0]
+            return self._fetch_naver_close_series(code)
+        if len(normalized) == 6 and normalized.isdigit():
+            return self._fetch_naver_close_series(normalized)
+
+        # 해외 종목/글로벌 지수는 Stooq 사용
+        mapped = self._map_symbol_for_stooq(normalized)
+        if mapped:
+            return self._fetch_stooq_close_series(mapped)
+        return {}
+
+    async def _fetch_close_series_with_fallback(
+        self,
+        symbol: str,
+        period: str = "2y",
+    ) -> tuple[dict[str, float], str]:
+        try:
+            series = await self._fetch_yahoo_close_series_with_retry(symbol, period=period)
+            return series, "yahoo"
+        except HTTPError as exc:
+            if exc.code != 429:
+                raise
+
+            series = await asyncio.to_thread(self._fetch_free_close_series, symbol)
+            if series:
+                return series, "free"
+            raise
+
+    @staticmethod
+    def _to_returns(prices: dict[str, float]) -> dict[str, float]:
+        if len(prices) < 2:
+            return {}
+        ordered = sorted(prices.items(), key=lambda x: x[0])
+        returns: dict[str, float] = {}
+        prev = ordered[0][1]
+        for d, p in ordered[1:]:
+            if prev > 0:
+                returns[d] = (p - prev) / prev
+            prev = p
+        return returns
+
+    @staticmethod
+    def _calculate_beta(
+        asset_returns: dict[str, float], benchmark_returns: dict[str, float]
+    ) -> float | None:
+        common_dates = sorted(set(asset_returns.keys()) & set(benchmark_returns.keys()))
+        if len(common_dates) < 30:
+            return None
+
+        x = [asset_returns[d] for d in common_dates]
+        y = [benchmark_returns[d] for d in common_dates]
+        n = len(x)
+        mean_x = sum(x) / n
+        mean_y = sum(y) / n
+        cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y)) / (n - 1)
+        var_y = sum((yi - mean_y) ** 2 for yi in y) / (n - 1)
+        if abs(var_y) < 1e-12:
+            return None
+        return round(cov / var_y, 4)
+
+    async def _collect_product_beta_values(
+        self,
+        product: Product,
+        benchmark_cache: dict[str, dict[str, float]],
+    ) -> tuple[float | None, float | None, str]:
+        ticker = self._resolve_ticker(product)
+        if not ticker:
+            return 0.0, 0.0, "ticker_missing_defaulted_zero"
+
+        try:
+            asset_prices, asset_provider = await self._fetch_close_series_with_fallback(
+                ticker
+            )
+            if not asset_prices:
+                return None, None, "asset_price_unavailable"
+
+            # 과도한 연속 호출로 429를 유발하지 않도록 요청 간 짧은 간격 유지
+            await asyncio.sleep(0.2)
+
+            if "^GSPC" not in benchmark_cache:
+                benchmark_cache["^GSPC"], _ = await self._fetch_close_series_with_fallback(
+                    "^GSPC"
+                )
+                await asyncio.sleep(0.2)
+            if "^KS11" not in benchmark_cache:
+                benchmark_cache["^KS11"], _ = await self._fetch_close_series_with_fallback(
+                    "^KS11"
+                )
+
+            asset_returns = self._to_returns(asset_prices)
+            global_returns = self._to_returns(benchmark_cache["^GSPC"])
+            domestic_returns = self._to_returns(benchmark_cache["^KS11"])
+
+            global_beta = self._calculate_beta(asset_returns, global_returns)
+            domestic_beta = self._calculate_beta(asset_returns, domestic_returns)
+
+            if global_beta is None and domestic_beta is None:
+                return None, None, "measured_failed_insufficient_overlap"
+            if asset_provider == "free":
+                return domestic_beta, global_beta, "collected_via_free_fallback"
+            return domestic_beta, global_beta, "collected"
+        except HTTPError as exc:
+            if exc.code == 429:
+                return None, None, "measured_failed_rate_limited_429"
+            return None, None, f"measured_failed_external_http_{exc.code}"
+        except (URLError, TimeoutError):
+            return None, None, "measured_failed_external_fetch"
+
     @transactional(mode="writable")
     async def create_product(self, command: CreateProductCommand) -> ProductResult:
         if await self._product_repo.exists_identity(
@@ -193,6 +616,7 @@ class PortfolioAppService:
             characteristics=command.characteristics,
             risk_level=command.risk_level,
             allow_snapshot_input=command.allow_snapshot_input,
+            ticker=command.ticker,
             display_order=command.display_order,
         )
         saved = await self._product_repo.add(model)
@@ -234,6 +658,7 @@ class PortfolioAppService:
             characteristics=command.characteristics,
             risk_level=command.risk_level,
             allow_snapshot_input=command.allow_snapshot_input,
+            ticker=command.ticker,
         )
         saved = await self._product_repo.update(product)
         return ProductResult.from_domain(saved)
@@ -254,6 +679,156 @@ class PortfolioAppService:
             )
 
         await self._product_repo.delete(command.product_id)
+
+    @transactional(mode="writable")
+    async def collect_product_beta(
+        self, product_id: int
+    ) -> ProductBetaCollectionItemResult:
+        product = await self._product_repo.find_by_id(product_id)
+        if product is None:
+            raise NotFoundError("product", product_id)
+
+        benchmark_cache: dict[str, dict[str, float]] = {}
+        domestic_beta, global_beta, message = await self._collect_product_beta_values(
+            product, benchmark_cache
+        )
+        updated = False
+        collected_at: datetime | None = None
+        if message in {"collected", "ticker_missing_defaulted_zero"}:
+            product.domestic_beta = domestic_beta
+            product.global_beta = global_beta
+            product.beta_collected_at = datetime.now()
+            saved = await self._product_repo.update(product)
+            updated = True
+            collected_at = saved.beta_collected_at
+        else:
+            saved = product
+
+        return ProductBetaCollectionItemResult(
+            product_id=saved.product_id,
+            product_name=saved.product_name,
+            domestic_beta=domestic_beta,
+            global_beta=global_beta,
+            beta_collected_at=collected_at,
+            message=message,
+            updated=updated,
+        )
+
+    @transactional(mode="writable")
+    async def collect_all_product_betas(self) -> ProductBetaCollectionResult:
+        products = await self._product_repo.get_all()
+        items: list[ProductBetaCollectionItemResult] = []
+        updated_count = 0
+        benchmark_cache: dict[str, dict[str, float]] = {}
+
+        for product in products:
+            domestic_beta, global_beta, message = await self._collect_product_beta_values(
+                product, benchmark_cache
+            )
+            updated = False
+            collected_at: datetime | None = None
+            if message in {"collected", "ticker_missing_defaulted_zero"}:
+                product.domestic_beta = domestic_beta
+                product.global_beta = global_beta
+                product.beta_collected_at = datetime.now()
+                saved = await self._product_repo.update(product)
+                updated = True
+                collected_at = saved.beta_collected_at
+                updated_count += 1
+            else:
+                saved = product
+            items.append(
+                ProductBetaCollectionItemResult(
+                    product_id=saved.product_id,
+                    product_name=saved.product_name,
+                    domestic_beta=domestic_beta,
+                    global_beta=global_beta,
+                    beta_collected_at=collected_at,
+                    message=message,
+                    updated=updated,
+                )
+            )
+
+        return ProductBetaCollectionResult(updated_count=updated_count, items=items)
+
+    @transactional(mode="writable")
+    async def resolve_product_ticker(self, product_id: int) -> ProductTickerResolveResult:
+        product = await self._product_repo.find_by_id(product_id)
+        if product is None:
+            raise NotFoundError("product", product_id)
+
+        old_ticker = product.ticker
+        normalized = self._resolve_ticker(product)
+        if not normalized:
+            return ProductTickerResolveResult(
+                product_id=product_id,
+                old_ticker=old_ticker,
+                new_ticker=old_ticker,
+                message="ticker_missing",
+                updated=False,
+            )
+
+        code = self._extract_krx_code(normalized)
+        if not code:
+            return ProductTickerResolveResult(
+                product_id=product_id,
+                old_ticker=old_ticker,
+                new_ticker=normalized,
+                message="ticker_not_krx_code",
+                updated=False,
+            )
+
+        try:
+            suffix = await self._get_krx_market_suffix_for_code(code)
+        except Exception:
+            return ProductTickerResolveResult(
+                product_id=product_id,
+                old_ticker=old_ticker,
+                new_ticker=old_ticker,
+                message="ticker_resolve_krx_master_unavailable",
+                updated=False,
+            )
+
+        if not suffix:
+            resolved_fallback = f"{code}.KS"
+            if normalized == resolved_fallback:
+                return ProductTickerResolveResult(
+                    product_id=product_id,
+                    old_ticker=old_ticker,
+                    new_ticker=normalized,
+                    message="ticker_already_resolved_default_ks",
+                    updated=False,
+                )
+
+            product.ticker = resolved_fallback
+            saved = await self._product_repo.update(product)
+            return ProductTickerResolveResult(
+                product_id=product_id,
+                old_ticker=old_ticker,
+                new_ticker=saved.ticker,
+                message="ticker_resolved_default_ks",
+                updated=True,
+            )
+
+        resolved = f"{code}{suffix}"
+        if normalized == resolved:
+            return ProductTickerResolveResult(
+                product_id=product_id,
+                old_ticker=old_ticker,
+                new_ticker=normalized,
+                message="ticker_already_resolved",
+                updated=False,
+            )
+
+        product.ticker = resolved
+        saved = await self._product_repo.update(product)
+        return ProductTickerResolveResult(
+            product_id=product_id,
+            old_ticker=old_ticker,
+            new_ticker=saved.ticker,
+            message="ticker_resolved",
+            updated=True,
+        )
 
     # ------------------------------------------------------------------
     # Accounts
@@ -932,8 +1507,12 @@ class PortfolioAppService:
                 characteristics=prod.characteristics,
                 risk_level=prod.risk_level,
                 allow_snapshot_input=prod.allow_snapshot_input,
+                ticker=prod.ticker,
                 display_order=prod.display_order,
                 created_at=prod.created_at,
+                domestic_beta=prod.domestic_beta,
+                global_beta=prod.global_beta,
+                beta_collected_at=prod.beta_collected_at,
             )
             for prod in products
         ]

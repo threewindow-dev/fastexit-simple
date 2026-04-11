@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS products (
     characteristics  TEXT[]       NULL,
     risk_level       VARCHAR(20)  NOT NULL CHECK (risk_level IN ('안전', '위험')),
     allow_snapshot_input BOOLEAN  NOT NULL DEFAULT TRUE,
+    ticker           VARCHAR(32)  NULL,
+    domestic_beta    NUMERIC(12,6) NULL,
+    global_beta      NUMERIC(12,6) NULL,
+    beta_collected_at TIMESTAMP WITHOUT TIME ZONE NULL,
     display_order    INTEGER      NOT NULL DEFAULT 0,
     created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     UNIQUE (product_name, asset_class, region, currency, investment_type)

@@ -225,6 +225,10 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             characteristics=product.characteristics,
             risk_level=product.risk_level,
             allow_snapshot_input=product.allow_snapshot_input,
+            ticker=product.ticker,
+            domestic_beta=product.domestic_beta,
+            global_beta=product.global_beta,
+            beta_collected_at=product.beta_collected_at,
             display_order=product.display_order,
         )
         session.add(entity)
@@ -239,8 +243,16 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             characteristics=entity.characteristics,
             risk_level=entity.risk_level,
             allow_snapshot_input=entity.allow_snapshot_input,
+            ticker=entity.ticker,
             display_order=entity.display_order,
             created_at=entity.created_at,
+            domestic_beta=float(entity.domestic_beta)
+            if entity.domestic_beta is not None
+            else None,
+            global_beta=float(entity.global_beta)
+            if entity.global_beta is not None
+            else None,
+            beta_collected_at=entity.beta_collected_at,
         )
 
     @use_transaction()
@@ -262,8 +274,16 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
             characteristics=entity.characteristics,
             risk_level=entity.risk_level,
             allow_snapshot_input=entity.allow_snapshot_input,
+            ticker=entity.ticker,
             display_order=entity.display_order,
             created_at=entity.created_at,
+            domestic_beta=float(entity.domestic_beta)
+            if entity.domestic_beta is not None
+            else None,
+            global_beta=float(entity.global_beta)
+            if entity.global_beta is not None
+            else None,
+            beta_collected_at=entity.beta_collected_at,
         )
 
     @use_transaction()
@@ -281,6 +301,10 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
                 characteristics=product.characteristics,
                 risk_level=product.risk_level,
                 allow_snapshot_input=product.allow_snapshot_input,
+                ticker=product.ticker,
+                domestic_beta=product.domestic_beta,
+                global_beta=product.global_beta,
+                beta_collected_at=product.beta_collected_at,
                 display_order=product.display_order,
             )
         )
@@ -329,8 +353,12 @@ class SQLAlchemyProductRepository(_BaseRepo, ProductRepository):
                 characteristics=e.characteristics,
                 risk_level=e.risk_level,
                 allow_snapshot_input=e.allow_snapshot_input,
+                ticker=e.ticker,
                 display_order=e.display_order,
                 created_at=e.created_at,
+                domestic_beta=float(e.domestic_beta) if e.domestic_beta is not None else None,
+                global_beta=float(e.global_beta) if e.global_beta is not None else None,
+                beta_collected_at=e.beta_collected_at,
             )
             for e in entities
         ]
