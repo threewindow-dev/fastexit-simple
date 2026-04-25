@@ -277,6 +277,7 @@ export default function PortfolioPage() {
   const [savingAllTargetAccounts, setSavingAllTargetAccounts] = useState(false);
   const [assetClassTargets, setAssetClassTargets] = useState<Record<string, string>>({});
   const [savingAssetClassTargets, setSavingAssetClassTargets] = useState(false);
+  const [snapshotAnalysisAccountGroupFilter, setSnapshotAnalysisAccountGroupFilter] = useState<number | null>(null);
 
   // Institution Form
   const [newInstitution, setNewInstitution] = useState({
@@ -5351,9 +5352,64 @@ export default function PortfolioPage() {
               }))
               .sort((a, b) => b.value - a.value);
 
+            const filteredDetailHoldings = snapshotAnalysisAccountGroupFilter === null
+              ? latestHoldings
+              : latestHoldings.filter((snapshotHolding) => {
+                  const holding = holdings.find((item) => item.holding_id === snapshotHolding.holding_id);
+                  if (!holding) {
+                    return false;
+                  }
+
+                  const selectedGroup = sortedAccountGroups.find(
+                    (group) => group.account_group_id === snapshotAnalysisAccountGroupFilter
+                  );
+
+                  return selectedGroup?.account_ids.includes(holding.account_id) ?? false;
+                });
+
+            const detailAssetClassMap = new Map<string, number>();
+            filteredDetailHoldings.forEach((snapshotHolding) => {
+              const holding = holdings.find((item) => item.holding_id === snapshotHolding.holding_id);
+              const product = holding ? products.find((item) => item.product_id === holding.product_id) : undefined;
+              const assetClass = product?.asset_class || '미분류';
+              const amount = Number(snapshotHolding.valuation_amount || 0);
+              detailAssetClassMap.set(assetClass, (detailAssetClassMap.get(assetClass) || 0) + amount);
+            });
+
+            const detailAssetClassCandidates = [
+              ...ASSET_CLASS_ORDER,
+              ...Object.keys(assetClassTargets),
+              ...chartData.map((item) => item.name),
+              ...Array.from(detailAssetClassMap.keys()),
+            ];
+
+            const detailAssetClassNames = Array.from(new Set(detailAssetClassCandidates));
+            const detailChartData = detailAssetClassNames
+              .map((name) => ({
+                name,
+                value: detailAssetClassMap.get(name) || 0,
+              }))
+              .sort((a, b) => {
+                const aOrder = ASSET_CLASS_ORDER.indexOf(a.name);
+                const bOrder = ASSET_CLASS_ORDER.indexOf(b.name);
+
+                if (aOrder !== -1 || bOrder !== -1) {
+                  if (aOrder === -1) {
+                    return 1;
+                  }
+                  if (bOrder === -1) {
+                    return -1;
+                  }
+                  return aOrder - bOrder;
+                }
+
+                return a.name.localeCompare(b.name, 'ko');
+              });
+
             const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF6B6B'];
 
             const totalValue = chartData.reduce((sum, item) => sum + item.value, 0);
+            const detailTotalValue = detailChartData.reduce((sum, item) => sum + item.value, 0);
 
             // 커스텀 Legend 컴포넌트 (비중 순서 유지)
             const CustomPieLegend = (props: any) => {
@@ -5420,9 +5476,29 @@ export default function PortfolioPage() {
 
                   {/* 자산 유형별 상세 표 */}
                   <div style={{ flex: '1', minWidth: '300px' }}>
-                    <h3>자산 유형별 상세</h3>
+                    <div className={styles.filterRow} style={{ justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                      <h3 style={{ margin: 0 }}>자산 유형별 상세</h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <label htmlFor="snapshot-analysis-account-group-filter">계좌그룹</label>
+                        <select
+                          id="snapshot-analysis-account-group-filter"
+                          value={snapshotAnalysisAccountGroupFilter ?? ''}
+                          onChange={(e) =>
+                            setSnapshotAnalysisAccountGroupFilter(
+                              e.target.value ? Number(e.target.value) : null
+                            )
+                          }
+                        >
+                          <option value="">전체</option>
+                          {sortedAccountGroups.map((group) => (
+                            <option key={group.account_group_id} value={group.account_group_id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                     {(() => {
-                      const snapshotYear = new Date(latestSnapshot.reference_date).getFullYear();
                       const targetsByAssetClass = assetClassTargets; // targetAllocations에서 가져온 데이터
 
                       return (
@@ -5436,9 +5512,11 @@ export default function PortfolioPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {chartData.map((item, idx) => {
+                            {detailChartData.map((item, idx) => {
                               const targetPercentage = targetsByAssetClass[item.name];
-                              const currentPercentage = ((item.value / totalValue) * 100).toFixed(2);
+                              const currentPercentage = detailTotalValue > 0
+                                ? ((item.value / detailTotalValue) * 100).toFixed(2)
+                                : '0.00';
                               return (
                                 <tr key={idx}>
                                   <td>{item.name}</td>
@@ -5457,7 +5535,7 @@ export default function PortfolioPage() {
                             <tr style={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
                               <td>합계</td>
                               <td style={{ textAlign: 'right' }}>
-                                {totalValue.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
+                                {detailTotalValue.toLocaleString('ko-KR', { minimumFractionDigits: 0 })} 원
                               </td>
                               <td style={{ textAlign: 'right' }}>100.00%</td>
                               <td style={{ textAlign: 'right' }}>
