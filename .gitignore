@@ -31,3 +31,6 @@ Thumbs.db
 
 # Next.js build output
 frontend/.next/
+
+# DB 백업 파일 (보안상 git 제외)
+backup/

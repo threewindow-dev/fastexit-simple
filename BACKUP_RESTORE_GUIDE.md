@@ -2,21 +2,18 @@
 
 ## 백업 파일 정보
 
-생성 일시: 2026-03-07 16:03:40
+### 백업 파일 위치
+
+- 디렉터리: `backup/` (프로젝트 루트 기준)
+- 형식: zip (비밀번호 보호)
+- 명명 규칙: `fastexit-backup-YYYYMMDD_HHMMSS.zip`
 
 ### 백업 파일 목록
 
-1. **SQL 덤프 백업** (논리적 백업)
-   - 파일: `fastexit-backup-20260307_160340.sql`
-   - 크기: 47KB
-   - 용도: 데이터만 복원 (스키마 + 데이터)
-   - 장점: 사람이 읽을 수 있음, 버전 간 호환성 높음
-
-2. **볼륨 전체 백업** (물리적 백업)
-   - 파일: `fastexit-data-20260307_160340.tar.gz`
-   - 크기: 6.6MB
-   - 용도: PostgreSQL 데이터 디렉터리 전체 복원
-   - 장점: 빠른 복원, 완전한 상태 보존
+| 파일명 | 생성 일시 | 크기 | 비고 |
+|--------|----------|------|------|
+| `fastexit-backup-20260503_193632.zip` | 2026-05-03 19:36 | 63KB | 최신 |
+| `fastexit-backup-20260426.zip` | 2026-04-26 | 123KB | |
 
 ## 복원 방법
 
@@ -26,7 +23,11 @@
 # 1. 컨테이너가 실행 중인지 확인
 docker ps | grep fastexit
 
-# 2. 기존 데이터베이스 초기화 (선택사항 - 완전히 새로 시작하려면)
+# 2. zip 압축 해제 (비밀번호 입력 필요)
+cd /home/ubuntu/workspaces/fastexit-simple/backup
+unzip fastexit-backup-20260503_193632.zip
+
+# 3. 기존 데이터베이스 초기화 (선택사항 - 완전히 새로 시작하려면)
 docker exec -i fastexit psql -U postgres -d fastexit << EOF
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
@@ -34,10 +35,10 @@ GRANT ALL ON SCHEMA public TO postgres;
 GRANT ALL ON SCHEMA public TO public;
 EOF
 
-# 3. SQL 덤프 복원
-docker exec -i fastexit psql -U postgres -d fastexit < fastexit-backup-20260307_160340.sql
+# 4. SQL 덤프 복원
+docker exec -i fastexit psql -U postgres -d fastexit < fastexit-backup-20260503_193632.sql
 
-# 4. 복원 확인
+# 5. 복원 확인
 docker exec fastexit psql -U postgres -d fastexit -c "
 SELECT 
   (SELECT COUNT(*) FROM institutions) as institutions,
@@ -47,6 +48,9 @@ SELECT
   (SELECT COUNT(*) FROM holdings) as holdings,
   (SELECT COUNT(*) FROM snapshots) as snapshots;
 "
+
+# 6. 복원 후 sql 파일 삭제
+rm fastexit-backup-20260503_193632.sql
 ```
 
 ### 방법 2: 볼륨 전체 복원 (완전 복구)
@@ -61,17 +65,10 @@ docker volume rm fastexit-data
 # 3. 새 볼륨 생성
 docker volume create fastexit-data
 
-# 4. 백업 파일 복원
-docker run --rm \
-  -v fastexit-data:/data \
-  -v $(pwd):/backup \
-  alpine tar xzf /backup/fastexit-data-20260307_160340.tar.gz -C /data
+# 4. 컨테이너 재시작 (스키마 자동 생성됨)
+bash scripts/run-single-container.sh
 
-# 5. 컨테이너 재시작
-docker start fastexit
-
-# 6. 로그 확인
-docker logs fastexit --tail 50
+# 5. SQL 덤프로 데이터 복원 (방법 1의 4번 단계 참고)
 ```
 
 ## 정기 백업 스크립트
@@ -80,23 +77,22 @@ docker logs fastexit --tail 50
 #!/bin/bash
 # 파일명: scripts/backup-db.sh
 
-BACKUP_DIR="/home/ubuntu/workspaces/fastexit-simple/backups"
+BACKUP_DIR="/home/ubuntu/workspaces/fastexit-simple/backup"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+ZIP_PASSWORD="<비밀번호>"
 
 mkdir -p "$BACKUP_DIR"
 
 echo "Creating SQL backup..."
 docker exec fastexit pg_dump -U postgres fastexit > "$BACKUP_DIR/fastexit-backup-${TIMESTAMP}.sql"
 
-echo "Creating volume backup..."
-docker run --rm \
-  -v fastexit-data:/data \
-  -v "$BACKUP_DIR":/backup \
-  alpine tar czf /backup/fastexit-data-${TIMESTAMP}.tar.gz -C /data .
+echo "Compressing with password..."
+cd "$BACKUP_DIR"
+zip -P "$ZIP_PASSWORD" "fastexit-backup-${TIMESTAMP}.zip" "fastexit-backup-${TIMESTAMP}.sql"
+rm "fastexit-backup-${TIMESTAMP}.sql"
 
-# 7일 이상 된 백업 삭제
-find "$BACKUP_DIR" -name "fastexit-*.sql" -mtime +7 -delete
-find "$BACKUP_DIR" -name "fastexit-data-*.tar.gz" -mtime +7 -delete
+# 30일 이상 된 백업 삭제
+find "$BACKUP_DIR" -name "fastexit-backup-*.zip" -mtime +30 -delete
 
 echo "Backup completed:"
 ls -lh "$BACKUP_DIR" | tail -5
@@ -142,8 +138,9 @@ docker restart fastexit
 ## 백업 파일 관리
 
 ### 로컬 보관
-- 위치: `/home/ubuntu/workspaces/fastexit-simple/`
-- 보관 기간: 7일 (정기 백업 스크립트 기준)
+- 위치: `/home/ubuntu/workspaces/fastexit-simple/backup/`
+- 형식: zip (비밀번호 보호)
+- 보관 기간: 30일 (정기 백업 스크립트 기준)
 
 ### 외부 백업 권장사항
 - 클라우드 스토리지 (AWS S3, Google Cloud Storage 등)
@@ -159,21 +156,28 @@ scp fastexit-backup-20260307_160340.sql user@backup-server:/backups/fastexit/
 
 ```bash
 # SQL 백업 파일 검사 (구문 오류 체크)
+# 1. zip 압축 해제
+cd /home/ubuntu/workspaces/fastexit-simple/backup
+unzip fastexit-backup-20260503_193632.zip
+
 docker exec -i fastexit psql -U postgres -d template1 << EOF
 CREATE DATABASE backup_test;
 EOF
 
-docker exec -i fastexit psql -U postgres -d backup_test < fastexit-backup-20260307_160340.sql
+docker exec -i fastexit psql -U postgres -d backup_test < fastexit-backup-20260503_193632.sql
 
 docker exec fastexit psql -U postgres -d template1 -c "DROP DATABASE backup_test;"
+
+# 검증 후 sql 파일 삭제
+rm fastexit-backup-20260503_193632.sql
 ```
 
 ## 추가 정보
 
-- PostgreSQL 버전: 17.9
+- PostgreSQL 버전: 17
 - 백업 방식: pg_dump (plain SQL format)
-- 압축: gzip (볼륨 백업)
-- 문자 인코딩: SQL_ASCII/UTF-8
+- 압축: zip (비밀번호 보호)
+- 문자 인코딩: UTF-8
 
 ---
 
