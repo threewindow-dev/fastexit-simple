@@ -61,6 +61,7 @@ from subdomains.portfolio.application.dtos import (
     WeeklyPivotAccountRow,
     WeeklyPivotAccountGroupRow,
     WeeklyPivotReportResult,
+    AnnualMddItem,
 )
 from subdomains.portfolio.domain import (
     Institution,
@@ -1471,11 +1472,121 @@ class PortfolioAppService:
             weeks=weeks,
             account_groups=account_group_rows,
             accounts=accounts,
+            mdd_by_year=await self._compute_annual_mdd(
+                user_id=query.user_id,
+                year_snapshots=year_snapshots,
+                account_groups=[g for g in account_groups if g.include_in_report],
+            ),
         )
 
     # ------------------------------------------------------------------
     # List/Read Operations
     # ------------------------------------------------------------------
+
+    async def _compute_annual_mdd(
+        self,
+        user_id: int,
+        year_snapshots: list,
+        account_groups: list,
+    ) -> list[AnnualMddItem]:
+        """연도별 MDD(Maximum Drawdown)를 주간 스냅샷으로부터 계산한다.
+
+        각 연간 스냅샷의 데이터 연도(reference_date.year - 1)에 해당하는
+        주간 스냅샷들의 include_in_report 계좌그룹 총액을 집계하여
+        MDD = (최저총액 - 최고총액) / 최고총액 × 100 을 반환한다.
+        """
+        if not year_snapshots:
+            return []
+
+        # include_in_report 계좌그룹에 속한 계좌 ID 집합
+        included_account_ids: set[int] = set()
+        for grp in account_groups:
+            included_account_ids.update(grp.account_ids)
+
+        # 전체 주간 스냅샷 조회 (@use_transaction이 현재 트랜잭션을 자동으로 주입)
+        all_weekly = await self._snapshot_repo.get_weekly_by_user(user_id)
+
+        mdd_items: list[AnnualMddItem] = []
+        for snap in year_snapshots:
+            data_year = snap.reference_date.year - 1
+
+            year_weekly = sorted(
+                [ws for ws in all_weekly if ws.reference_date.year == data_year],
+                key=lambda x: x.reference_date,
+            )
+
+            if len(year_weekly) < 2:
+                mdd_items.append(
+                    AnnualMddItem(
+                        data_year=data_year,
+                        annual_snapshot_id=snap.annual_snapshot_id,
+                        peak_amount=0.0,
+                        trough_amount=0.0,
+                        mdd_percentage=0.0,
+                        weekly_snapshot_count=len(year_weekly),
+                    )
+                )
+                continue
+
+            # 해당 연도 주간 스냅샷 보유자산 일괄 조회
+            weekly_ids = [ws.weekly_snapshot_id for ws in year_weekly]
+            holdings_data = await self._report_repo.get_weekly_snapshot_holdings(weekly_ids)
+
+            # 주간 스냅샷별 include_in_report 계좌 총액 집계
+            totals_by_ws: dict[int, float] = {ws_id: 0.0 for ws_id in weekly_ids}
+            for row in holdings_data:
+                account_id = row.get("account_id")
+                ws_id = row.get("weekly_snapshot_id")
+                if account_id in included_account_ids and ws_id in totals_by_ws:
+                    totals_by_ws[ws_id] += float(row.get("valuation_amount", 0) or 0)
+
+            # 날짜 순서가 보장된 주간 총액 시계열
+            ordered_totals = [totals_by_ws[ws.weekly_snapshot_id] for ws in year_weekly]
+            nonzero_totals = [v for v in ordered_totals if v > 0]
+
+            if not nonzero_totals:
+                mdd_items.append(
+                    AnnualMddItem(
+                        data_year=data_year,
+                        annual_snapshot_id=snap.annual_snapshot_id,
+                        peak_amount=0.0,
+                        trough_amount=0.0,
+                        mdd_percentage=0.0,
+                        weekly_snapshot_count=len(year_weekly),
+                    )
+                )
+                continue
+
+            # 올바른 MDD: 시간 순서대로 진행하며 직전 최고점 대비 현재 낙폭의 최댓값
+            # 꾸준히 상승하기만 하면 MDD = 0.0%
+            running_peak = ordered_totals[0]
+            mdd_pct = 0.0
+            mdd_peak = running_peak
+            mdd_trough = running_peak
+            for v in ordered_totals[1:]:
+                if v <= 0:
+                    continue
+                if v > running_peak:
+                    running_peak = v
+                else:
+                    drawdown = (v - running_peak) / running_peak * 100
+                    if drawdown < mdd_pct:
+                        mdd_pct = drawdown
+                        mdd_peak = running_peak
+                        mdd_trough = v
+
+            mdd_items.append(
+                AnnualMddItem(
+                    data_year=data_year,
+                    annual_snapshot_id=snap.annual_snapshot_id,
+                    peak_amount=mdd_peak,
+                    trough_amount=mdd_trough,
+                    mdd_percentage=mdd_pct,
+                    weekly_snapshot_count=len(year_weekly),
+                )
+            )
+
+        return mdd_items
 
     @transactional(mode="readonly")
     async def list_institutions(self) -> list[InstitutionResult]:

@@ -599,11 +599,21 @@ class WeeklyPivotAccountGroupRow(BaseModel):
     valuations: list[WeeklyPivotAccountValuation]
 
 
+class AnnualMddItem(BaseModel):
+    data_year: int
+    annual_snapshot_id: int
+    peak_amount: float
+    trough_amount: float
+    mdd_percentage: float
+    weekly_snapshot_count: int
+
+
 class WeeklyPivotReportData(BaseModel):
     year: int
     weeks: list[WeeklyPivotWeekInfo]
     account_groups: list[WeeklyPivotAccountGroupRow]
     accounts: list[WeeklyPivotAccountRow]
+    mdd_by_year: list[AnnualMddItem] = []
 
 
 class WeeklyPivotReportResponse(ApiResponse[WeeklyPivotReportData]):

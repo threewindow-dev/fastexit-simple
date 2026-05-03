@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
@@ -558,10 +558,23 @@ class WeeklyPivotAccountGroupRow:
 
 
 @dataclass
+class AnnualMddItem:
+    """연도별 연간 MDD (Maximum Drawdown) 정보"""
+
+    data_year: int  # 데이터 연도 (annual snapshot reference_date.year - 1)
+    annual_snapshot_id: int  # 대응하는 연간 스냅샷 ID
+    peak_amount: float  # 해당 연도 주간 스냅샷 중 최고 포트폴리오 총액
+    trough_amount: float  # 해당 연도 주간 스냅샷 중 최저 포트폴리오 총액
+    mdd_percentage: float  # MDD (%) = (trough - peak) / peak * 100
+    weekly_snapshot_count: int  # 계산에 사용된 주간 스냅샷 수
+
+
+@dataclass
 class WeeklyPivotReportResult:
-    """주간 Pivot 보고서 결과"""
+    """주간/연간 Pivot 보고서 결과"""
 
     year: int
     weeks: list[WeeklyPivotWeekInfo]
     account_groups: list[WeeklyPivotAccountGroupRow]  # 계좌그룹 행
     accounts: list[WeeklyPivotAccountRow]
+    mdd_by_year: list[AnnualMddItem] = field(default_factory=list)  # 연도별 MDD (연간 보고서 전용)

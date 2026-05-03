@@ -53,6 +53,7 @@ from .portfolio_dtos import (
     WeeklyPivotAccountRow,
     WeeklyPivotAccountGroupRow,
     WeeklyPivotReportResult,
+    AnnualMddItem,
 )
 
 __all__ = [
@@ -110,4 +111,5 @@ __all__ = [
     "WeeklyPivotAccountRow",
     "WeeklyPivotAccountGroupRow",
     "WeeklyPivotReportResult",
+    "AnnualMddItem",
 ]

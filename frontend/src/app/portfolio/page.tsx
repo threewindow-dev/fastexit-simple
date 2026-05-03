@@ -133,11 +133,21 @@ interface WeeklyPivotAccountGroupRow {
   valuations: WeeklyPivotAccountValuation[];
 }
 
+interface AnnualMddItem {
+  data_year: number;
+  annual_snapshot_id: number;
+  peak_amount: number;
+  trough_amount: number;
+  mdd_percentage: number;
+  weekly_snapshot_count: number;
+}
+
 interface WeeklyPivotReportData {
   year: number;
   weeks: WeeklyPivotWeekInfo[];
   account_groups: WeeklyPivotAccountGroupRow[];
   accounts: WeeklyPivotAccountRow[];
+  mdd_by_year?: AnnualMddItem[];
 }
 
 interface Holding {
@@ -589,10 +599,18 @@ export default function PortfolioPage() {
       }
       const [moved] = ordered.splice(fromIndex, 1);
       ordered.splice(toIndex, 0, moved);
-      return ordered.map((item, index) => ({
-        ...item,
-        display_order: index + 1,
-      }));
+
+      const orderMap = new Map(
+        ordered.map((item, index) => [item.product_id, index + 1])
+      );
+
+      return prev.map((item) => {
+        const updatedOrder = orderMap.get(item.product_id);
+        if (updatedOrder == null) {
+          return item;
+        }
+        return { ...item, display_order: updatedOrder };
+      });
     });
     setDraggingProductId(null);
   };
@@ -1325,7 +1343,105 @@ export default function PortfolioPage() {
       if (!response.ok) throw new Error('Failed to fetch annual report');
       const result = await response.json();
       if (result.code === 0 && result.data) {
-        setAnnualReportData(result.data);
+        const annualData: WeeklyPivotReportData = result.data;
+        const thisYear = new Date().getFullYear();
+        // 연간 스냅샷의 reference_date는 다음 해 1월(e.g. 2025년 데이터 → 2026-01-xx)
+        // 이번 연도 연간보고서가 있으면 reference_date 연도가 thisYear+1이어야 함
+        const hasCurrentYear = annualData.weeks.some(
+          (w) => new Date(w.reference_date).getFullYear() === thisYear + 1
+        );
+
+        if (!hasCurrentYear) {
+          // 이번 연도 주간보고서에서 마지막 항목을 가져와 연간보고서에 추가
+          try {
+            const weeklyResponse = await fetch(
+              `${API_BASE_URL}/portfolio/reports/weekly/pivot?user_id=1&year=${thisYear}`
+            );
+            if (weeklyResponse.ok) {
+              const weeklyResult = await weeklyResponse.json();
+              if (weeklyResult.code === 0 && weeklyResult.data) {
+                const weeklyData: WeeklyPivotReportData = weeklyResult.data;
+                if (weeklyData.weeks.length > 0) {
+                  const lastWeekIdx = weeklyData.weeks.length - 1;
+                  // week_number: 999 → 현재 연도 합성 항목임을 표시 (헤더 렌더링에서 구분)
+                  const lastWeek = { ...weeklyData.weeks[lastWeekIdx], week_number: 999 };
+
+                  // weeks 배열에 마지막 주간 항목 추가
+                  const mergedWeeks = [...annualData.weeks, lastWeek];
+
+                  // account_groups 병합: 연간 그룹에 마지막 주간 valuation 추가
+                  const weeklyGroupMap = new Map(
+                    weeklyData.account_groups.map((g) => [g.account_group_id, g])
+                  );
+                  const mergedGroups = annualData.account_groups.map((g) => {
+                    const weeklyGroup = weeklyGroupMap.get(g.account_group_id);
+                    const lastValuation = weeklyGroup
+                      ? weeklyGroup.valuations[lastWeekIdx] ?? { weekly_snapshot_id: lastWeek.weekly_snapshot_id, amount: 0 }
+                      : { weekly_snapshot_id: lastWeek.weekly_snapshot_id, amount: 0 };
+                    return { ...g, valuations: [...g.valuations, lastValuation] };
+                  });
+                  // 연간보고서에 없는 계좌그룹이 주간에 있으면 추가
+                  weeklyData.account_groups.forEach((wg) => {
+                    if (!mergedGroups.find((g) => g.account_group_id === wg.account_group_id)) {
+                      const zeroValuations = annualData.weeks.map((w) => ({
+                        weekly_snapshot_id: w.weekly_snapshot_id,
+                        amount: 0,
+                      }));
+                      const lastValuation = wg.valuations[lastWeekIdx] ?? {
+                        weekly_snapshot_id: lastWeek.weekly_snapshot_id,
+                        amount: 0,
+                      };
+                      mergedGroups.push({ ...wg, valuations: [...zeroValuations, lastValuation] });
+                    }
+                  });
+
+                  // accounts 병합: 연간 계좌에 마지막 주간 valuation 추가
+                  const weeklyAccountMap = new Map(
+                    weeklyData.accounts.map((a) => [a.account_id, a])
+                  );
+                  const mergedAccounts = annualData.accounts.map((a) => {
+                    const weeklyAccount = weeklyAccountMap.get(a.account_id);
+                    const lastValuation = weeklyAccount
+                      ? weeklyAccount.valuations[lastWeekIdx] ?? { weekly_snapshot_id: lastWeek.weekly_snapshot_id, amount: 0 }
+                      : { weekly_snapshot_id: lastWeek.weekly_snapshot_id, amount: 0 };
+                    return { ...a, valuations: [...a.valuations, lastValuation] };
+                  });
+                  weeklyData.accounts.forEach((wa) => {
+                    if (!mergedAccounts.find((a) => a.account_id === wa.account_id)) {
+                      const zeroValuations = annualData.weeks.map((w) => ({
+                        weekly_snapshot_id: w.weekly_snapshot_id,
+                        amount: 0,
+                      }));
+                      const lastValuation = wa.valuations[lastWeekIdx] ?? {
+                        weekly_snapshot_id: lastWeek.weekly_snapshot_id,
+                        amount: 0,
+                      };
+                      mergedAccounts.push({ ...wa, valuations: [...zeroValuations, lastValuation] });
+                    }
+                  });
+
+                  setAnnualReportData({
+                    ...annualData,
+                    weeks: mergedWeeks,
+                    account_groups: mergedGroups,
+                    accounts: mergedAccounts,
+                  });
+                } else {
+                  setAnnualReportData(annualData);
+                }
+              } else {
+                setAnnualReportData(annualData);
+              }
+            } else {
+              setAnnualReportData(annualData);
+            }
+          } catch {
+            // 주간보고서 fetch 실패 시 연간보고서 데이터만 사용
+            setAnnualReportData(annualData);
+          }
+        } else {
+          setAnnualReportData(annualData);
+        }
       } else {
         setAnnualReportData(null);
       }
@@ -1699,6 +1815,10 @@ export default function PortfolioPage() {
       ...item,
       display_order: index + 1,
     }));
+    const displayOrderMap = new Map<number, number>();
+    ordered.forEach((item) => {
+      displayOrderMap.set(item.product_id, item.display_order);
+    });
 
     try {
       setSavingProductOrder(true);
@@ -1715,7 +1835,12 @@ export default function PortfolioPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update display order');
-      setProducts(ordered);
+      setProducts((prev) =>
+        prev.map((item) => {
+          const newOrder = displayOrderMap.get(item.product_id);
+          return newOrder == null ? item : { ...item, display_order: newOrder };
+        })
+      );
       alert('상품 표시순서가 저장되었습니다.');
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update display order');
@@ -2919,6 +3044,12 @@ export default function PortfolioPage() {
             <h2>상품 목록</h2>
             <div className={styles.actionButtons}>
               <button
+                onClick={handleSaveProductOrder}
+                disabled={savingProductOrder}
+              >
+                {savingProductOrder ? '저장 중...' : '표시순서 저장'}
+              </button>
+              <button
                 onClick={() => setShowProductBetaView((prev) => !prev)}
               >
                 {showProductBetaView ? '일반 보기' : '베타 보기'}
@@ -3145,6 +3276,7 @@ export default function PortfolioPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
+                  <th>정렬</th>
                   <th>번호</th>
                   <th>상품명</th>
                   <th>자산군</th>
@@ -3162,7 +3294,20 @@ export default function PortfolioPage() {
               </thead>
               <tbody>
                 {getSortedProducts().map((prod, index) => (
-                  <tr key={prod.product_id}>
+                  <tr
+                    key={prod.product_id}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => handleProductDrop(prod.product_id)}
+                  >
+                    <td
+                      className={styles.dragHandle}
+                      draggable
+                      onDragStart={() => handleProductDragStart(prod.product_id)}
+                      onDragEnd={() => setDraggingProductId(null)}
+                      title="드래그하여 순서 변경"
+                    >
+                      ::
+                    </td>
                     <td>{index + 1}</td>
                     <td>{prod.product_name}</td>
                     <td>{prod.asset_class}</td>
@@ -5137,7 +5282,9 @@ export default function PortfolioPage() {
                     </th>
                     {annualReportData.weeks.map((yearPoint) => (
                       <th key={yearPoint.weekly_snapshot_id} style={{ backgroundColor: '#fff', minWidth: '100px', fontSize: '11px', padding: '6px 4px', textAlign: 'center' }}>
-                        {new Date(yearPoint.reference_date).getFullYear() - 1}년
+                        {yearPoint.week_number === 999
+                          ? `${new Date(yearPoint.reference_date).getFullYear()}년`
+                          : `${new Date(yearPoint.reference_date).getFullYear() - 1}년`}
                       </th>
                     ))}
                   </tr>
@@ -5245,6 +5392,47 @@ export default function PortfolioPage() {
                           );
                         })}
                       </tr>
+                      <tr style={{ fontWeight: 'bold', backgroundColor: '#fff0f0' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff0f0', zIndex: 1 }}>
+                          전년 대비 금액
+                        </td>
+                        {annualReportData.weeks.map((yearPoint, yearIdx) => {
+                          const currentTotal = annualReportData.accounts.reduce((sum, account) => {
+                            const val = account.valuations[yearIdx];
+                            return sum + (val ? val.amount : 0);
+                          }, 0);
+
+                          let changeAmount = 0;
+                          let changeColor = 'black';
+
+                          if (yearIdx > 0) {
+                            const prevTotal = annualReportData.accounts.reduce((sum, account) => {
+                              const val = account.valuations[yearIdx - 1];
+                              return sum + (val ? val.amount : 0);
+                            }, 0);
+                            changeAmount = currentTotal - prevTotal;
+                            if (changeAmount >= 1) {
+                              changeColor = '#d32f2f';
+                            } else if (changeAmount <= -1) {
+                              changeColor = '#1976d2';
+                            }
+                          }
+
+                          return (
+                            <td
+                              key={yearPoint.weekly_snapshot_id}
+                              style={{
+                                textAlign: 'right',
+                                color: changeColor,
+                              }}
+                            >
+                              {yearIdx > 0
+                                ? (changeAmount >= 0 ? '+' : '') + changeAmount.toLocaleString('ko-KR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                                : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#fff5f5' }}>
                         <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1 }}>
                           전년 대비 변화
@@ -5288,6 +5476,65 @@ export default function PortfolioPage() {
                           );
                         })}
                       </tr>
+                      {/* 연간 MDD 행 */}
+                      {annualReportData.mdd_by_year && annualReportData.mdd_by_year.length > 0 && (
+                        <>
+                          <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f4ff' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1 }}>
+                              연간 MDD
+                            </td>
+                            {annualReportData.weeks.map((yearPoint) => {
+                              const mddItem = annualReportData.mdd_by_year!.find(
+                                (m) => m.annual_snapshot_id === yearPoint.weekly_snapshot_id
+                              );
+                              const hasData = mddItem && mddItem.weekly_snapshot_count >= 2;
+                              const mddPct = hasData ? mddItem!.mdd_percentage : null;
+                              const mddColor = mddPct !== null && mddPct < -0.01 ? '#1976d2' : 'inherit';
+                              return (
+                                <td
+                                  key={yearPoint.weekly_snapshot_id}
+                                  style={{ textAlign: 'right', color: mddColor }}
+                                  title={hasData ? `최고: ${mddItem!.peak_amount.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}\n최저: ${mddItem!.trough_amount.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}\n주간 스냅샷 수: ${mddItem!.weekly_snapshot_count}` : ''}
+                                >
+                                  {mddPct !== null ? mddPct.toFixed(2) + '%' : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                          <tr style={{ backgroundColor: '#f0f4ff' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1, fontSize: '11px', color: '#555' }}>
+                              MDD 최고금액
+                            </td>
+                            {annualReportData.weeks.map((yearPoint) => {
+                              const mddItem = annualReportData.mdd_by_year!.find(
+                                (m) => m.annual_snapshot_id === yearPoint.weekly_snapshot_id
+                              );
+                              const hasData = mddItem && mddItem.weekly_snapshot_count >= 2 && mddItem.peak_amount > 0;
+                              return (
+                                <td key={yearPoint.weekly_snapshot_id} style={{ textAlign: 'right', fontSize: '11px', color: '#555' }}>
+                                  {hasData ? mddItem!.peak_amount.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                          <tr style={{ backgroundColor: '#f0f4ff' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1, fontSize: '11px', color: '#555' }}>
+                              MDD 최저금액
+                            </td>
+                            {annualReportData.weeks.map((yearPoint) => {
+                              const mddItem = annualReportData.mdd_by_year!.find(
+                                (m) => m.annual_snapshot_id === yearPoint.weekly_snapshot_id
+                              );
+                              const hasData = mddItem && mddItem.weekly_snapshot_count >= 2 && mddItem.trough_amount > 0;
+                              return (
+                                <td key={yearPoint.weekly_snapshot_id} style={{ textAlign: 'right', fontSize: '11px', color: '#555' }}>
+                                  {hasData ? mddItem!.trough_amount.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) : '-'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </>
+                      )}
                     </>
                   )}
                 </tbody>

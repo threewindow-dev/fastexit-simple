@@ -124,6 +124,7 @@ from subdomains.portfolio.interface.schemas import (
     WeeklyPivotAccountValuation,
     WeeklyPivotAccountRow,
     WeeklyPivotAccountGroupRow,
+    AnnualMddItem as AnnualMddItemSchema,
     CreateTargetAllocationRequest,
     TargetAllocationSchema,
     TargetAllocationListResponse,
@@ -1422,7 +1423,18 @@ async def annual_pivot_report(
     ]
 
     data = WeeklyPivotReportData(
-        year=result.year, weeks=weeks, account_groups=account_groups, accounts=accounts
+        year=result.year, weeks=weeks, account_groups=account_groups, accounts=accounts,
+        mdd_by_year=[
+            AnnualMddItemSchema(
+                data_year=m.data_year,
+                annual_snapshot_id=m.annual_snapshot_id,
+                peak_amount=m.peak_amount,
+                trough_amount=m.trough_amount,
+                mdd_percentage=m.mdd_percentage,
+                weekly_snapshot_count=m.weekly_snapshot_count,
+            )
+            for m in result.mdd_by_year
+        ],
     )
     return WeeklyPivotReportResponse(code=0, message="success", data=data)
 
