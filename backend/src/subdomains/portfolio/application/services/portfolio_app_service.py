@@ -62,6 +62,7 @@ from subdomains.portfolio.application.dtos import (
     WeeklyPivotAccountGroupRow,
     WeeklyPivotReportResult,
     AnnualMddItem,
+    WeeklyPivotAssetClassRow,
 )
 from subdomains.portfolio.domain import (
     Institution,
@@ -1261,8 +1262,9 @@ class PortfolioAppService:
             inst.institution_id: inst.display_order for inst in institutions
         }
 
-        # 6. 계좌별로 그룹화
+        # 6. 계좌별/자산유형별 그룹화
         account_map = {}
+        asset_class_map: dict[str, dict] = {}
         for row in weekly_holdings_data:
             account_id = row.get("account_id")
             if account_id not in account_map:
@@ -1281,6 +1283,13 @@ class PortfolioAppService:
             if weekly_snapshot_id not in account_map[account_id]["valuations"]:
                 account_map[account_id]["valuations"][weekly_snapshot_id] = 0
             account_map[account_id]["valuations"][weekly_snapshot_id] += amount
+
+            asset_class = row.get("asset_class", "기타자산")
+            if asset_class not in asset_class_map:
+                asset_class_map[asset_class] = {"valuations": {}}
+            if weekly_snapshot_id not in asset_class_map[asset_class]["valuations"]:
+                asset_class_map[asset_class]["valuations"][weekly_snapshot_id] = 0
+            asset_class_map[asset_class]["valuations"][weekly_snapshot_id] += amount
 
         # 7. 계좌별 행 데이터 생성 및 정렬 (institution의 display_order, account의 display_order 순서로)
         accounts = []
@@ -1343,11 +1352,31 @@ class PortfolioAppService:
                 )
             )
 
+        asset_class_order = ["주식", "채권", "통화", "금", "부동산", "가상자산", "기타자산"]
+        asset_class_rows = []
+        for asset_class in asset_class_order:
+            valuations = [
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=snap.weekly_snapshot_id,
+                    amount=asset_class_map.get(asset_class, {"valuations": {}})[
+                        "valuations"
+                    ].get(snap.weekly_snapshot_id, 0.0),
+                )
+                for snap in year_snapshots
+            ]
+            asset_class_rows.append(
+                WeeklyPivotAssetClassRow(
+                    asset_class=asset_class,
+                    valuations=valuations,
+                )
+            )
+
         return WeeklyPivotReportResult(
             year=query.year,
             weeks=weeks,
             account_groups=account_group_rows,
             accounts=accounts,
+            asset_classes=asset_class_rows,
         )
 
     @transactional(mode="readonly")
@@ -1374,8 +1403,9 @@ class PortfolioAppService:
             for snap in year_snapshots
         ]
 
-        # 3. 각 연간 스냅샷의 보유자산 데이터 조회 및 계좌별 집계
+        # 3. 각 연간 스냅샷의 보유자산 데이터 조회 및 계좌별/자산유형별 집계
         account_map: dict[int, dict] = {}
+        asset_class_map: dict[str, dict] = {}
         for snapshot in year_snapshots:
             annual_holdings_data = await self._report_repo.get_annual_snapshot_holdings(
                 snapshot.annual_snapshot_id
@@ -1397,6 +1427,14 @@ class PortfolioAppService:
                 if annual_snapshot_id not in account_map[account_id]["valuations"]:
                     account_map[account_id]["valuations"][annual_snapshot_id] = 0
                 account_map[account_id]["valuations"][annual_snapshot_id] += amount
+
+                # 자산유형별 합계 계산
+                asset_class = row.get("asset_class", "기타자산")
+                if asset_class not in asset_class_map:
+                    asset_class_map[asset_class] = {"valuations": {}}
+                if annual_snapshot_id not in asset_class_map[asset_class]["valuations"]:
+                    asset_class_map[asset_class]["valuations"][annual_snapshot_id] = 0
+                asset_class_map[asset_class]["valuations"][annual_snapshot_id] += amount
 
         # 4. Institution display_order 조회 (정렬용)
         institutions = await self._institution_repo.get_all()
@@ -1467,11 +1505,32 @@ class PortfolioAppService:
                 )
             )
 
+        # 7. 자산유형별 행 데이터 생성 (고정 순서)
+        asset_class_order = ["주식", "채권", "통화", "금", "부동산", "가상자산", "기타자산"]
+        asset_class_rows = []
+        for asset_class in asset_class_order:
+            valuations = [
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=snap.annual_snapshot_id,
+                    amount=asset_class_map.get(asset_class, {"valuations": {}})[
+                        "valuations"
+                    ].get(snap.annual_snapshot_id, 0.0),
+                )
+                for snap in year_snapshots
+            ]
+            asset_class_rows.append(
+                WeeklyPivotAssetClassRow(
+                    asset_class=asset_class,
+                    valuations=valuations,
+                )
+            )
+
         return WeeklyPivotReportResult(
             year=0,  # 연간 보고서는 연도 구분이 없음
             weeks=weeks,
             account_groups=account_group_rows,
             accounts=accounts,
+            asset_classes=asset_class_rows,
             mdd_by_year=await self._compute_annual_mdd(
                 user_id=query.user_id,
                 year_snapshots=year_snapshots,

@@ -77,6 +77,7 @@ from .portfolio_schema import (
     WeeklyPivotAccountValuation,
     WeeklyPivotAccountRow,
     WeeklyPivotAccountGroupRow,
+    WeeklyPivotAssetClassRow,
     AnnualMddItem,
 )
 from .target_allocation_schema import (
@@ -182,6 +183,7 @@ __all__ = [
     "WeeklyPivotAccountValuation",
     "WeeklyPivotAccountRow",
     "WeeklyPivotAccountGroupRow",
+    "WeeklyPivotAssetClassRow",
     "AnnualMddItem",
     "TargetAllocationSchema",
     "CreateTargetAllocationRequest",

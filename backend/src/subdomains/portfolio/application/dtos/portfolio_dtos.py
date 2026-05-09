@@ -558,6 +558,14 @@ class WeeklyPivotAccountGroupRow:
 
 
 @dataclass
+class WeeklyPivotAssetClassRow:
+    """자산유형별 행 데이터"""
+
+    asset_class: str
+    valuations: list[WeeklyPivotAccountValuation]  # 주차별 평가액
+
+
+@dataclass
 class AnnualMddItem:
     """연도별 연간 MDD (Maximum Drawdown) 정보"""
 
@@ -578,3 +586,4 @@ class WeeklyPivotReportResult:
     account_groups: list[WeeklyPivotAccountGroupRow]  # 계좌그룹 행
     accounts: list[WeeklyPivotAccountRow]
     mdd_by_year: list[AnnualMddItem] = field(default_factory=list)  # 연도별 MDD (연간 보고서 전용)
+    asset_classes: list[WeeklyPivotAssetClassRow] = field(default_factory=list)  # 자산유형별 행 (연간 보고서 전용)

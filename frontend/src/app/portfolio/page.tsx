@@ -133,6 +133,11 @@ interface WeeklyPivotAccountGroupRow {
   valuations: WeeklyPivotAccountValuation[];
 }
 
+interface WeeklyPivotAssetClassRow {
+  asset_class: string;
+  valuations: WeeklyPivotAccountValuation[];
+}
+
 interface AnnualMddItem {
   data_year: number;
   annual_snapshot_id: number;
@@ -148,6 +153,7 @@ interface WeeklyPivotReportData {
   account_groups: WeeklyPivotAccountGroupRow[];
   accounts: WeeklyPivotAccountRow[];
   mdd_by_year?: AnnualMddItem[];
+  asset_classes?: WeeklyPivotAssetClassRow[];
 }
 
 interface Holding {
@@ -1420,11 +1426,33 @@ export default function PortfolioPage() {
                     }
                   });
 
+                  // asset_classes 병합: 연간 자산유형에 마지막 주간 valuation 추가
+                  const weeklyAssetClassMap = new Map(
+                    (weeklyData.asset_classes || []).map((row) => [row.asset_class, row])
+                  );
+                  const mergedAssetClasses = (annualData.asset_classes || ASSET_CLASS_ORDER.map((assetClass) => ({
+                    asset_class: assetClass,
+                    valuations: annualData.weeks.map((w) => ({
+                      weekly_snapshot_id: w.weekly_snapshot_id,
+                      amount: 0,
+                    })),
+                  }))).map((row) => {
+                    const weeklyRow = weeklyAssetClassMap.get(row.asset_class);
+                    const lastValuation = weeklyRow
+                      ? weeklyRow.valuations[lastWeekIdx] ?? { weekly_snapshot_id: lastWeek.weekly_snapshot_id, amount: 0 }
+                      : { weekly_snapshot_id: lastWeek.weekly_snapshot_id, amount: 0 };
+                    return {
+                      ...row,
+                      valuations: [...row.valuations, lastValuation],
+                    };
+                  });
+
                   setAnnualReportData({
                     ...annualData,
                     weeks: mergedWeeks,
                     account_groups: mergedGroups,
                     accounts: mergedAccounts,
+                    asset_classes: mergedAssetClasses,
                   });
                 } else {
                   setAnnualReportData(annualData);
@@ -4801,7 +4829,7 @@ export default function PortfolioPage() {
                     <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 11, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                       금융기관
                     </th>
-                    <th style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 11, width: '200px', minWidth: '200px' }}>
+                    <th style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 11, width: '260px', minWidth: '260px' }}>
                       계좌
                     </th>
                     {filteredData.weeks.map((week) => (
@@ -4825,7 +4853,7 @@ export default function PortfolioPage() {
                           <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold', width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                             {group.account_group_name}
                           </td>
-                          <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '11px', color: '#666', width: '200px', minWidth: '200px' }}>
+                          <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '11px', color: '#666', width: '260px', minWidth: '260px' }}>
                             (합계)
                           </td>
                           {group.valuations.map((val, idx) => (
@@ -4845,7 +4873,7 @@ export default function PortfolioPage() {
                         <td style={{ position: 'sticky', left: 0, backgroundColor: '#ffeb99', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                           총합
                         </td>
-                        <td style={{ position: 'sticky', left: '160px', backgroundColor: '#ffeb99', zIndex: 1, width: '200px', minWidth: '200px' }}>
+                        <td style={{ position: 'sticky', left: '160px', backgroundColor: '#ffeb99', zIndex: 1, width: '260px', minWidth: '260px' }}>
                         </td>
                         {(() => {
                           // 모든 주차의 총액 계산
@@ -4900,7 +4928,7 @@ export default function PortfolioPage() {
                       <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                         {account.institution_name}
                       </td>
-                      <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 1, width: '200px', minWidth: '200px' }}>
+                      <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 1, width: '260px', minWidth: '260px' }}>
                         {account.account_name}
                       </td>
                       {account.valuations.map((val, idx) => (
@@ -4919,7 +4947,7 @@ export default function PortfolioPage() {
                   {filteredData.accounts.length > 0 && (
                     <>
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1, width: '420px', minWidth: '420px' }}>
                           총합
                         </td>
                         {(() => {
@@ -4967,7 +4995,7 @@ export default function PortfolioPage() {
                         <>
                           {/* 전주 대비 변화 (금액) 행 */}
                           <tr style={{ fontWeight: 'bold', backgroundColor: '#fff5f5' }}>
-                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#fff5f5', zIndex: 1, width: '420px', minWidth: '420px' }}>
                               전주 대비 변화 (금액)
                             </td>
                             {filteredData.weeks.map((week, weekIdx) => {
@@ -5011,7 +5039,7 @@ export default function PortfolioPage() {
                           </tr>
                           {/* 전주 대비 변화 (%) 행 */}
                           <tr style={{ fontWeight: 'bold', backgroundColor: '#ffebee' }}>
-                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#ffebee', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#ffebee', zIndex: 1, width: '420px', minWidth: '420px' }}>
                               전주 대비 변화 (%)
                             </td>
                             {filteredData.weeks.map((week, weekIdx) => {
@@ -5059,7 +5087,7 @@ export default function PortfolioPage() {
                       )}
                       {/* 전월 대비 변화 (금액) 행 */}
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#e3f2fd' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#e3f2fd', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#e3f2fd', zIndex: 1, width: '420px', minWidth: '420px' }}>
                           전월 대비 변화 (금액)
                         </td>
                         {filteredData.weeks.map((week, weekIdx) => {
@@ -5132,7 +5160,7 @@ export default function PortfolioPage() {
                       </tr>
                       {/* 전월 대비 변화 (%) 행 */}
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#bbdefb', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#bbdefb', zIndex: 1, width: '420px', minWidth: '420px' }}>
                           전월 대비 변화 (%)
                         </td>
                         {filteredData.weeks.map((week, weekIdx) => {
@@ -5277,7 +5305,7 @@ export default function PortfolioPage() {
                     <th style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 11, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                       금융기관
                     </th>
-                    <th style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 11, width: '200px', minWidth: '200px' }}>
+                    <th style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 11, width: '260px', minWidth: '260px' }}>
                       계좌
                     </th>
                     {annualReportData.weeks.map((yearPoint) => (
@@ -5302,7 +5330,7 @@ export default function PortfolioPage() {
                           <td style={{ position: 'sticky', left: 0, backgroundColor: '#fffacd', zIndex: 1, fontWeight: 'bold', width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                             {group.account_group_name}
                           </td>
-                          <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '11px', color: '#666', width: '200px', minWidth: '200px' }}>
+                          <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fffacd', zIndex: 1, fontSize: '11px', color: '#666', width: '260px', minWidth: '260px' }}>
                             (합계)
                           </td>
                           {group.valuations.map((val, idx) => (
@@ -5321,7 +5349,7 @@ export default function PortfolioPage() {
                         <td style={{ position: 'sticky', left: 0, backgroundColor: '#ffeb99', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                           총합
                         </td>
-                        <td style={{ position: 'sticky', left: '160px', backgroundColor: '#ffeb99', zIndex: 1, width: '200px', minWidth: '200px' }}>
+                        <td style={{ position: 'sticky', left: '160px', backgroundColor: '#ffeb99', zIndex: 1, width: '260px', minWidth: '260px' }}>
                         </td>
                         {annualReportData.weeks.map((yearPoint, yearIdx) => {
                           const total = annualReportData.accounts.reduce((sum, account) => {
@@ -5353,7 +5381,7 @@ export default function PortfolioPage() {
                       <td style={{ position: 'sticky', left: 0, backgroundColor: '#fff', zIndex: 1, width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
                         {account.institution_name}
                       </td>
-                      <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 1, width: '200px', minWidth: '200px' }}>
+                      <td style={{ position: 'sticky', left: '160px', backgroundColor: '#fff', zIndex: 1, width: '260px', minWidth: '260px' }}>
                         {account.account_name}
                       </td>
                       {account.valuations.map((val, idx) => (
@@ -5372,7 +5400,7 @@ export default function PortfolioPage() {
                   {annualReportData.accounts.length > 0 && (
                     <>
                       <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f0f0' }}>
-                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1, width: '360px', minWidth: '360px' }}>
+                        <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f0f0', zIndex: 1, width: '420px', minWidth: '420px' }}>
                           총합
                         </td>
                         {annualReportData.weeks.map((yearPoint, yearIdx) => {
@@ -5476,12 +5504,48 @@ export default function PortfolioPage() {
                           );
                         })}
                       </tr>
+                      {/* 자산유형별 합계 섹션 */}
+                      {annualReportData.asset_classes && annualReportData.asset_classes.length > 0 && (
+                        <>
+                          <tr style={{ borderBottom: '2px solid #ccc' }}>
+                            <td colSpan={annualReportData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
+                              자산유형별 합계
+                            </td>
+                          </tr>
+                          {annualReportData.asset_classes.map((assetClass) => (
+                            <tr key={assetClass.asset_class}>
+                              <td style={{ position: 'sticky', left: 0, backgroundColor: '#f9f9f9', zIndex: 1, fontWeight: 'bold', width: '160px', minWidth: '160px', whiteSpace: 'nowrap' }}>
+                                {assetClass.asset_class}
+                              </td>
+                              <td style={{ position: 'sticky', left: '160px', backgroundColor: '#f9f9f9', zIndex: 1, fontSize: '11px', color: '#666', width: '260px', minWidth: '260px' }}>
+                                (합계)
+                              </td>
+                              {assetClass.valuations.map((val, idx) => (
+                                <td key={idx} style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                  {val.amount > 0
+                                    ? val.amount.toLocaleString('ko-KR', {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 0,
+                                      })
+                                    : '-'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </>
+                      )}
                       {/* 연간 MDD 행 */}
                       {annualReportData.mdd_by_year && annualReportData.mdd_by_year.length > 0 && (
                         <>
-                          <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f4ff' }}>
-                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1 }}>
+                          <tr style={{ borderBottom: '2px solid #ccc' }}>
+                            <td colSpan={annualReportData.weeks.length + 2} style={{ padding: '10px 8px', backgroundColor: '#f5f5f5', fontWeight: 'bold', textAlign: 'center' }}>
                               연간 MDD
+                            </td>
+                          </tr>
+                          <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f4ff' }}>
+
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1 }}>
+                              MDD (%)
                             </td>
                             {annualReportData.weeks.map((yearPoint) => {
                               const mddItem = annualReportData.mdd_by_year!.find(
@@ -5501,8 +5565,8 @@ export default function PortfolioPage() {
                               );
                             })}
                           </tr>
-                          <tr style={{ backgroundColor: '#f0f4ff' }}>
-                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1, fontSize: '11px', color: '#555' }}>
+                          <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f4ff' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1 }}>
                               MDD 최고금액
                             </td>
                             {annualReportData.weeks.map((yearPoint) => {
@@ -5511,14 +5575,14 @@ export default function PortfolioPage() {
                               );
                               const hasData = mddItem && mddItem.weekly_snapshot_count >= 2 && mddItem.peak_amount > 0;
                               return (
-                                <td key={yearPoint.weekly_snapshot_id} style={{ textAlign: 'right', fontSize: '11px', color: '#555' }}>
+                                <td key={yearPoint.weekly_snapshot_id} style={{ textAlign: 'right' }}>
                                   {hasData ? mddItem!.peak_amount.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) : '-'}
                                 </td>
                               );
                             })}
                           </tr>
-                          <tr style={{ backgroundColor: '#f0f4ff' }}>
-                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1, fontSize: '11px', color: '#555' }}>
+                          <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f4ff' }}>
+                            <td colSpan={2} style={{ position: 'sticky', left: 0, backgroundColor: '#f0f4ff', zIndex: 1 }}>
                               MDD 최저금액
                             </td>
                             {annualReportData.weeks.map((yearPoint) => {
@@ -5527,7 +5591,7 @@ export default function PortfolioPage() {
                               );
                               const hasData = mddItem && mddItem.weekly_snapshot_count >= 2 && mddItem.trough_amount > 0;
                               return (
-                                <td key={yearPoint.weekly_snapshot_id} style={{ textAlign: 'right', fontSize: '11px', color: '#555' }}>
+                                <td key={yearPoint.weekly_snapshot_id} style={{ textAlign: 'right' }}>
                                   {hasData ? mddItem!.trough_amount.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) : '-'}
                                 </td>
                               );

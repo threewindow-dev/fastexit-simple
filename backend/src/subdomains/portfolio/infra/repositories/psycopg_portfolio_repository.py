@@ -1498,11 +1498,13 @@ class PsycopgReportQueryRepository(_BaseRepo, ReportQueryRepository):
                        a.institution_id,
                        a.name AS account_name,
                        a.display_order,
-                       i.name AS institution_name
+                      i.name AS institution_name,
+                      p.asset_class
                 FROM weekly_snapshot_holdings wsh
                 JOIN holdings h ON wsh.holding_id = h.holding_id
                 JOIN accounts a ON h.account_id = a.account_id
                 JOIN institutions i ON a.institution_id = i.institution_id
+                  JOIN products p ON h.product_id = p.product_id
                 WHERE wsh.weekly_snapshot_id = ANY(%s)
                 ORDER BY i.display_order, a.display_order
                 """,
@@ -1533,8 +1535,9 @@ class PsycopgReportQueryRepository(_BaseRepo, ReportQueryRepository):
                        i.display_order AS institution_display_order,
                        p.product_id,
                        p.product_name,
-                       p.display_order AS product_display_order
-                FROM annual_snapshot_holdings ash
+                                             p.display_order AS product_display_order,
+                                             p.asset_class
+                  FROM annual_snapshot_holdings ash
                 JOIN holdings h ON ash.holding_id = h.holding_id
                 JOIN accounts a ON h.account_id = a.account_id
                 JOIN institutions i ON a.institution_id = i.institution_id

@@ -124,6 +124,7 @@ from subdomains.portfolio.interface.schemas import (
     WeeklyPivotAccountValuation,
     WeeklyPivotAccountRow,
     WeeklyPivotAccountGroupRow,
+    WeeklyPivotAssetClassRow,
     AnnualMddItem as AnnualMddItemSchema,
     CreateTargetAllocationRequest,
     TargetAllocationSchema,
@@ -1363,8 +1364,25 @@ async def weekly_pivot_report(
         for acc in result.accounts
     ]
 
+    asset_classes = [
+        WeeklyPivotAssetClassRow(
+            asset_class=row.asset_class,
+            valuations=[
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=val.weekly_snapshot_id, amount=val.amount
+                )
+                for val in row.valuations
+            ],
+        )
+        for row in result.asset_classes
+    ]
+
     data = WeeklyPivotReportData(
-        year=result.year, weeks=weeks, account_groups=account_groups, accounts=accounts
+        year=result.year,
+        weeks=weeks,
+        account_groups=account_groups,
+        accounts=accounts,
+        asset_classes=asset_classes,
     )
     return WeeklyPivotReportResponse(code=0, message="success", data=data)
 
@@ -1422,6 +1440,19 @@ async def annual_pivot_report(
         for acc in result.accounts
     ]
 
+    asset_classes = [
+        WeeklyPivotAssetClassRow(
+            asset_class=row.asset_class,
+            valuations=[
+                WeeklyPivotAccountValuation(
+                    weekly_snapshot_id=val.weekly_snapshot_id, amount=val.amount
+                )
+                for val in row.valuations
+            ],
+        )
+        for row in result.asset_classes
+    ]
+
     data = WeeklyPivotReportData(
         year=result.year, weeks=weeks, account_groups=account_groups, accounts=accounts,
         mdd_by_year=[
@@ -1435,6 +1466,7 @@ async def annual_pivot_report(
             )
             for m in result.mdd_by_year
         ],
+        asset_classes=asset_classes,
     )
     return WeeklyPivotReportResponse(code=0, message="success", data=data)
 
