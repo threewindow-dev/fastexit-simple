@@ -1538,6 +1538,11 @@ class PortfolioAppService:
             ),
         )
 
+    @transactional(mode="readonly")
+    async def get_institution_assets(self, user_id: int) -> list[dict]:
+        """금융기관별 최근 주간스냅샷 기준 자산총합 조회"""
+        return await self._report_repo.institution_assets_report(user_id)
+
     # ------------------------------------------------------------------
     # List/Read Operations
     # ------------------------------------------------------------------

@@ -55,6 +55,9 @@ from subdomains.portfolio.interface.schemas import (
     InstitutionResponseData,
     InstitutionsResponse,
     InstitutionsResponseData,
+    InstitutionAssetsResponse,
+    InstitutionAssetsResponseData,
+    InstitutionAssetsItem,
     DeleteInstitutionResponse,
     DisplayOrderUpdateResponse,
     DisplayOrderUpdateResponseData,
@@ -166,6 +169,36 @@ def _iso(dt) -> str | None:
 # ---------------------------------------------------------------------------
 # Institutions
 # ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/institutions/assets",
+    response_model=InstitutionAssetsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="금융기관별 자산총합 조회",
+    responses={**common_responses},
+)
+async def get_institution_assets(
+    service: PortfolioAppService = Depends(get_portfolio_app_service),
+) -> InstitutionAssetsResponse:
+    """최근 주간스냅샷 기준 금융기관별 자산총합 조회"""
+    # 현재 사용자 ID는 시스템에서 결정되어야 함 (예: 토큰에서 추출)
+    # 현재는 첫 번째 사용자를 가정 (프로덕션에서는 인증 시스템 통합 필요)
+    user_id = 1  # TODO: 실제로는 요청 컨텍스트에서 사용자 ID를 얻어야 함
+    
+    rows = await service.get_institution_assets(user_id)
+    items = [
+        InstitutionAssetsItem(
+            institution_id=r.get("institution_id"),
+            institution_name=r.get("institution_name", ""),
+            display_order=r.get("display_order", 0),
+            type=r.get("type", ""),
+            total_assets=float(r.get("total_assets", 0) or 0),
+        )
+        for r in rows
+    ]
+    data = InstitutionAssetsResponseData(items=items)
+    return InstitutionAssetsResponse(code=0, message="success", data=data)
 
 
 @router.get(

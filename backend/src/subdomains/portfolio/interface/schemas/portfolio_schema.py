@@ -72,6 +72,22 @@ class DisplayOrderUpdateResponse(ApiResponse[DisplayOrderUpdateResponseData]):
     pass
 
 
+class InstitutionAssetsItem(BaseModel):
+    institution_id: int = Field(..., description="기관 ID", examples=[1])
+    institution_name: str = Field(..., description="기관명", examples=["KB증권"])
+    display_order: int = Field(0, description="표시 순서", examples=[0])
+    type: str = Field(..., description="유형", examples=["증권사", "은행", "기타기관"])
+    total_assets: float = Field(..., description="자산총합", examples=[1000000.0])
+
+
+class InstitutionAssetsResponseData(BaseModel):
+    items: list[InstitutionAssetsItem] = Field(..., description="금융기관별 자산 목록")
+
+
+class InstitutionAssetsResponse(ApiResponse[InstitutionAssetsResponseData]):
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Products
 # ---------------------------------------------------------------------------

@@ -1426,6 +1426,37 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         rows = result.mappings().all()
         return [dict(row) for row in rows]
 
+    @use_transaction()
+    async def institution_assets_report(
+        self, conn: Connection, user_id: int
+    ) -> list[dict]:
+        """금융기관별 최근 주간스냅샷 기준 자산총합 조회"""
+        session = self._require_session(conn)
+        stmt = text("""
+            WITH latest_weekly_snapshot AS (
+                SELECT weekly_snapshot_id, reference_date
+                FROM weekly_snapshots
+                WHERE user_id = :user_id
+                ORDER BY reference_date DESC
+                LIMIT 1
+            )
+            SELECT i.institution_id,
+                   i.name AS institution_name,
+                   i.display_order,
+                   i.type,
+                   SUM(wsh.valuation_amount) AS total_assets
+            FROM latest_weekly_snapshot lws
+            JOIN weekly_snapshot_holdings wsh ON lws.weekly_snapshot_id = wsh.weekly_snapshot_id
+            JOIN holdings h ON wsh.holding_id = h.holding_id
+            JOIN accounts a ON h.account_id = a.account_id
+            JOIN institutions i ON a.institution_id = i.institution_id
+            GROUP BY i.institution_id, i.name, i.display_order, i.type
+            ORDER BY i.display_order, i.institution_id
+            """).bindparams(bindparam("user_id", type_=Integer))
+        result = await session.execute(stmt, {"user_id": user_id})
+        rows = result.mappings().all()
+        return [dict(row) for row in rows]
+
 
 __all__ = [
     "SQLAlchemyInstitutionRepository",

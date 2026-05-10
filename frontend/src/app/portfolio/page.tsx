@@ -23,6 +23,7 @@ interface Institution {
   type: string;
   display_order: number;
   created_at: string;
+  total_assets?: number;
 }
 
 interface Product {
@@ -1122,14 +1123,38 @@ export default function PortfolioPage() {
   const fetchInstitutions = async () => {
     try {
       setLoading(true);
+      // 기본 기관 정보 조회
       const response = await fetch(`${API_BASE_URL}/portfolio/institutions`);
       if (!response.ok) throw new Error('Failed to fetch institutions');
       const result = await response.json();
       const items = Array.isArray(result) ? result : result.data?.items || [];
+      
+      // 금융기관별 자산총합 조회
+      let assetsMap: Record<number, number> = {};
+      try {
+        const assetsResponse = await fetch(`${API_BASE_URL}/portfolio/institutions/assets`);
+        if (assetsResponse.ok) {
+          const assetsResult = await assetsResponse.json();
+          const assetsItems = Array.isArray(assetsResult) ? assetsResult : assetsResult.data?.items || [];
+          assetsMap = Object.fromEntries(
+            assetsItems.map((item: any) => [item.institution_id, item.total_assets || 0])
+          );
+        }
+      } catch (err) {
+        console.warn('Failed to fetch institution assets:', err);
+        // 자산 조회 실패 시에도 기본 정보는 표시
+      }
+      
+      // 자산정보와 merge
+      const itemsWithAssets = items.map((item: Institution) => ({
+        ...item,
+        total_assets: assetsMap[item.institution_id] || 0,
+      }));
+      
       const maxDisplayOrder = Array.isArray(result)
         ? Math.max(0, ...items.map((item: Institution) => item.display_order ?? 0))
         : result.data?.max_display_order ?? Math.max(0, ...items.map((item: Institution) => item.display_order ?? 0));
-      setInstitutions(items);
+      setInstitutions(itemsWithAssets);
       setInstitutionMaxDisplayOrder(maxDisplayOrder);
       setNewInstitution((prev) => ({
         ...prev,
@@ -3013,13 +3038,23 @@ export default function PortfolioPage() {
           {loading ? (
             <div className={styles.loading}>로딩 중...</div>
           ) : (
-            <table className={styles.table}>
+            <table className={`${styles.table} ${styles.institutionsTable}`}>
+              <colgroup>
+                <col style={{ width: '64px' }} />
+                <col style={{ width: '72px' }} />
+                <col style={{ width: '110px' }} />
+                <col />
+                <col style={{ width: '180px' }} />
+                <col style={{ width: '130px' }} />
+                <col style={{ width: '140px' }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th>정렬</th>
                   <th>번호</th>
-                  <th>기관명</th>
                   <th>유형</th>
+                  <th>기관명</th>
+                  <th className={styles.amount} style={{ textAlign: 'right' }}>자산총합</th>
                   <th>생성일</th>
                   <th>작업</th>
                 </tr>
@@ -3041,8 +3076,14 @@ export default function PortfolioPage() {
                       ::
                     </td>
                     <td>{index + 1}</td>
-                    <td>{inst.name}</td>
                     <td>{inst.type}</td>
+                    <td>{inst.name}</td>
+                    <td className={styles.amount} style={{ textAlign: 'right' }}>
+                      {inst.total_assets !== undefined && inst.total_assets > 0 
+                        ? inst.total_assets.toLocaleString('ko-KR', { maximumFractionDigits: 0 })
+                        : '-'
+                      }
+                    </td>
                     <td>{new Date(inst.created_at).toLocaleDateString()}</td>
                     <td>
                       <div className={styles.actionButtons}>
