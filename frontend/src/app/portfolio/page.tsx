@@ -6222,7 +6222,15 @@ export default function PortfolioPage() {
             ).sort();
 
             const lineColors = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#82CA9D', '#8884D8', '#FFC658', '#FF6B6B'];
-            const amountKeys = ['전체합계', ...allAccountGroups];
+            const logScaleSeriesThreshold = 100000000;
+            const currentYear = String(new Date().getFullYear());
+            const currentYearData = chartDataByYear.find((item) => item.year === currentYear);
+            const visibleAccountGroups = snapshotAnalysisLogScale
+              ? allAccountGroups.filter((group) =>
+                  Number(currentYearData?.[group] ?? 0) > logScaleSeriesThreshold
+                )
+              : allAccountGroups;
+            const amountKeys = ['전체합계', ...visibleAccountGroups];
             const amountChartData = snapshotAnalysisLogScale
               ? chartDataByYear.map((item) => {
                   const nextItem: Record<string, string | number | null> = { ...item };
@@ -6364,6 +6372,27 @@ export default function PortfolioPage() {
                       />
                     </span>
                     <span style={{ fontWeight: 500 }}>Y축 로그 스케일</span>
+                    <span
+                      aria-label="로그 스케일 표시 기준 안내"
+                      title="로그 스케일에서는 올해 평가금액이 1억원을 넘지 않는 계좌그룹은 차트에서 제외됩니다."
+                      style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        border: '1px solid #94a3b8',
+                        color: '#475569',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        cursor: 'help',
+                        backgroundColor: '#f8fafc',
+                      }}
+                    >
+                      i
+                    </span>
                   </button>
                 </div>
                 
@@ -6403,18 +6432,23 @@ export default function PortfolioPage() {
                         connectNulls={snapshotAnalysisLogScale}
                       />
                       {/* 계좌그룹별 라인 */}
-                      {allAccountGroups.map((group, idx) => (
-                        <Line
-                          key={group}
-                          type="monotone"
-                          dataKey={group}
-                          stroke={lineColors[idx % lineColors.length]}
-                          strokeWidth={2}
-                          dot={{ fill: lineColors[idx % lineColors.length], r: 4 }}
-                          activeDot={{ r: 6 }}
-                          connectNulls={snapshotAnalysisLogScale}
-                        />
-                      ))}
+                      {visibleAccountGroups.map((group) => {
+                        const originalIndex = allAccountGroups.indexOf(group);
+                        const lineColor = lineColors[originalIndex % lineColors.length];
+
+                        return (
+                          <Line
+                            key={group}
+                            type="monotone"
+                            dataKey={group}
+                            stroke={lineColor}
+                            strokeWidth={2}
+                            dot={{ fill: lineColor, r: 4 }}
+                            activeDot={{ r: 6 }}
+                            connectNulls={snapshotAnalysisLogScale}
+                          />
+                        );
+                      })}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
