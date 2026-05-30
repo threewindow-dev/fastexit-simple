@@ -259,6 +259,20 @@ const formatCollectedDate = (value: string | null | undefined): string => {
   return new Date(value).toLocaleString();
 };
 
+const truncateToFixed = (value: number, digits: number): string => {
+  const factor = 10 ** digits;
+  const truncated = Math.trunc(value * factor) / factor;
+  return truncated.toFixed(digits);
+};
+
+const formatToEokLabel = (value: number): string => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return '0.00억';
+  }
+  return `${truncateToFixed(numericValue / 100000000, 2)}억`;
+};
+
 export default function PortfolioPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'institutions' | 'products' | 'accounts' | 'accountGroups' | 'snapshots' | 'weeklySnapshots' | 'annualSnapshots' | 'annualSnapshotHoldings' | 'holdings' | 'snapshotHoldings' | 'weeklyReport' | 'annualReport' | 'snapshotAnalysis' | 'targetAllocations'>('institutions');
   
@@ -295,6 +309,7 @@ export default function PortfolioPage() {
   const [assetClassTargets, setAssetClassTargets] = useState<Record<string, string>>({});
   const [savingAssetClassTargets, setSavingAssetClassTargets] = useState(false);
   const [snapshotAnalysisAccountGroupFilter, setSnapshotAnalysisAccountGroupFilter] = useState<number | null>(null);
+  const [snapshotAnalysisLogScale, setSnapshotAnalysisLogScale] = useState(false);
 
   // Institution Form
   const [newInstitution, setNewInstitution] = useState({
@@ -6015,22 +6030,36 @@ export default function PortfolioPage() {
                   기준일: {latestCurrentYearSnapshot.reference_date}
                 </p>
                 <ResponsiveContainer width="100%" height={320}>
-                  <ComposedChart data={chartData}>
+                  <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="그룹" />
                     <YAxis
                       yAxisId="left"
+                      width={96}
                       tickFormatter={(value) =>
-                        Number(value).toLocaleString('ko-KR', {
-                          minimumFractionDigits: 0,
-                          maximumFractionDigits: 0,
-                        })
+                        formatToEokLabel(Number(value))
                       }
+                      tickMargin={8}
+                      label={{
+                        value: '평가금액 (억원)',
+                        angle: -90,
+                        position: 'insideLeft',
+                        dx: 6,
+                        style: { fill: '#4b5563', fontSize: 12, fontWeight: 600 },
+                      }}
                     />
                     <YAxis
                       yAxisId="right"
                       orientation="right"
                       tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+                      tickMargin={8}
+                      label={{
+                        value: '달성률 (%)',
+                        angle: 90,
+                        position: 'insideRight',
+                        dx: -10,
+                        style: { fill: '#4b5563', fontSize: 12, fontWeight: 600 },
+                      }}
                     />
                     <Tooltip
                       formatter={(value: number | string | undefined, name: string | undefined) => {
@@ -6193,6 +6222,17 @@ export default function PortfolioPage() {
             ).sort();
 
             const lineColors = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#82CA9D', '#8884D8', '#FFC658', '#FF6B6B'];
+            const amountKeys = ['전체합계', ...allAccountGroups];
+            const amountChartData = snapshotAnalysisLogScale
+              ? chartDataByYear.map((item) => {
+                  const nextItem: Record<string, string | number | null> = { ...item };
+                  amountKeys.forEach((key) => {
+                    const rawValue = Number(nextItem[key]);
+                    nextItem[key] = Number.isFinite(rawValue) && rawValue > 0 ? rawValue : null;
+                  });
+                  return nextItem;
+                })
+              : chartDataByYear;
 
             // 금액 차트용 커스텀 Tooltip 컴포넌트
             const CustomAmountTooltip = (props: any) => {
@@ -6278,19 +6318,77 @@ export default function PortfolioPage() {
 
             return (
               <div style={{ marginTop: '40px' }}>
-                <h2>연간 평가금액 추이</h2>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                  <h2 style={{ margin: 0 }}>연간 평가금액 추이</h2>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={snapshotAnalysisLogScale}
+                    aria-label="Y축 로그 스케일 전환"
+                    onClick={() => setSnapshotAnalysisLogScale((prev) => !prev)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      border: `1px solid ${snapshotAnalysisLogScale ? '#60a5fa' : '#d1d5db'}`,
+                      borderRadius: '999px',
+                      padding: '6px 10px',
+                      backgroundColor: snapshotAnalysisLogScale ? '#eff6ff' : '#ffffff',
+                      color: '#1f2937',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: '40px',
+                        height: '22px',
+                        borderRadius: '999px',
+                        backgroundColor: snapshotAnalysisLogScale ? '#2563eb' : '#d1d5db',
+                        padding: '2px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          backgroundColor: '#ffffff',
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.2)',
+                          transform: snapshotAnalysisLogScale ? 'translateX(18px)' : 'translateX(0)',
+                          transition: 'transform 0.2s ease',
+                        }}
+                      />
+                    </span>
+                    <span style={{ fontWeight: 500 }}>Y축 로그 스케일</span>
+                  </button>
+                </div>
                 
                 {/* 평가금액 선그래프 */}
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
                   <ResponsiveContainer width="100%" height={350}>
-                    <LineChart data={chartDataByYear}>
+                    <LineChart data={amountChartData} margin={{ top: 8, right: 8, bottom: 8, left: 18 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="year" />
                       <YAxis 
+                        scale={snapshotAnalysisLogScale ? 'log' : 'auto'}
+                        domain={snapshotAnalysisLogScale ? ['auto', 'auto'] : [0, 'auto']}
+                        allowDataOverflow={snapshotAnalysisLogScale}
+                        width={100}
                         tickFormatter={(value) =>
-                          (value / 1000000).toFixed(0) + 'M'
+                          formatToEokLabel(Number(value))
                         }
-                        label={{ value: '평가금액 (원)', angle: -90, position: 'insideLeft' }}
+                        tickMargin={8}
+                        label={{
+                          value: snapshotAnalysisLogScale ? '평가금액 (억원, 로그)' : '평가금액 (억원)',
+                          angle: -90,
+                          position: 'insideLeft',
+                          dx: -8,
+                          style: { fill: '#4b5563', fontSize: 12, fontWeight: 600 },
+                        }}
                       />
                       <Tooltip content={CustomAmountTooltip} />
                       <Legend content={CustomAmountLegend} />
@@ -6302,6 +6400,7 @@ export default function PortfolioPage() {
                         strokeWidth={3}
                         dot={{ fill: '#FF0000', r: 5 }}
                         activeDot={{ r: 7 }}
+                        connectNulls={snapshotAnalysisLogScale}
                       />
                       {/* 계좌그룹별 라인 */}
                       {allAccountGroups.map((group, idx) => (
@@ -6313,6 +6412,7 @@ export default function PortfolioPage() {
                           strokeWidth={2}
                           dot={{ fill: lineColors[idx % lineColors.length], r: 4 }}
                           activeDot={{ r: 6 }}
+                          connectNulls={snapshotAnalysisLogScale}
                         />
                       ))}
                     </LineChart>
@@ -6326,8 +6426,16 @@ export default function PortfolioPage() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="year" />
                       <YAxis 
+                        width={74}
                         tickFormatter={(value) => `${value.toFixed(0)}%`}
-                        label={{ value: '증가율 (%)', angle: -90, position: 'insideLeft' }}
+                        tickMargin={8}
+                        label={{
+                          value: '증가율 (%)',
+                          angle: -90,
+                          position: 'insideLeft',
+                          dx: 10,
+                          style: { fill: '#4b5563', fontSize: 12, fontWeight: 600 },
+                        }}
                       />
                       <Tooltip content={CustomGrowthTooltip} />
                       <Bar
