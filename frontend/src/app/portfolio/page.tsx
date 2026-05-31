@@ -188,6 +188,15 @@ interface TargetAllocationAccount {
   target_amount: string;
 }
 
+type SnapshotAnalysisWeeklyRange = '6m' | '1y' | '2y' | '5y' | 'all';
+
+interface SnapshotAnalysisWeeklyPoint {
+  weekId: number;
+  referenceDate: string;
+  xLabel: string;
+  amount: number;
+}
+
 interface Report {
   period_type: string;
   reference_date: string;
@@ -228,6 +237,13 @@ const ASSET_CLASS_ORDER = [
   '가상자산',
   '기타자산',
 ];
+
+const SNAPSHOT_ANALYSIS_WEEKLY_RANGE_TO_WEEKS: Record<Exclude<SnapshotAnalysisWeeklyRange, 'all'>, number> = {
+  '6m': 26,
+  '1y': 52,
+  '2y': 104,
+  '5y': 260,
+};
 
 const getAssetClassColor = (assetClass: string | null | undefined): string => {
   if (!assetClass) {
@@ -310,6 +326,14 @@ export default function PortfolioPage() {
   const [savingAssetClassTargets, setSavingAssetClassTargets] = useState(false);
   const [snapshotAnalysisAccountGroupFilter, setSnapshotAnalysisAccountGroupFilter] = useState<number | null>(null);
   const [snapshotAnalysisLogScale, setSnapshotAnalysisLogScale] = useState(false);
+  const [snapshotAnalysisWeeklyRange, setSnapshotAnalysisWeeklyRange] = useState<SnapshotAnalysisWeeklyRange>('1y');
+  const [snapshotAnalysisWeeklyAccountFilter, setSnapshotAnalysisWeeklyAccountFilter] = useState<string>('all');
+  const [snapshotAnalysisWeeklyAssetFilter, setSnapshotAnalysisWeeklyAssetFilter] = useState<string>('all');
+  const [snapshotAnalysisWeeklySecondSeriesEnabled, setSnapshotAnalysisWeeklySecondSeriesEnabled] = useState(false);
+  const [snapshotAnalysisWeeklySecondAccountFilter, setSnapshotAnalysisWeeklySecondAccountFilter] = useState<string>('all');
+  const [snapshotAnalysisWeeklySecondAssetFilter, setSnapshotAnalysisWeeklySecondAssetFilter] = useState<string>('all');
+  const [snapshotAnalysisWeeklyWindowStart, setSnapshotAnalysisWeeklyWindowStart] = useState(0);
+  const [snapshotAnalysisWeeklyWindowEnd, setSnapshotAnalysisWeeklyWindowEnd] = useState(0);
 
   // Institution Form
   const [newInstitution, setNewInstitution] = useState({
@@ -970,6 +994,211 @@ export default function PortfolioPage() {
     : null;
   const isSelectedSnapshotLocked = selectedSnapshot?.status === 'locked';
 
+  const institutionById = new Map<number, Institution>();
+  institutions.forEach((institution) => {
+    institutionById.set(institution.institution_id, institution);
+  });
+
+  const getSnapshotAnalysisAccountOptionLabel = (account: Account): string => {
+    const institutionName = institutionById.get(account.institution_id)?.name;
+    if (!institutionName) {
+      return account.name;
+    }
+    return `${institutionName} - ${account.name}`;
+  };
+
+  const snapshotAnalysisWeeklyAccountOptions = sortedAccounts;
+  const snapshotAnalysisSelectedWeeklyAccountId =
+    snapshotAnalysisWeeklyAccountFilter === 'all' ? null : Number(snapshotAnalysisWeeklyAccountFilter);
+  const snapshotAnalysisAssetProductIdSet = new Set<number>(
+    holdings
+      .filter((holding) => {
+        if (snapshotAnalysisSelectedWeeklyAccountId == null) {
+          return true;
+        }
+        return holding.account_id === snapshotAnalysisSelectedWeeklyAccountId;
+      })
+      .map((holding) => holding.product_id)
+  );
+  const snapshotAnalysisWeeklyAssetOptions = products
+    .filter((product) => snapshotAnalysisAssetProductIdSet.has(product.product_id))
+    .sort((a, b) => {
+      const displayDiff = (a.display_order ?? 0) - (b.display_order ?? 0);
+      if (displayDiff !== 0) {
+        return displayDiff;
+      }
+      return a.product_id - b.product_id;
+    });
+  const snapshotAnalysisSelectedWeeklyAssetId =
+    snapshotAnalysisWeeklyAssetFilter === 'all' ? null : Number(snapshotAnalysisWeeklyAssetFilter);
+  const snapshotAnalysisSelectedWeeklySecondAccountId =
+    snapshotAnalysisWeeklySecondAccountFilter === 'all' ? null : Number(snapshotAnalysisWeeklySecondAccountFilter);
+  const snapshotAnalysisSecondAssetProductIdSet = new Set<number>(
+    holdings
+      .filter((holding) => {
+        if (snapshotAnalysisSelectedWeeklySecondAccountId == null) {
+          return true;
+        }
+        return holding.account_id === snapshotAnalysisSelectedWeeklySecondAccountId;
+      })
+      .map((holding) => holding.product_id)
+  );
+  const snapshotAnalysisWeeklySecondAssetOptions = products
+    .filter((product) => snapshotAnalysisSecondAssetProductIdSet.has(product.product_id))
+    .sort((a, b) => {
+      const displayDiff = (a.display_order ?? 0) - (b.display_order ?? 0);
+      if (displayDiff !== 0) {
+        return displayDiff;
+      }
+      return a.product_id - b.product_id;
+    });
+  const snapshotAnalysisSelectedWeeklySecondAssetId =
+    snapshotAnalysisWeeklySecondAssetFilter === 'all' ? null : Number(snapshotAnalysisWeeklySecondAssetFilter);
+
+  const snapshotAnalysisWeeklySnapshotRows = [...weeklySnapshots].sort((a, b) => {
+    const dateDiff = new Date(a.reference_date).getTime() - new Date(b.reference_date).getTime();
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+    return a.weekly_snapshot_id - b.weekly_snapshot_id;
+  });
+
+  const snapshotHoldingsBySnapshotId = new Map<number, SnapshotHolding[]>();
+  snapshotHoldings.forEach((snapshotHolding) => {
+    if (snapshotHolding.snapshot_id == null) {
+      return;
+    }
+    const existing = snapshotHoldingsBySnapshotId.get(snapshotHolding.snapshot_id) ?? [];
+    existing.push(snapshotHolding);
+    snapshotHoldingsBySnapshotId.set(snapshotHolding.snapshot_id, existing);
+  });
+
+  const holdingById = new Map<number, Holding>();
+  holdings.forEach((holding) => {
+    holdingById.set(holding.holding_id, holding);
+  });
+
+  const buildSnapshotAnalysisWeeklySeriesData = (
+    accountId: number | null,
+    assetId: number | null
+  ): SnapshotAnalysisWeeklyPoint[] =>
+    snapshotAnalysisWeeklySnapshotRows.map((weeklySnapshot) => {
+      const sourceSnapshotHoldings = snapshotHoldingsBySnapshotId.get(weeklySnapshot.source_snapshot_id) ?? [];
+      let totalAmount = 0;
+
+      sourceSnapshotHoldings.forEach((snapshotHolding) => {
+        const holding = holdingById.get(snapshotHolding.holding_id);
+        if (!holding) {
+          return;
+        }
+
+        if (accountId != null && holding.account_id !== accountId) {
+          return;
+        }
+
+        if (assetId != null && holding.product_id !== assetId) {
+          return;
+        }
+
+        const amount = Number(snapshotHolding.valuation_amount);
+        if (!Number.isFinite(amount)) {
+          return;
+        }
+
+        totalAmount += amount;
+      });
+
+      return {
+        weekId: weeklySnapshot.weekly_snapshot_id,
+        referenceDate: weeklySnapshot.reference_date,
+        xLabel: new Date(weeklySnapshot.reference_date).toLocaleDateString('ko-KR', {
+          year: '2-digit',
+          month: '2-digit',
+          day: '2-digit',
+        }),
+        amount: totalAmount,
+      };
+    });
+
+  const snapshotAnalysisWeeklySeriesData = buildSnapshotAnalysisWeeklySeriesData(
+    snapshotAnalysisSelectedWeeklyAccountId,
+    snapshotAnalysisSelectedWeeklyAssetId
+  );
+  const snapshotAnalysisWeeklySecondSeriesData = buildSnapshotAnalysisWeeklySeriesData(
+    snapshotAnalysisSelectedWeeklySecondAccountId,
+    snapshotAnalysisSelectedWeeklySecondAssetId
+  );
+
+  const snapshotAnalysisWeeklyWindowLength =
+    snapshotAnalysisWeeklyRange === 'all'
+      ? snapshotAnalysisWeeklySeriesData.length
+      : Math.min(
+          SNAPSHOT_ANALYSIS_WEEKLY_RANGE_TO_WEEKS[snapshotAnalysisWeeklyRange],
+          snapshotAnalysisWeeklySeriesData.length
+        );
+
+  const snapshotAnalysisWeeklyVisibleSeriesData =
+    snapshotAnalysisWeeklyWindowLength === 0
+      ? []
+      : snapshotAnalysisWeeklySeriesData.slice(
+          snapshotAnalysisWeeklyWindowStart,
+          snapshotAnalysisWeeklyWindowEnd + 1
+        );
+  const snapshotAnalysisWeeklySecondVisibleSeriesData =
+    snapshotAnalysisWeeklyWindowLength === 0
+      ? []
+      : snapshotAnalysisWeeklySecondSeriesData.slice(
+          snapshotAnalysisWeeklyWindowStart,
+          snapshotAnalysisWeeklyWindowEnd + 1
+        );
+  const snapshotAnalysisWeeklyChartData = snapshotAnalysisWeeklyVisibleSeriesData.map((point, index) => ({
+    ...point,
+    amountPrimary: point.amount,
+    amountSecondary: snapshotAnalysisWeeklySecondSeriesEnabled
+      ? (snapshotAnalysisWeeklySecondVisibleSeriesData[index]?.amount ?? 0)
+      : undefined,
+  }));
+
+  const snapshotAnalysisPrimaryAccountName =
+    snapshotAnalysisSelectedWeeklyAccountId == null
+      ? null
+      : (() => {
+          const selectedAccount = snapshotAnalysisWeeklyAccountOptions.find(
+            (account) => account.account_id === snapshotAnalysisSelectedWeeklyAccountId
+          );
+          return selectedAccount ? getSnapshotAnalysisAccountOptionLabel(selectedAccount) : null;
+        })();
+  const snapshotAnalysisPrimaryAssetName =
+    snapshotAnalysisSelectedWeeklyAssetId == null
+      ? null
+      : snapshotAnalysisWeeklyAssetOptions.find((product) => product.product_id === snapshotAnalysisSelectedWeeklyAssetId)?.product_name ?? null;
+  const snapshotAnalysisSecondaryAccountName =
+    snapshotAnalysisSelectedWeeklySecondAccountId == null
+      ? null
+      : (() => {
+          const selectedAccount = snapshotAnalysisWeeklyAccountOptions.find(
+            (account) => account.account_id === snapshotAnalysisSelectedWeeklySecondAccountId
+          );
+          return selectedAccount ? getSnapshotAnalysisAccountOptionLabel(selectedAccount) : null;
+        })();
+  const snapshotAnalysisSecondaryAssetName =
+    snapshotAnalysisSelectedWeeklySecondAssetId == null
+      ? null
+      : snapshotAnalysisWeeklySecondAssetOptions.find((product) => product.product_id === snapshotAnalysisSelectedWeeklySecondAssetId)?.product_name ?? null;
+
+  const snapshotAnalysisPrimarySeriesLabel =
+    snapshotAnalysisSelectedWeeklyAssetId != null
+      ? `${snapshotAnalysisPrimaryAssetName ?? '선택 자산'} 평가금액`
+      : snapshotAnalysisSelectedWeeklyAccountId != null
+        ? `${snapshotAnalysisPrimaryAccountName ?? '선택 계좌'} 합계 평가금액`
+        : '전체 합계 평가금액';
+  const snapshotAnalysisSecondarySeriesLabel =
+    snapshotAnalysisSelectedWeeklySecondAssetId != null
+      ? `비교: ${snapshotAnalysisSecondaryAssetName ?? '선택 자산'} 평가금액`
+      : snapshotAnalysisSelectedWeeklySecondAccountId != null
+        ? `비교: ${snapshotAnalysisSecondaryAccountName ?? '선택 계좌'} 합계 평가금액`
+        : '비교: 전체 합계 평가금액';
+
   useEffect(() => {
     if (activeTab === 'users') {
       fetchUsers();
@@ -1016,9 +1245,12 @@ export default function PortfolioPage() {
       fetchAnnualReport();
     } else if (activeTab === 'snapshotAnalysis') {
       fetchSnapshots();
+      fetchWeeklySnapshots();
       fetchSnapshotHoldings();
       fetchAnnualSnapshots();
       fetchAccountGroups();
+      fetchInstitutions();
+      fetchAccounts();
       fetchHoldings();
       fetchProducts();
       fetchCurrentYearAccountTargetAllocations();
@@ -1051,6 +1283,47 @@ export default function PortfolioPage() {
       fetchAllAnnualSnapshotHoldings(annualSnapshots);
     }
   }, [activeTab, annualSnapshots]);
+
+  useEffect(() => {
+    if (snapshotAnalysisWeeklyAssetFilter === 'all') {
+      return;
+    }
+
+    const isValidAsset = snapshotAnalysisWeeklyAssetOptions.some(
+      (option) => String(option.product_id) === snapshotAnalysisWeeklyAssetFilter
+    );
+    if (!isValidAsset) {
+      setSnapshotAnalysisWeeklyAssetFilter('all');
+    }
+  }, [snapshotAnalysisWeeklyAssetFilter, snapshotAnalysisWeeklyAssetOptions]);
+
+  useEffect(() => {
+    if (snapshotAnalysisWeeklySecondAssetFilter === 'all') {
+      return;
+    }
+
+    const isValidAsset = snapshotAnalysisWeeklySecondAssetOptions.some(
+      (option) => String(option.product_id) === snapshotAnalysisWeeklySecondAssetFilter
+    );
+    if (!isValidAsset) {
+      setSnapshotAnalysisWeeklySecondAssetFilter('all');
+    }
+  }, [snapshotAnalysisWeeklySecondAssetFilter, snapshotAnalysisWeeklySecondAssetOptions]);
+
+  useEffect(() => {
+    const dataLength = snapshotAnalysisWeeklySeriesData.length;
+    if (dataLength === 0 || snapshotAnalysisWeeklyWindowLength === 0) {
+      setSnapshotAnalysisWeeklyWindowStart(0);
+      setSnapshotAnalysisWeeklyWindowEnd(0);
+      return;
+    }
+
+    const maxStart = Math.max(0, dataLength - snapshotAnalysisWeeklyWindowLength);
+    const nextEnd = dataLength - 1;
+    const nextStart = Math.max(0, nextEnd - snapshotAnalysisWeeklyWindowLength + 1);
+    setSnapshotAnalysisWeeklyWindowStart(Math.min(Math.max(0, nextStart), maxStart));
+    setSnapshotAnalysisWeeklyWindowEnd(nextEnd);
+  }, [snapshotAnalysisWeeklyRange, snapshotAnalysisWeeklyWindowLength, snapshotAnalysisWeeklySeriesData.length]);
 
   useEffect(() => {
     if (!selectedSnapshotId) {
@@ -6488,6 +6761,211 @@ export default function PortfolioPage() {
                       />
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+
+                {/* 주간 평가금액 추이 */}
+                <div style={{ marginTop: '40px' }}>
+                  <h2 style={{ margin: '0 0 14px 0' }}>주간 평가금액 추이</h2>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                      alignItems: 'flex-start',
+                      marginBottom: '14px',
+                    }}
+                  >
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '14px', color: '#374151', fontWeight: 600 }}>조회 구간</span>
+                      <select
+                        value={snapshotAnalysisWeeklyRange}
+                        onChange={(e) => setSnapshotAnalysisWeeklyRange(e.target.value as SnapshotAnalysisWeeklyRange)}
+                        style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                      >
+                        <option value="6m">6개월</option>
+                        <option value="1y">1년</option>
+                        <option value="2y">2년</option>
+                        <option value="5y">5년</option>
+                        <option value="all">전체</option>
+                      </select>
+                    </label>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '130px minmax(230px, 1fr) minmax(230px, 1fr)',
+                        columnGap: '12px',
+                        rowGap: '10px',
+                        alignItems: 'center',
+                        flex: '1 1 760px',
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '14px',
+                          color: '#111827',
+                          fontWeight: 700,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked
+                          readOnly
+                          disabled
+                          style={{ opacity: 1 }}
+                        />
+                        기본 시리즈
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '14px', color: '#374151', fontWeight: 600 }}>계좌</span>
+                        <select
+                          value={snapshotAnalysisWeeklyAccountFilter}
+                          onChange={(e) => {
+                            setSnapshotAnalysisWeeklyAccountFilter(e.target.value);
+                            setSnapshotAnalysisWeeklyAssetFilter('all');
+                          }}
+                          style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '200px', width: '100%' }}
+                        >
+                          <option value="all">전체 계좌</option>
+                          {snapshotAnalysisWeeklyAccountOptions.map((account) => (
+                            <option key={account.account_id} value={String(account.account_id)}>
+                              {getSnapshotAnalysisAccountOptionLabel(account)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '14px', color: '#374151', fontWeight: 600 }}>자산</span>
+                        <select
+                          value={snapshotAnalysisWeeklyAssetFilter}
+                          onChange={(e) => setSnapshotAnalysisWeeklyAssetFilter(e.target.value)}
+                          style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '200px', width: '100%' }}
+                        >
+                          <option value="all">전체 자산</option>
+                          {snapshotAnalysisWeeklyAssetOptions.map((product) => (
+                            <option key={product.product_id} value={String(product.product_id)}>
+                              {product.product_name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#374151', fontWeight: 600 }}>
+                        <input
+                          type="checkbox"
+                          checked={snapshotAnalysisWeeklySecondSeriesEnabled}
+                          onChange={(e) => setSnapshotAnalysisWeeklySecondSeriesEnabled(e.target.checked)}
+                        />
+                        2번째 시리즈
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', opacity: snapshotAnalysisWeeklySecondSeriesEnabled ? 1 : 0.55 }}>
+                        <span style={{ fontSize: '14px', color: '#374151', fontWeight: 600 }}>계좌</span>
+                        <select
+                          disabled={!snapshotAnalysisWeeklySecondSeriesEnabled}
+                          value={snapshotAnalysisWeeklySecondAccountFilter}
+                          onChange={(e) => {
+                            setSnapshotAnalysisWeeklySecondAccountFilter(e.target.value);
+                            setSnapshotAnalysisWeeklySecondAssetFilter('all');
+                          }}
+                          style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '200px', width: '100%' }}
+                        >
+                          <option value="all">전체 계좌</option>
+                          {snapshotAnalysisWeeklyAccountOptions.map((account) => (
+                            <option key={account.account_id} value={String(account.account_id)}>
+                              {getSnapshotAnalysisAccountOptionLabel(account)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', opacity: snapshotAnalysisWeeklySecondSeriesEnabled ? 1 : 0.55 }}>
+                        <span style={{ fontSize: '14px', color: '#374151', fontWeight: 600 }}>자산</span>
+                        <select
+                          disabled={!snapshotAnalysisWeeklySecondSeriesEnabled}
+                          value={snapshotAnalysisWeeklySecondAssetFilter}
+                          onChange={(e) => setSnapshotAnalysisWeeklySecondAssetFilter(e.target.value)}
+                          style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', minWidth: '200px', width: '100%' }}
+                        >
+                          <option value="all">전체 자산</option>
+                          {snapshotAnalysisWeeklySecondAssetOptions.map((product) => (
+                            <option key={product.product_id} value={String(product.product_id)}>
+                              {product.product_name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+
+                  {snapshotAnalysisWeeklyChartData.length > 0 ? (
+                    <>
+                      <ResponsiveContainer width="100%" height={320}>
+                        <LineChart
+                          data={snapshotAnalysisWeeklyChartData}
+                          margin={{ top: 8, right: 8, bottom: 8, left: 18 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="xLabel" minTickGap={24} />
+                          <YAxis
+                            width={100}
+                            tickFormatter={(value) => formatToEokLabel(Number(value))}
+                            tickMargin={8}
+                            label={{
+                              value: '평가금액 (억원)',
+                              angle: -90,
+                              position: 'insideLeft',
+                              dx: -8,
+                              style: { fill: '#4b5563', fontSize: 12, fontWeight: 600 },
+                            }}
+                          />
+                          <Tooltip
+                            formatter={(value: number | string | undefined, name: string | undefined) => {
+                              const numericValue = Number(value ?? 0);
+                              return [
+                                numericValue.toLocaleString('ko-KR', {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 0,
+                                }),
+                                name ?? '평가금액',
+                              ];
+                            }}
+                            labelFormatter={(_, payload) => {
+                              const rawDate = payload?.[0]?.payload?.referenceDate;
+                              return rawDate ? `기준일: ${rawDate}` : '';
+                            }}
+                          />
+                          <Legend />
+                          <Line
+                            type="monotone"
+                            dataKey="amountPrimary"
+                            name={snapshotAnalysisPrimarySeriesLabel}
+                            stroke="#2563eb"
+                            strokeWidth={2}
+                            dot={{ fill: '#2563eb', r: 2 }}
+                            activeDot={{ r: 5 }}
+                            isAnimationActive={false}
+                          />
+                          {snapshotAnalysisWeeklySecondSeriesEnabled && (
+                            <Line
+                              type="monotone"
+                              dataKey="amountSecondary"
+                              name={snapshotAnalysisSecondarySeriesLabel}
+                              stroke="#f97316"
+                              strokeWidth={2}
+                              dot={{ fill: '#f97316', r: 2 }}
+                              activeDot={{ r: 5 }}
+                              isAnimationActive={false}
+                            />
+                          )}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </>
+                  ) : (
+                    <p style={{ color: '#6b7280' }}>주간 시계열 데이터를 표시할 수 없습니다.</p>
+                  )}
                 </div>
               </div>
             );
