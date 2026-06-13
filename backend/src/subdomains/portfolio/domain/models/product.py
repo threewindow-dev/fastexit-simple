@@ -62,7 +62,9 @@ class Product:
         ticker: str | None = None,
         display_order: int = 0,
     ) -> "Product":
-        normalized_ticker = ticker.strip().upper() if ticker and ticker.strip() else None
+        normalized_ticker = (
+            ticker.strip().upper() if ticker and ticker.strip() else None
+        )
         return cls(
             product_id=None,
             product_name=product_name,
@@ -94,9 +96,9 @@ class Product:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "domestic_beta": self.domestic_beta,
             "global_beta": self.global_beta,
-            "beta_collected_at": self.beta_collected_at.isoformat()
-            if self.beta_collected_at
-            else None,
+            "beta_collected_at": (
+                self.beta_collected_at.isoformat() if self.beta_collected_at else None
+            ),
         }
 
     def update(

@@ -506,7 +506,8 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
     @use_transaction()
     async def get_all(self, conn: Connection) -> list[Account]:
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             SELECT a.account_id,
                    a.institution_id,
                    a.name,
@@ -517,7 +518,8 @@ class SQLAlchemyAccountRepository(_BaseRepo, AccountRepository):
             FROM accounts a
             JOIN institutions i ON a.institution_id = i.institution_id
             ORDER BY i.display_order, a.display_order
-            """)
+            """
+        )
         result = await session.execute(stmt)
         rows = result.mappings().all()
         return [
@@ -973,7 +975,8 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
     ) -> SnapshotHolding:
         session = self._require_session(conn)
         # upsert
-        stmt = text("""
+        stmt = text(
+            """
             INSERT INTO snapshot_holdings (snapshot_id, holding_id, valuation_amount, data_source, created_at)
             VALUES (:snapshot_id, :holding_id, :valuation_amount, :data_source, :created_at)
             ON CONFLICT (snapshot_id, holding_id)
@@ -981,7 +984,8 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
                           data_source = EXCLUDED.data_source,
                           created_at = EXCLUDED.created_at
             RETURNING holding_id, valuation_amount, data_source
-            """)
+            """
+        )
         result = await session.execute(
             stmt,
             {
@@ -1043,7 +1047,8 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
         editable_until: datetime | None,
     ) -> int:
         session = self._require_session(conn)
-        insert_snap = text("""
+        insert_snap = text(
+            """
             INSERT INTO weekly_snapshots (
                 user_id,
                 reference_date,
@@ -1054,7 +1059,8 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
             )
             VALUES (:user_id, :reference_date, :source_snapshot_id, :status, :editable_until, :created_at)
             RETURNING weekly_snapshot_id
-            """)
+            """
+        )
         snap_res = await session.execute(
             insert_snap,
             {
@@ -1067,12 +1073,14 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
             },
         )
         weekly_id = snap_res.scalar_one()
-        insert_holdings = text("""
+        insert_holdings = text(
+            """
             INSERT INTO weekly_snapshot_holdings (weekly_snapshot_id, holding_id, valuation_amount, data_source, created_at)
             SELECT :weekly_id, holding_id, valuation_amount, data_source, :created_at
             FROM snapshot_holdings WHERE snapshot_id = :source_snapshot_id
             ON CONFLICT (weekly_snapshot_id, holding_id) DO NOTHING
-            """)
+            """
+        )
         await session.execute(
             insert_holdings,
             {
@@ -1093,11 +1101,13 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
         reference_date: date,
     ) -> int:
         session = self._require_session(conn)
-        insert_snap = text("""
+        insert_snap = text(
+            """
             INSERT INTO annual_snapshots (user_id, reference_date, source_snapshot_id, status, created_at)
             VALUES (:user_id, :reference_date, :source_snapshot_id, 'locked', :created_at)
             RETURNING annual_snapshot_id
-            """)
+            """
+        )
         snap_res = await session.execute(
             insert_snap,
             {
@@ -1108,12 +1118,14 @@ class SQLAlchemySnapshotRepository(_BaseRepo, SnapshotRepository):
             },
         )
         annual_id = snap_res.scalar_one()
-        insert_holdings = text("""
+        insert_holdings = text(
+            """
             INSERT INTO annual_snapshot_holdings (annual_snapshot_id, holding_id, valuation_amount, data_source, created_at)
             SELECT :annual_id, holding_id, valuation_amount, data_source, :created_at
             FROM snapshot_holdings WHERE snapshot_id = :source_snapshot_id
             ON CONFLICT (annual_snapshot_id, holding_id) DO NOTHING
-            """)
+            """
+        )
         await session.execute(
             insert_holdings,
             {
@@ -1206,7 +1218,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         end_date: date | None,
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             SELECT ws.reference_date,
                    i.name AS institution_name,
                    a.account_id,
@@ -1222,7 +1235,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND (:end_date IS NULL OR ws.reference_date <= :end_date)
             GROUP BY ws.reference_date, i.name, a.account_id, a.name, i.display_order, a.display_order
             ORDER BY ws.reference_date DESC, i.display_order, a.display_order
-            """).bindparams(
+            """
+        ).bindparams(
             bindparam("user_id", type_=Integer),
             bindparam("start_date", type_=Date),
             bindparam("end_date", type_=Date),
@@ -1239,7 +1253,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         self, conn: Connection, user_id: int, year: int | None
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             SELECT EXTRACT(YEAR FROM asnap.reference_date) AS year,
                    asnap.reference_date,
                    i.name AS institution_name,
@@ -1257,7 +1272,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND (:year IS NULL OR EXTRACT(YEAR FROM asnap.reference_date) = :year)
             GROUP BY year, asnap.reference_date, i.name, i.display_order, a.account_id, a.name, a.display_order
             ORDER BY year DESC, i.display_order, a.display_order
-            """).bindparams(
+            """
+        ).bindparams(
             bindparam("user_id", type_=Integer),
             bindparam("year", type_=Integer),
         )
@@ -1274,7 +1290,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         end_date: date | None,
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             SELECT ws.reference_date,
                    ag.name AS account_group_name,
                    a.account_id,
@@ -1292,7 +1309,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND (:end_date IS NULL OR ws.reference_date <= :end_date)
             GROUP BY ws.reference_date, ag.account_group_id, ag.name, a.account_id, a.name
             ORDER BY ws.reference_date DESC, ag.name, a.account_id
-            """).bindparams(
+            """
+        ).bindparams(
             bindparam("user_id", type_=Integer),
             bindparam("start_date", type_=Date),
             bindparam("end_date", type_=Date),
@@ -1309,7 +1327,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         self, conn: Connection, user_id: int, year: int | None
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             SELECT EXTRACT(YEAR FROM asnap.reference_date) AS year,
                    asnap.reference_date,
                    ag.name AS account_group_name,
@@ -1327,7 +1346,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND (:year IS NULL OR EXTRACT(YEAR FROM asnap.reference_date) = :year)
             GROUP BY year, asnap.reference_date, ag.account_group_id, ag.name, a.account_id, a.name
             ORDER BY year DESC, ag.name, a.account_id
-            """).bindparams(
+            """
+        ).bindparams(
             bindparam("user_id", type_=Integer),
             bindparam("year", type_=Integer),
         )
@@ -1340,7 +1360,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         self, conn: Connection, user_id: int, snapshot_date: date
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             SELECT p.asset_class,
                    p.product_name,
                    SUM(sh.valuation_amount) AS valuation_amount,
@@ -1354,7 +1375,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
               AND s.status = 'locked'
             GROUP BY p.asset_class, p.product_name
             ORDER BY p.asset_class, p.product_name
-            """)
+            """
+        )
         result = await session.execute(
             stmt, {"user_id": user_id, "snapshot_date": snapshot_date}
         )
@@ -1370,7 +1392,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
             return []
 
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             SELECT wsh.weekly_snapshot_id,
                    wsh.holding_id,
                    wsh.valuation_amount,
@@ -1387,7 +1410,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
                  JOIN products p ON h.product_id = p.product_id
             WHERE wsh.weekly_snapshot_id = ANY(:snapshot_ids)
             ORDER BY i.display_order, a.display_order
-            """)
+            """
+        )
         result = await session.execute(stmt, {"snapshot_ids": weekly_snapshot_ids})
         rows = result.mappings().all()
         return [dict(row) for row in rows]
@@ -1397,7 +1421,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
         self, conn: Connection, annual_snapshot_id: int
     ) -> list[dict]:
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             SELECT ash.annual_snapshot_holding_id,
                    ash.annual_snapshot_id,
                    ash.holding_id,
@@ -1421,7 +1446,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
             JOIN products p ON h.product_id = p.product_id
             WHERE ash.annual_snapshot_id = :annual_snapshot_id
             ORDER BY i.display_order, a.display_order, p.display_order, p.product_id
-            """).bindparams(bindparam("annual_snapshot_id", type_=Integer))
+            """
+        ).bindparams(bindparam("annual_snapshot_id", type_=Integer))
         result = await session.execute(stmt, {"annual_snapshot_id": annual_snapshot_id})
         rows = result.mappings().all()
         return [dict(row) for row in rows]
@@ -1432,7 +1458,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
     ) -> list[dict]:
         """금융기관별 최근 주간스냅샷 기준 자산총합 조회"""
         session = self._require_session(conn)
-        stmt = text("""
+        stmt = text(
+            """
             WITH latest_weekly_snapshot AS (
                 SELECT weekly_snapshot_id, reference_date
                 FROM weekly_snapshots
@@ -1452,7 +1479,8 @@ class SQLAlchemyReportQueryRepository(_BaseRepo, ReportQueryRepository):
             JOIN institutions i ON a.institution_id = i.institution_id
             GROUP BY i.institution_id, i.name, i.display_order, i.type
             ORDER BY i.display_order, i.institution_id
-            """).bindparams(bindparam("user_id", type_=Integer))
+            """
+        ).bindparams(bindparam("user_id", type_=Integer))
         result = await session.execute(stmt, {"user_id": user_id})
         rows = result.mappings().all()
         return [dict(row) for row in rows]

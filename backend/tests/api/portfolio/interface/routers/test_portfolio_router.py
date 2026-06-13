@@ -520,7 +520,9 @@ class TestCreateProduct:
         create_res = await client.post("/api/portfolio/products", json=payload)
         product_id = create_res.json()["data"]["product_id"]
 
-        response = await client.post(f"/api/portfolio/products/{product_id}/beta:collect")
+        response = await client.post(
+            f"/api/portfolio/products/{product_id}/beta:collect"
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -592,7 +594,9 @@ class TestCreateProduct:
         create_res = await client.post("/api/portfolio/products", json=payload)
         product_id = create_res.json()["data"]["product_id"]
 
-        response = await client.post(f"/api/portfolio/products/{product_id}/beta:collect")
+        response = await client.post(
+            f"/api/portfolio/products/{product_id}/beta:collect"
+        )
 
         assert response.status_code == 200
         data = response.json()

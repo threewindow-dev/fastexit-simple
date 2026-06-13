@@ -397,7 +397,9 @@ class TestPortfolioProductBetaService:
         assert len(series) == 2
 
     @pytest.mark.asyncio
-    async def test_resolve_product_ticker_success_krx_code(self, mock_transaction_manager):
+    async def test_resolve_product_ticker_success_krx_code(
+        self, mock_transaction_manager
+    ):
         mock_product_repo = AsyncMock()
         product = Product(
             product_id=11,

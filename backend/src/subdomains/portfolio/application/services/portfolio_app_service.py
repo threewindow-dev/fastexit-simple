@@ -508,7 +508,9 @@ class PortfolioAppService:
         period: str = "2y",
     ) -> tuple[dict[str, float], str]:
         try:
-            series = await self._fetch_yahoo_close_series_with_retry(symbol, period=period)
+            series = await self._fetch_yahoo_close_series_with_retry(
+                symbol, period=period
+            )
             return series, "yahoo"
         except HTTPError as exc:
             if exc.code != 429:
@@ -571,13 +573,13 @@ class PortfolioAppService:
             await asyncio.sleep(0.2)
 
             if "^GSPC" not in benchmark_cache:
-                benchmark_cache["^GSPC"], _ = await self._fetch_close_series_with_fallback(
-                    "^GSPC"
+                benchmark_cache["^GSPC"], _ = (
+                    await self._fetch_close_series_with_fallback("^GSPC")
                 )
                 await asyncio.sleep(0.2)
             if "^KS11" not in benchmark_cache:
-                benchmark_cache["^KS11"], _ = await self._fetch_close_series_with_fallback(
-                    "^KS11"
+                benchmark_cache["^KS11"], _ = (
+                    await self._fetch_close_series_with_fallback("^KS11")
                 )
 
             asset_returns = self._to_returns(asset_prices)
@@ -724,8 +726,8 @@ class PortfolioAppService:
         benchmark_cache: dict[str, dict[str, float]] = {}
 
         for product in products:
-            domestic_beta, global_beta, message = await self._collect_product_beta_values(
-                product, benchmark_cache
+            domestic_beta, global_beta, message = (
+                await self._collect_product_beta_values(product, benchmark_cache)
             )
             updated = False
             collected_at: datetime | None = None
@@ -754,7 +756,9 @@ class PortfolioAppService:
         return ProductBetaCollectionResult(updated_count=updated_count, items=items)
 
     @transactional(mode="writable")
-    async def resolve_product_ticker(self, product_id: int) -> ProductTickerResolveResult:
+    async def resolve_product_ticker(
+        self, product_id: int
+    ) -> ProductTickerResolveResult:
         product = await self._product_repo.find_by_id(product_id)
         if product is None:
             raise NotFoundError("product", product_id)
@@ -1352,7 +1356,15 @@ class PortfolioAppService:
                 )
             )
 
-        asset_class_order = ["주식", "채권", "통화", "금", "부동산", "가상자산", "기타자산"]
+        asset_class_order = [
+            "주식",
+            "채권",
+            "통화",
+            "금",
+            "부동산",
+            "가상자산",
+            "기타자산",
+        ]
         asset_class_rows = []
         for asset_class in asset_class_order:
             valuations = [
@@ -1506,7 +1518,15 @@ class PortfolioAppService:
             )
 
         # 7. 자산유형별 행 데이터 생성 (고정 순서)
-        asset_class_order = ["주식", "채권", "통화", "금", "부동산", "가상자산", "기타자산"]
+        asset_class_order = [
+            "주식",
+            "채권",
+            "통화",
+            "금",
+            "부동산",
+            "가상자산",
+            "기타자산",
+        ]
         asset_class_rows = []
         for asset_class in asset_class_order:
             valuations = [
@@ -1594,7 +1614,9 @@ class PortfolioAppService:
 
             # 해당 연도 주간 스냅샷 보유자산 일괄 조회
             weekly_ids = [ws.weekly_snapshot_id for ws in year_weekly]
-            holdings_data = await self._report_repo.get_weekly_snapshot_holdings(weekly_ids)
+            holdings_data = await self._report_repo.get_weekly_snapshot_holdings(
+                weekly_ids
+            )
 
             # 주간 스냅샷별 include_in_report 계좌 총액 집계
             totals_by_ws: dict[int, float] = {ws_id: 0.0 for ws_id in weekly_ids}

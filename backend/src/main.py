@@ -129,9 +129,7 @@ async def _ensure_portfolio_columns(conn):
         )
     )
     await conn.execute(
-        text(
-            "ALTER TABLE products ADD COLUMN IF NOT EXISTS ticker VARCHAR(32) NULL"
-        )
+        text("ALTER TABLE products ADD COLUMN IF NOT EXISTS ticker VARCHAR(32) NULL")
     )
 
 

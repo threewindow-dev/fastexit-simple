@@ -170,7 +170,9 @@ class ProductBetaCollectItem(BaseModel):
 
 class ProductBetaCollectResponseData(BaseModel):
     updated_count: int = Field(..., description="업데이트된 상품 수", examples=[3])
-    items: list[ProductBetaCollectItem] = Field(..., description="상품별 베타 수집 결과")
+    items: list[ProductBetaCollectItem] = Field(
+        ..., description="상품별 베타 수집 결과"
+    )
 
 
 class ProductBetaCollectResponse(ApiResponse[ProductBetaCollectResponseData]):

@@ -247,12 +247,16 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             ticker=row.get("ticker"),
             display_order=row["display_order"],
             created_at=row["created_at"],
-            domestic_beta=float(row["domestic_beta"])
-            if row.get("domestic_beta") is not None
-            else None,
-            global_beta=float(row["global_beta"])
-            if row.get("global_beta") is not None
-            else None,
+            domestic_beta=(
+                float(row["domestic_beta"])
+                if row.get("domestic_beta") is not None
+                else None
+            ),
+            global_beta=(
+                float(row["global_beta"])
+                if row.get("global_beta") is not None
+                else None
+            ),
             beta_collected_at=row.get("beta_collected_at"),
         )
 
@@ -286,12 +290,16 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
             ticker=row.get("ticker"),
             display_order=row["display_order"],
             created_at=row["created_at"],
-            domestic_beta=float(row["domestic_beta"])
-            if row.get("domestic_beta") is not None
-            else None,
-            global_beta=float(row["global_beta"])
-            if row.get("global_beta") is not None
-            else None,
+            domestic_beta=(
+                float(row["domestic_beta"])
+                if row.get("domestic_beta") is not None
+                else None
+            ),
+            global_beta=(
+                float(row["global_beta"])
+                if row.get("global_beta") is not None
+                else None
+            ),
             beta_collected_at=row.get("beta_collected_at"),
         )
 
@@ -392,12 +400,16 @@ class PsycopgProductRepository(_BaseRepo, ProductRepository):
                 ticker=row.get("ticker"),
                 display_order=row["display_order"],
                 created_at=row["created_at"],
-                domestic_beta=float(row["domestic_beta"])
-                if row.get("domestic_beta") is not None
-                else None,
-                global_beta=float(row["global_beta"])
-                if row.get("global_beta") is not None
-                else None,
+                domestic_beta=(
+                    float(row["domestic_beta"])
+                    if row.get("domestic_beta") is not None
+                    else None
+                ),
+                global_beta=(
+                    float(row["global_beta"])
+                    if row.get("global_beta") is not None
+                    else None
+                ),
                 beta_collected_at=row.get("beta_collected_at"),
             )
             for row in rows

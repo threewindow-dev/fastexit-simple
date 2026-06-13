@@ -6471,12 +6471,14 @@ export default function PortfolioPage() {
               if (index > 0) {
                 const prevTotal = chartDataByYear[index - 1].전체합계;
                 const currentTotal = item.전체합계;
+                item.연간자산증가액 = currentTotal - prevTotal;
                 if (prevTotal > 0) {
                   item.증가율 = ((currentTotal - prevTotal) / prevTotal) * 100;
                 } else {
                   item.증가율 = 0;
                 }
               } else {
+                item.연간자산증가액 = null; // 첫 해는 증감액 없음
                 item.증가율 = null; // 첫 해는 증가율 없음
               }
             });
@@ -6555,7 +6557,10 @@ export default function PortfolioPage() {
                 return null;
               }
 
-              const growthRate = payload[0]?.value;
+              const growthEntry = payload.find((entry: any) => entry?.dataKey === '증가율');
+              const increaseEntry = payload.find((entry: any) => entry?.dataKey === '연간자산증가액');
+              const growthRate = growthEntry?.value;
+              const annualIncreaseAmount = increaseEntry?.value;
 
               return (
                 <div style={{ 
@@ -6568,6 +6573,11 @@ export default function PortfolioPage() {
                   {growthRate !== null && growthRate !== undefined && (
                     <p style={{ margin: '3px 0', color: '#82ca9d', fontWeight: 'bold' }}>
                       {`증가율: ${growthRate >= 0 ? '+' : ''}${growthRate.toFixed(2)}%`}
+                    </p>
+                  )}
+                  {annualIncreaseAmount !== null && annualIncreaseAmount !== undefined && (
+                    <p style={{ margin: '3px 0', color: '#4f46e5', fontWeight: 'bold' }}>
+                      {`연간 자산 증가액: ${annualIncreaseAmount >= 0 ? '+' : ''}${Number(annualIncreaseAmount).toLocaleString('ko-KR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} 원`}
                     </p>
                   )}
                 </div>
@@ -6726,15 +6736,54 @@ export default function PortfolioPage() {
                   </ResponsiveContainer>
                 </div>
 
-                {/* 증가율 막대그래프 */}
+                {/* 증가율 막대그래프 - 두 축의 0 위치를 동기화하여 계산 */}
+                {(() => {
+                  // 두 계열의 실제 데이터 범위 수집
+                  const leftVals = chartDataByYear
+                    .map((d) => d.증가율 as number | null)
+                    .filter((v): v is number => v !== null && Number.isFinite(v));
+                  const rightVals = chartDataByYear
+                    .map((d) => d.연간자산증가액 as number | null)
+                    .filter((v): v is number => v !== null && Number.isFinite(v));
+
+                  // 패딩 적용 후 각 축의 최대/최소
+                  const leftMax = leftVals.length > 0 ? Math.max(...leftVals) : 10;
+                  const leftMin = leftVals.length > 0 ? Math.min(...leftVals) : 0;
+                  const rightMax = rightVals.length > 0 ? Math.max(...rightVals) : 1;
+                  const rightMin = rightVals.length > 0 ? Math.min(...rightVals) : 0;
+
+                  const leftMaxPad  = leftMax  > 0 ? leftMax  * 1.2  : 10;
+                  const leftMinPad  = leftMin  < 0 ? leftMin  * 1.4  : 0;
+                  const rightMaxPad = rightMax > 0 ? rightMax * 1.2  : 1;
+                  const rightMinPad = rightMin < 0 ? rightMin * 1.4  : 0;
+
+                  // 0이 전체 높이에서 차지하는 비율(아래쪽 기준)을 두 축 중 큰 값으로 통일
+                  const leftRange  = leftMaxPad  - leftMinPad;
+                  const rightRange = rightMaxPad - rightMinPad;
+                  const leftZeroFrac  = leftRange  > 0 ? -leftMinPad  / leftRange  : 0;
+                  const rightZeroFrac = rightRange > 0 ? -rightMinPad / rightRange : 0;
+                  const zeroFrac = Math.max(leftZeroFrac, rightZeroFrac);
+
+                  // 각 축의 최대값은 유지하고, 최소값만 zeroFrac 에 맞게 재계산
+                  // (0 - min) / (max - min) = zeroFrac  =>  min = -zeroFrac * max / (1 - zeroFrac)
+                  const safeDiv = zeroFrac < 1 ? 1 - zeroFrac : 1;
+                  const leftMinAligned  = -(zeroFrac * leftMaxPad)  / safeDiv;
+                  const rightMinAligned = -(zeroFrac * rightMaxPad) / safeDiv;
+
+                  const leftDomain:  [number, number] = [leftMinAligned,  leftMaxPad];
+                  const rightDomain: [number, number] = [rightMinAligned, rightMaxPad];
+
+                  return (
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: '40px' }}>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={chartDataByYear}>
+                  <ResponsiveContainer width="100%" height={290}>
+                    <BarChart data={chartDataByYear} margin={{ top: 26, right: 16, bottom: 8, left: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="year" />
                       <YAxis 
+                        yAxisId="left"
                         width={74}
-                        tickFormatter={(value) => `${value.toFixed(0)}%`}
+                        domain={leftDomain}
+                        tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
                         tickMargin={8}
                         label={{
                           value: '증가율 (%)',
@@ -6744,11 +6793,27 @@ export default function PortfolioPage() {
                           style: { fill: '#4b5563', fontSize: 12, fontWeight: 600 },
                         }}
                       />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        width={96}
+                        domain={rightDomain}
+                        tickFormatter={(value) => formatToEokLabel(Number(value))}
+                        tickMargin={8}
+                        label={{
+                          value: '연간 자산 증가액 (억원)',
+                          angle: 90,
+                          position: 'insideRight',
+                          dx: -4,
+                          style: { fill: '#4b5563', fontSize: 12, fontWeight: 600 },
+                        }}
+                      />
                       <Tooltip content={CustomGrowthTooltip} />
                       <Bar
+                        yAxisId="left"
                         dataKey="증가율"
                         fill="#82ca9d"
-                        barSize={50}
+                        barSize={24}
                         label={{
                           position: 'top',
                           formatter: (value: any) => {
@@ -6759,9 +6824,26 @@ export default function PortfolioPage() {
                           style: { fontSize: '12px', fontWeight: 'bold' }
                         }}
                       />
+                      <Bar
+                        yAxisId="right"
+                        dataKey="연간자산증가액"
+                        fill="#4f46e5"
+                        barSize={24}
+                        label={{
+                          position: 'top',
+                          formatter: (value: any) => {
+                            if (value === null || value === undefined) return '';
+                            const numValue = Number(value);
+                            return `${numValue >= 0 ? '+' : ''}${formatToEokLabel(numValue)}`;
+                          },
+                          style: { fontSize: '12px', fontWeight: 'bold' }
+                        }}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                  );
+                })()}
 
                 {/* 주간 평가금액 추이 */}
                 <div style={{ marginTop: '40px' }}>
@@ -6902,7 +6984,7 @@ export default function PortfolioPage() {
 
                   {snapshotAnalysisWeeklyChartData.length > 0 ? (
                     <>
-                      <ResponsiveContainer width="100%" height={320}>
+                      <ResponsiveContainer width="100%" height={640}>
                         <LineChart
                           data={snapshotAnalysisWeeklyChartData}
                           margin={{ top: 8, right: 8, bottom: 8, left: 18 }}

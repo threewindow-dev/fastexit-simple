@@ -62,9 +62,7 @@ class TestCreateUser:
         assert result.email == "john@example.com"
         assert result.full_name == "John Doe"
 
-        mock_user_repository.exists_by_username.assert_awaited_once_with(
-            "john_doe"
-        )
+        mock_user_repository.exists_by_username.assert_awaited_once_with("john_doe")
         mock_user_repository.exists_by_email.assert_awaited_once_with(
             "john@example.com"
         )

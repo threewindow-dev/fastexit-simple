@@ -185,7 +185,7 @@ async def get_institution_assets(
     # 현재 사용자 ID는 시스템에서 결정되어야 함 (예: 토큰에서 추출)
     # 현재는 첫 번째 사용자를 가정 (프로덕션에서는 인증 시스템 통합 필요)
     user_id = 1  # TODO: 실제로는 요청 컨텍스트에서 사용자 ID를 얻어야 함
-    
+
     rows = await service.get_institution_assets(user_id)
     items = [
         InstitutionAssetsItem(
@@ -1487,7 +1487,10 @@ async def annual_pivot_report(
     ]
 
     data = WeeklyPivotReportData(
-        year=result.year, weeks=weeks, account_groups=account_groups, accounts=accounts,
+        year=result.year,
+        weeks=weeks,
+        account_groups=account_groups,
+        accounts=accounts,
         mdd_by_year=[
             AnnualMddItemSchema(
                 data_year=m.data_year,

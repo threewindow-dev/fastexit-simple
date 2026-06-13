@@ -585,5 +585,9 @@ class WeeklyPivotReportResult:
     weeks: list[WeeklyPivotWeekInfo]
     account_groups: list[WeeklyPivotAccountGroupRow]  # 계좌그룹 행
     accounts: list[WeeklyPivotAccountRow]
-    mdd_by_year: list[AnnualMddItem] = field(default_factory=list)  # 연도별 MDD (연간 보고서 전용)
-    asset_classes: list[WeeklyPivotAssetClassRow] = field(default_factory=list)  # 자산유형별 행 (연간 보고서 전용)
+    mdd_by_year: list[AnnualMddItem] = field(
+        default_factory=list
+    )  # 연도별 MDD (연간 보고서 전용)
+    asset_classes: list[WeeklyPivotAssetClassRow] = field(
+        default_factory=list
+    )  # 자산유형별 행 (연간 보고서 전용)
